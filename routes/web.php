@@ -7,7 +7,7 @@ Route::get('/', function () {
 });
 
 // Endpoint de prueba (sin autenticación por ahora)
-Route::post('api/tools/test', function (Request $request) {
+Route::post('/api/tools/test', function (Request $request) {
     Log::info('Tool call recibido:', $request->all());
     
     return response()->json([
