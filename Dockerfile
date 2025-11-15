@@ -5,14 +5,16 @@ RUN addgroup -g 1000 www && adduser -u 1000 -G www -s /bin/sh -D www
 
 # 2. Dependencias del sistema
 RUN apk add --no-cache \
-    nginx supervisor curl zip unzip git sqlite libzip-dev linux-headers \
-    && docker-php-ext-install pdo pdo_mysql zip
+nginx supervisor curl zip unzip git sqlite libzip-dev linux-headers \
+&& docker-php-ext-install pdo pdo_mysql zip
 
 # 3. Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # 4. WORKDIR con propietario www
 WORKDIR /var/www
+RUN chown www:www /var/www
+
 # Cambiamos owner ANTES de copiar
 COPY --chown=www:www . .
 
