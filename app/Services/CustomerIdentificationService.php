@@ -46,7 +46,12 @@ class CustomerIdentificationService
 
         return $this->handleNewCustomer($type, $value, $threadId);
     }
-
+    
+    /**
+     * Buscar cliente o vehículo según el tipo y valor
+     * 
+     * @return array{customer:?Customer, vehicle:?Vehicle}
+     */
     private function findCustomer(string $type, string $value): array
     {
         return match ($type) {
