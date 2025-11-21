@@ -1,8 +1,8 @@
 <?php
-// app/Repositories/ConversationRepository.php
 
 namespace App\Repositories;
 
+use Illuminate\Support\Facades\Log;
 use App\Models\Conversation;
 
 class ConversationRepository
@@ -14,12 +14,23 @@ class ConversationRepository
 
     public function createOrUpdate(string $threadId, int $customerId): Conversation
     {
+        $existing = $this->findByThreadId($threadId);
+        
+        if ($existing && $existing->customer_id !== $customerId) {
+            Log::warning('Thread ID conflict', [
+                'thread_id' => $threadId,
+                'old_customer' => $existing->customer_id,
+                'new_customer' => $customerId
+            ]);
+            // Decide: ¿crear nueva conversación o actualizar?
+        }
+        
         return Conversation::updateOrCreate(
             ['thread_id' => $threadId],
             [
                 'customer_id' => $customerId,
-                'status' => 'identified',
-                'started_at' => now(),
+                'status' => 'active',
+                'started_at' => $existing?->started_at ?? now(),
             ]
         );
     }

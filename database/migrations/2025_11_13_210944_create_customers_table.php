@@ -15,14 +15,17 @@ return new class extends Migration
             $table->id();
             $table->string('dni')->unique()->nullable();
             $table->string('email')->unique()->nullable();
-            $table->string('phone')->nullable();
+            $table->string('phone')->nullable()->nullable();
             $table->string('name')->nullable();
             $table->json('metadata')->nullable();
+            $table->boolean('is_anonymous')->default(false);
+            $table->timestamp('completed_at')->nullable(); // Ver si es necesario
             $table->timestamps();
             $table->softDeletes(); // ← Soft deletes
             
             $table->index('dni');
             $table->index('email');
+            $table->index('phone');
             $table->index('deleted_at');
         });
     }

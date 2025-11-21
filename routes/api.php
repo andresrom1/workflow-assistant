@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\TestingController;
 use App\Http\Controllers\ToolsController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -30,3 +31,22 @@ Route::post('tools/show-data-form',        [ToolsController::class, 'showDataFor
 Route::post('tools/show-vehicle-photos-form', [ToolsController::class, 'showVehiclePhotosForm']);
 Route::post('tools/show-payment-form',     [ToolsController::class, 'showPaymentForm']);
 Route::post('tools/finalize-policy',       [ToolsController::class, 'finalizePolicy']);
+
+
+Route::prefix('dev')->group(function () {
+    
+    // Ejecutar tests
+    Route::get('/run-tests', [TestingController::class, 'runTests']);
+    
+    // Estado de la BD
+    Route::get('/database-status', [TestingController::class, 'databaseStatus']);
+    
+    // Limpiar BD
+    Route::post('/clean-database', [TestingController::class, 'cleanDatabase']);
+    
+    // Info del sistema
+    Route::get('/system-info', [TestingController::class, 'systemInfo']);
+    
+    // ⚠️ PELIGROSO: Solo habilitar si realmente lo necesitas
+    Route::post('/fresh-migrations', [TestingController::class, 'freshMigrations']);
+});

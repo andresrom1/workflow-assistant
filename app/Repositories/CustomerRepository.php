@@ -18,15 +18,107 @@ class CustomerRepository
     {
         return Customer::where('email', $email)->first();
     }
+    public function findByPhone(string $phone): ?Customer
+    {
+        $normalized = $this->normalizePhone($phone);
+        return Customer::where('phone', $normalized)->first();
+    }
 
+/**
+     * Crear customer (puede ser anónimo)
+     */
     public function create(array $data): Customer
     {
+        // Normalizar datos
+        if (isset($data['email'])) {
+            $data['email'] = strtolower(trim($data['email']));
+        }
+        
+        if (isset($data['phone'])) {
+            $data['phone'] = $this->normalizePhone($data['phone']);
+        }
+        
+        // Determinar si es anónimo
+        $isAnonymous = !isset($data['dni']) 
+                    && !isset($data['email']) 
+                    && !isset($data['phone']);
+        
+        $data['is_anonymous'] = $isAnonymous;
+        
+        if (!$isAnonymous) {
+            $data['completed_at'] = now();
+        }
+        
         return Customer::create($data);
     }
 
-    public function update(Customer $customer, array $data): bool
+    /**
+     * Actualizar customer (por ejemplo, completar anónimo)
+     * @param Customer  $customer
+     * @param array $data<
+     */
+    public function update(Customer $customer, array $data): Customer
     {
-        return $customer->update($data);
+        // Normalizar datos
+        if (isset($data['email'])) {
+            $data['email'] = strtolower(trim($data['email']));
+        }
+        
+        if (isset($data['phone'])) {
+            $data['phone'] = $this->normalizePhone($data['phone']);
+        }
+        
+        $customer->update($data);
+        
+        // Si ahora tiene datos de contacto, marcar como completo
+        if ($customer->hasContactInfo() && $customer->is_anonymous) {
+            $customer->markAsComplete();
+        }
+        
+        return $customer->fresh();
+    }
+
+    /**
+     * Completar customer anónimo con nuevo identificador
+     */
+    public function completeAnonymous(Customer $customer, string $type, string $value): Customer
+    {
+        if (!$customer->is_anonymous) {
+            throw new \Exception('Customer no es anónimo');
+        }
+
+        $updateData = match($type) {
+            'dni' => ['dni' => $value],
+            'email' => ['email' => $value],
+            'phone' => ['phone' => $value],
+        };
+
+        return $this->update($customer, $updateData);
+    }
+
+    /**
+     * Normalizar teléfono argentino
+     */
+    private function normalizePhone(string $phone): string
+    {
+        // Quitar todo excepto números y +
+        $phone = preg_replace('/[^\d+]/', '', $phone);
+        
+        // Si empieza con 0, quitarlo
+        if (str_starts_with($phone, '0')) {
+            $phone = substr($phone, 1);
+        }
+        
+        // Si no tiene código de país, agregar +549 (Argentina celular)
+        if (!str_starts_with($phone, '+')) {
+            if (strlen($phone) === 10) { // 3512345678
+                $phone = '+549' . $phone;
+            } elseif (strlen($phone) === 13 && str_starts_with($phone, '549')) {
+                $phone = '+' . $phone;
+            }
+        }
+        
+        return $phone;
     }
 
     /**
@@ -37,7 +129,7 @@ class CustomerRepository
     public function getConversations(Customer $customer, int $limit = 5): Collection
     {
         return $customer->conversations()
-            ->where('status', '!=', 'anonymous')
+            ->with('vehicles')
             ->orderBy('created_at', 'desc')
             ->limit($limit)
             ->get()
@@ -62,12 +154,12 @@ class CustomerRepository
         return $customer->vehicles()
             ->get()
             ->map(fn($vehicle) => [
-            'id' => $vehicle->id,
-            'patente' => $vehicle->patente,
-            'marca' => $vehicle->marca,
-            'modelo' => $vehicle->modelo,
-            'año' => $vehicle->año,
-            'is_identified' => $identifiedVehicle && $identifiedVehicle->id === $vehicle->id,
+                'id' => $vehicle->id,
+                'patente' => $vehicle->patente,
+                'marca' => $vehicle->marca,
+                'modelo' => $vehicle->modelo,
+                'año' => $vehicle->año,
+                'is_identified' => $identifiedVehicle && $identifiedVehicle->id === $vehicle->id,
             ]);
     }
 }
