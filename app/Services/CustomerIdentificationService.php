@@ -39,15 +39,24 @@ class CustomerIdentificationService
      */
     public function identify(string $type, string $value, string $threadId): array
     {
+        Log::info(__METHOD__ . __LINE__ . 'Iniciando identificación', [
+            'type' => $type,
+            'value' => $value,
+            'thread_id' => $threadId,
+        ]);
+
         $this->validateIdentifier($type, $value);
 
         // PASO 1: Buscar customer existente
+        Log::info(__METHOD__ . __LINE__ . 'Buscando cliente existente', ['type' => $type, 'value' => $value]);
+        
         $result = $this->findCustomer($type, $value);
         $customer = $result['customer'];
         $identifiedVehicle = $result['vehicle'];
 
         // PASO 2: Si NO encontró customer, buscar por thread (customer anónimo previo)
         if (!$customer) {
+            Log::info(__METHOD__. __LINE__ . 'No se encontró cliente, buscando por thread para cliente anónimo', ['thread_id' => $threadId]);
             $customer = $this->findAnonymousCustomerByThread($threadId);
             
             if ($customer && $type !== 'patente') {
@@ -58,10 +67,12 @@ class CustomerIdentificationService
 
         // PASO 3: Si encontró customer, manejar como existente
         if ($customer) {
+            Log::info(__METHOD__. __LINE__ . ' Cliente existente encontrado', ['customer_id' => $customer->id]);
             return $this->handleExistingCustomer($customer, $identifiedVehicle, $threadId);
         }
 
         // PASO 4: Si no encontró nada, crear nuevo (puede ser anónimo)
+        Log::info(__METHOD__. __LINE__ . ' No se encontró cliente, creando nuevo');
         return $this->handleNewCustomer($type, $value, $threadId);
     }
     
@@ -132,7 +143,8 @@ class CustomerIdentificationService
      */
     private function findCustomer(string $type, string $value): array
     {
-        return match ($type) {
+        Log::info(__METHOD__ . 'Buscando cliente', ['type' => $type, 'value' => $value]);
+        $customer = match ($type) {
             'patente' => [
                 'vehicle' => $vehicle = $this->vehicleRepo->findByPatente($value),
                 'customer' => $vehicle?->customer ?? $this->handleOrphanVehicle($vehicle),
@@ -150,6 +162,8 @@ class CustomerIdentificationService
                 'customer' => $this->customerRepo->findByPhone($value),
             ],
         };
+        Log::info(__METHOD__ . 'Cliente encontrado:', ['customer' => $customer]);
+        return $customer;
     }
 
     private function handleExistingCustomer(Customer $customer, ?Vehicle $identifiedVehicle, string $threadId): array
@@ -172,6 +186,7 @@ class CustomerIdentificationService
             'phone'                   => $customer->phone,
             'dni'                     => $customer->dni,
             'is_new'                  => false,
+            'is_anonymous'            => $customer->is_anonymous,
             'previous_conversations'  => $conversations,
             'vehicles'                => $vehicles,
             'message'                 => $customer->name
@@ -222,6 +237,7 @@ class CustomerIdentificationService
             'phone'                  => null,
             'dni'                    => $type === 'dni' ? $value : null,
             'is_new'                 => true,
+            'is_anonymous'           => $customer->is_anonymous,
             'previous_conversations' => collect([]),
             'vehicles'               => $vehicle
                 ? collect([[
@@ -235,6 +251,7 @@ class CustomerIdentificationService
                 : collect([]),
             'message' => '¡Bienvenido! Eres un cliente nuevo',
         ];
+        
     }
 
     /**
@@ -264,6 +281,7 @@ class CustomerIdentificationService
 
     private function handleOrphanVehicle(?Vehicle $vehicle): ?Customer
     {
+        Log::info(__METHOD__ . __LINE__ . 'Vehículo sin cliente', ['vehicle_id' => $vehicle?->id ?? null, 'customer_id' => $vehicle?->customer_id ?? null]);
         if (!$vehicle) return null;
         
         if (!$vehicle->customer_id) {

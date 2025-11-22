@@ -14,6 +14,7 @@ class AgentToolAdapter
 
     public function identifyCustomer(array $payload): array
     {
+        Log::info('Adapter: identifyCustomer llamado', $payload);
         try {
             // Validación rápida (misma que antes)
             $type  = $payload['identifier_type']  ?? throw new \InvalidArgumentException('Falta identifier_type');
@@ -22,7 +23,8 @@ class AgentToolAdapter
 
             // Llamar al service (ahora devuelve array)
             $result = $this->customerService->identify($type, $value, $threadId);
-
+            Log::alert(__METHOD__ . 'Resultado de identificación:', $result);
+            
             // El array ya viene en formato “OpenAI-friendly”
             return array_merge(['success' => true], $result);
 

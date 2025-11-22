@@ -24,7 +24,7 @@ return new class extends Migration
             
             $table->index('thread_id');
             $table->index('customer_id');
-            $table->index('vehicle_id');
+            //$table->index('vehicle_id');
             $table->index('status');
         });
     }

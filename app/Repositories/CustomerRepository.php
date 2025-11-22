@@ -6,11 +6,13 @@ namespace App\Repositories;
 use App\Models\Customer;
 use App\Models\Vehicle;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 class CustomerRepository
 {
     public function findByDni(string $dni): ?Customer
     {
+        Log::info( __METHOD__ . ' Buscando customer por DNI', ['dni' => $dni]);
         return Customer::where('dni', $dni)->first();
     }
 
@@ -161,5 +163,39 @@ class CustomerRepository
                 'año' => $vehicle->año,
                 'is_identified' => $identifiedVehicle && $identifiedVehicle->id === $vehicle->id,
             ]);
+    }
+
+    /**
+     * Obtener todos los customers con relaciones, búsqueda y paginación
+     * @param array  $relations
+     * @param string $search
+     * @param int    $perPage
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator
+     */ 
+    public function getAllWithRelations(array $relations = [], string $search = '', int $perPage = 15)
+    {
+        $query = Customer::with($relations);
+
+        if (!empty($search)) {
+            $query->where(function($q) use ($search) {
+                $q->where('name', 'like', "%$search%")
+                  ->orWhere('email', 'like', "%$search%")
+                  ->orWhere('phone', 'like', "%$search%")
+                  ->orWhere('dni', 'like', "%$search%");
+            });
+        }
+
+        return $query->paginate($perPage);
+    }
+
+    /**
+     * Summary of findWithRelations
+     * @param int $id
+     * @param array $relations
+     * @return Customer
+     */
+    public function findWithRelations(int $id, array $relations = []): ?Customer
+    {
+        return Customer::with($relations)->find($id);
     }
 }
