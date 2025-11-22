@@ -198,4 +198,22 @@ class CustomerRepository
     {
         return Customer::with($relations)->find($id);
     }
+    
+    /**
+     * Get customers count
+     */
+    public function count(): int
+    {
+        return Customer::count();
+    }
+
+    /**
+     * Get recently created customers
+     */
+    public function getRecent(int $limit = 10): Collection
+    {
+        return Customer::orderBy('created_at', 'desc')
+            ->limit($limit)
+            ->get();
+    }
 }

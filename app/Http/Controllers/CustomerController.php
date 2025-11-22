@@ -62,7 +62,7 @@ class CustomerController extends Controller
 
         if (!$customer) {
             return redirect()
-                ->route('customers.show')
+                ->route('customers.index')
                 ->with('error', 'Cliente no encontrado');
         }
 
