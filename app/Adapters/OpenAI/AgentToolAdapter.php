@@ -20,7 +20,7 @@ class AgentToolAdapter
             // Validación rápida (misma que antes)
             $type  = $payload['identifier_type']  ?? throw new \InvalidArgumentException('Falta identifier_type');
             $value = $payload['identifier_value'] ?? throw new \InvalidArgumentException('Falta identifier_value');
-            $threadId = $payload['thread_id']    ?? throw new \InvalidArgumentException('Falta thread_id');
+            //$threadId = $payload['thread_id']    ?? throw new \InvalidArgumentException('Falta thread_id');
 
             // Llamar al service (ahora devuelve array)
             $result = $this->customerService->identify($type, $value, $threadId);
