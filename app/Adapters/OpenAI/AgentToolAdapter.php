@@ -16,6 +16,7 @@ class AgentToolAdapter
     {
         Log::info('Adapter: identifyCustomer llamado', $payload);
         try {
+            $threadId = "aca deberia ir el thread_id de openai";
             // Validación rápida (misma que antes)
             $type  = $payload['identifier_type']  ?? throw new \InvalidArgumentException('Falta identifier_type');
             $value = $payload['identifier_value'] ?? throw new \InvalidArgumentException('Falta identifier_value');
