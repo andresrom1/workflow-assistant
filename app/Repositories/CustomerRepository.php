@@ -57,7 +57,7 @@ class CustomerRepository
     /**
      * Actualizar customer (por ejemplo, completar anónimo)
      * @param Customer  $customer
-     * @param array $data<
+     * @param array $data
      */
     public function update(Customer $customer, array $data): Customer
     {
@@ -73,7 +73,9 @@ class CustomerRepository
         $customer->update($data);
         
         // Si ahora tiene datos de contacto, marcar como completo
-        if ($customer->hasContactInfo() && $customer->is_anonymous) {
+        if ($customer->hasContactInfo() && $customer->is_anonymous) { 
+            //analizar si $customer->is_anonymous es condicion requerida para marcar como completo
+            // En principio, si tiene datos de contacto, se puede marcar como completo 
             $customer->markAsComplete();
         }
         

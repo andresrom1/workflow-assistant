@@ -20,6 +20,13 @@ class ToolsController extends Controller
     public function identifyCustomer(Request $request)
     {
         Log::info('HTTP Request recibido: identify_customer', $request->all());
+        
+            // DEBUG: Ver TODO el request para encontrar el thread_id
+        Log::info(__METHOD__ . __LINE__ . ' HTTP Tool Request recibido: identify_customer', [
+            'body' => $request->all(),
+            'headers' => $request->headers->all(),
+            'raw_body' => $request->getContent(),
+        ]);
 
         // El adapter se encarga de todo
         $result = $this->adapter->identifyCustomer($request->all());
