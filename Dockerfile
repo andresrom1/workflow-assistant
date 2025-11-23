@@ -4,6 +4,7 @@ FROM php:8.4-fpm-alpine
 RUN addgroup -g 1000 www && adduser -u 1000 -G www -s /bin/sh -D www
 
 # 2. Dependencias del sistema
+#RUN apk add --no-cache \ # Vammos a probar si al cachear se despliega mas rapido
 RUN apk add --no-cache \
 nginx supervisor curl zip unzip git sqlite libzip-dev linux-headers \
 && docker-php-ext-install pdo pdo_mysql zip
