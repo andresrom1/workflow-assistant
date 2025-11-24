@@ -22,6 +22,7 @@ Route::post('/tools/test', function (Request $request) {
 });
 
 Route::post('tools/identify-customer', [ToolsController::class, 'identifyCustomer']);
+Route::post('/tools/identify-vehicle', [ToolsController::class, 'identifyVehicle']);
 
 #Sin imnplementar aún
 Route::post('tools/save-vehicle-data',   [ToolsController::class, 'saveVehicleData']);

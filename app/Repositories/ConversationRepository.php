@@ -41,4 +41,19 @@ class ConversationRepository
             $vehicleId => ['is_primary' => $isPrimary]
         ]);
     }
+
+    public function findActiveByOpenAIUserId(string $openaiUserId): ?Conversation
+    {
+        return Conversation::where('openai_user_id', $openaiUserId)
+            ->where('status', 'active')
+            ->latest('last_activity')
+            ->first();
+    }
+
+    public function updateActivity(string $openaiUserId): void
+    {
+        Conversation::where('openai_user_id', $openaiUserId)
+            ->where('status', 'active')
+            ->update(['last_activity' => now()]);
+    }
 }

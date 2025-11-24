@@ -22,14 +22,13 @@ class Vehicle extends Model
         'combustible',
         'codigo_postal',
         'uso',
-        'km_anuales',
+        'is_complete',
         'metadata',
     ];
 
     protected $casts = [
         'metadata' => 'array',
         'year' => 'integer',
-        'km_anuales' => 'integer',
     ];
 
     public function customer(): BelongsTo
@@ -48,5 +47,18 @@ class Vehicle extends Model
     public function quotes(): HasMany
     {
         return $this->hasMany(Quote::class);
+    }
+
+    // Verificar si el vehículo tiene todos los datos requeridos
+    public function checkCompleteness(): void
+    {
+        $this->is_complete = !empty($this->marca) 
+            && !empty($this->modelo) 
+            && !empty($this->version) 
+            && !empty($this->year) 
+            && !empty($this->combustible)
+            && !empty($this->codigo_postal);
+        
+        $this->save();
     }
 }

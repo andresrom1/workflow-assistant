@@ -3,6 +3,7 @@
 
 namespace App\Providers;
 
+use App\Services\VehicleIdentificationService;
 use Illuminate\Support\ServiceProvider;
 use App\Repositories\CustomerRepository;
 use App\Repositories\VehicleRepository;
@@ -27,13 +28,16 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(ConversationRepository::class),
             );
         });
+        $this->app->singleton(CustomerIdentificationService::class);
+        $this->app->singleton(VehicleIdentificationService::class);
 
         // Registrar Adapters
-        $this->app->singleton(AgentToolAdapter::class, function ($app) {
-            return new AgentToolAdapter(
-                $app->make(CustomerIdentificationService::class),
-            );
-        });
+        $this->app->singleton(AgentToolAdapter::class);
+        // $this->app->singleton(AgentToolAdapter::class, function ($app) {
+        //     return new AgentToolAdapter(
+        //         $app->make(CustomerIdentificationService::class),
+        //     );
+        // });
     }
 
     public function boot(): void

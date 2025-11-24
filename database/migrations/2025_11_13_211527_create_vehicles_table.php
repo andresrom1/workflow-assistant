@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::create('vehicles', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('customer_id')->constrained()->onDelete('cascade');
-            $table->string('patente')->unique();
+            $table->foreignId('customer_id')->constrained()->onDelete('set null');
+            $table->string('patente')->nullable()->unique();
             $table->string('marca')->nullable(); // VW, Ford, Fiat, etc.
             $table->string('modelo')->nullable(); // Gol, Focus, Palio
             $table->string('version')->nullable(); // Trend, Titanium, etc.
@@ -24,6 +24,7 @@ return new class extends Migration
             $table->enum('uso', ['particular', 'comercial', 'taxi_remis', 'uber'])->default('particular');
             $table->string('motor')->nullable(); // Nro. de motor
             $table->string('chasis')->nullable(); // Nro de chasis
+            $table->boolean('is_complete')->default(false); // Si tiene todos los datos
             $table->softDeletes(); // ← Soft deletes
             
             $table->json('metadata')->nullable(); // Datos adicionales
