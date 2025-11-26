@@ -55,6 +55,7 @@ class CustomerIdentificationService
         Log::info(__METHOD__ . __LINE__ . 'Buscando cliente existente', ['type' => $type, 'value' => $value]);
         
         $result = $this->findCustomer($type, $value);
+
         Log::info(__METHOD__. __LINE__ . 'Resultado de búsqueda de cliente:', $result);
         $customer = $result['customer'];
         $identifiedVehicle = $result['vehicle'];
@@ -179,7 +180,7 @@ class CustomerIdentificationService
                 'customer' => $this->customerRepo->findByPhone($value),
             ],
         };
-        Log::info(__METHOD__ . 'Cliente encontrado:', ['customer' => $customer]);
+        Log::info(__METHOD__ . 'Cliente encontrado:', [$customer]);
         return $customer;
     }
 
