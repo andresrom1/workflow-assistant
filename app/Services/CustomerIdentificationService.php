@@ -47,6 +47,7 @@ class CustomerIdentificationService
 
         // 1. Buscar o crear conversación por thread_id
         $conversation = $this->conversationRepo->findOrCreateByThreadId($threadId);
+        Log::info(__METHOD__ . __LINE__ . ' Conversación obtenida', ['conversation' => $conversation]);
 
         $this->validateIdentifier($type, $value);
 
@@ -54,6 +55,7 @@ class CustomerIdentificationService
         Log::info(__METHOD__ . __LINE__ . 'Buscando cliente existente', ['type' => $type, 'value' => $value]);
         
         $result = $this->findCustomer($type, $value);
+        Log::info(__METHOD__. __LINE__ . 'Resultado de búsqueda de cliente:', $result);
         $customer = $result['customer'];
         $identifiedVehicle = $result['vehicle'];
 
@@ -67,7 +69,7 @@ class CustomerIdentificationService
                 return $this->completeAnonymousCustomer($customer, $type, $value, $threadId);
             }
         }
-
+        Log::info(__METHOD__. __LINE__ . 'Cliente después de buscar anónimo por thread:', ['customer' => $customer]);
         // PASO 3:  Si encontró customer, manejar como existente
         //          Si no encontró nada, crear nuevo (puede ser anónimo)
         if ($customer) {
@@ -76,6 +78,7 @@ class CustomerIdentificationService
         } else {
             Log::info(__METHOD__. __LINE__ . ' No se encontró cliente, creando nuevo');
             $prepCustomer = $this->handleNewCustomer($type, $value, $threadId);
+            $customer = $prepCustomer['customer'];
         }
 
         // 3. Vincular conversación con cliente (si aún no está vinculada)
