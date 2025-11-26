@@ -73,6 +73,7 @@ class CustomerIdentificationService
         Log::info(__METHOD__. __LINE__ . 'Cliente después de buscar anónimo por thread:', ['customer' => $customer]);
         // PASO 3:  Si encontró customer, manejar como existente
         //          Si no encontró nada, crear nuevo (puede ser anónimo)
+
         if ($customer) {
             Log::info(__METHOD__. __LINE__ . ' Cliente existente encontrado', ['customer_id' => $customer->id]);
             $prepCustomer = $this->handleExistingCustomer($customer, $identifiedVehicle, $threadId);
@@ -252,6 +253,7 @@ class CustomerIdentificationService
 
         return [
             'success'                => true,
+            'customer'               => $customer,
             'customer_id'            => $customer->id,
             'name'                   => null,
             'email'                  => $type === 'email' ? $value : null,
