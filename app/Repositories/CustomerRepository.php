@@ -18,6 +18,7 @@ class CustomerRepository
 
     public function findByEmail(string $email): ?Customer
     {
+        Log::info( __METHOD__ . ' Buscando customer por email', ['email' => $email]);
         return Customer::where('email', $email)->first();
     }
     public function findByPhone(string $phone): ?Customer
