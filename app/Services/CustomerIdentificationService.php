@@ -229,9 +229,12 @@ class CustomerIdentificationService
                 ])
             ], // Sin datos de contacto → será anónimo
         };
+        Log::info(__METHOD__ . __LINE__ . ' Datos para nuevo cliente:', $customerData);
 
         $customer = $this->customerRepo->create($customerData);
 
+        Log::info(__METHOD__ . __LINE__ . ' Cliente creado', ['customer' => $customer]);
+        
         // Si es patente, crear vehicle
         $vehicle = null;
         if ($type === 'patente') {

@@ -27,7 +27,7 @@ class CustomerRepository
         return Customer::where('phone', $normalized)->first();
     }
 
-/**
+    /**
      * Crear customer (puede ser anónimo)
      */
     public function create(array $data): Customer
