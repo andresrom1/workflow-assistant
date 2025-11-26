@@ -7,9 +7,50 @@ use App\Models\Conversation;
 
 class ConversationRepository
 {
+    protected bool $log;
+
+    public function __construct()
+    {
+        $this->log = config('app.logs.log_conversation');
+    }
     public function findByThreadId(string $threadId): ?Conversation
     {
         return Conversation::where('thread_id', $threadId)->first();
+    }
+
+    /**
+     * Summary of findOrCreateByThreadId
+     * @param string $threadId
+     * @return Conversation
+     */
+    public function findOrCreateByThreadId(string $threadId): Conversation
+    {
+        $this->log && Log::info(__METHOD__ . __LINE__ . 'Find or create Conversation by id', ['thread_id' => $threadId]);
+        
+        $conversation = Conversation::where('thread_id', $threadId)->firstOrCreate(
+            ['thread_id' => $threadId],
+            [
+                'status' => 'active',
+                'started_at' => now(),
+            ]
+        );
+
+        $this->log && Log::info(__METHOD__ . __LINE__ , ['conversation' => $conversation]);
+        return $conversation;
+    }
+
+    /**
+     * Summary of linkCustomer
+     * @param int $conversationId
+     * @param int $customerId
+     * @return void
+     */
+    public function linkCustomer(int $conversationId, int $customerId): void
+    {
+        Conversation::where('id', $conversationId)->update([
+            'customer_id' => $customerId,
+            'last_activity' => now(),
+        ]);
     }
 
     public function createOrUpdate(string $threadId, int $customerId): Conversation
@@ -42,12 +83,17 @@ class ConversationRepository
         ]);
     }
 
-    public function findActiveByOpenAIUserId(string $openaiUserId): ?Conversation
+    public function findActiveByOpenAIUserId(string $threadId): ?Conversation
     {
-        return Conversation::where('openai_user_id', $openaiUserId)
+        Log::info(__METHOD__ . __LINE__ . ' Buscando conversación activa', ['thread_id' => $threadId]);
+        return Conversation::where('thread_id', $threadId)
             ->where('status', 'active')
             ->latest('last_activity')
             ->first();
+        // return Conversation::where('openai_user_id', $openaiUserId)
+        //     ->where('status', 'active')
+        //     ->latest('last_activity')
+        //     ->first();
     }
 
     public function updateActivity(string $openaiUserId): void

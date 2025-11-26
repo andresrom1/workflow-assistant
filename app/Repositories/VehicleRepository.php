@@ -45,6 +45,7 @@ class VehicleRepository
                 'combustible' => $specs['combustible'] ?? null,
                 'codigo_postal' => $specs['codigo_postal'] ?? null,
                 'customer_id' => $specs['customer_id'] ?? null,
+                'thread_id' => $specs['thread_id'] ?? null,
             ]
         );
     }

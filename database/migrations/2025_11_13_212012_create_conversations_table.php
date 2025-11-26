@@ -17,6 +17,8 @@ return new class extends Migration
             $table->foreignId('customer_id')->nullable()->constrained()->onDelete('cascade');
             $table->enum('status', ['anonymous', 'identified', 'active', 'completed', 'abandoned'])->default('anonymous');
             $table->json('metadata')->nullable();
+            $table->string('openai_user_id')->nullable();
+            $table->timestamp('last_activity')->useCurrent();
             $table->timestamp('started_at')->useCurrent();
             $table->timestamp('ended_at')->nullable();
             $table->timestamps();

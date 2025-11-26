@@ -27,12 +27,17 @@ class VehicleIdentificationService
         int $year,
         string $combustible,
         string $codigoPostal,
-        string $openaiUserId
+        string $openaiUserId,
+        string $threadId
     ): array {
         try {
+            Log::info(__METHOD__ . __LINE__, [
+                'identifyVehicle SERVICE',
+
+            ]);
             // 1. Buscar conversación activa
             $conversation = $this->conversationRepository
-                ->findActiveByOpenAIUserId($openaiUserId);
+                ->findActiveByOpenAIUserId($threadId);
 
             if (!$conversation) {
                 throw new \Exception('No active conversation found');
@@ -48,6 +53,7 @@ class VehicleIdentificationService
                 'combustible' => $combustible,
                 'codigo_postal' => $codigoPostal,
                 'customer_id' => $conversation->customer_id,
+                'thread_id' => $threadId,
             ]);
 
             // 3. Vincular vehículo con el cliente de la conversación

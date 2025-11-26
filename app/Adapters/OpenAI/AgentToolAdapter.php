@@ -43,7 +43,7 @@ class AgentToolAdapter
     public function identifyVehicle(array $arguments, string $openaiUserId): array
     {
         try {
-            
+            Log::info(__METHOD__.__LINE__,['identifyVehicle ADAPTED', 'arguments' => $arguments]);
             // Normalizar patente: mayúsculas y sin espacios
             $arguments['patente'] = strtoupper(str_replace(' ', '', $arguments['patente']));
             
@@ -59,7 +59,8 @@ class AgentToolAdapter
                 year: $validated['anio'],
                 combustible: $validated['combustible'],
                 codigoPostal: $validated['codigo_postal'],
-                openaiUserId: $openaiUserId
+                openaiUserId: $openaiUserId,
+                threadId: $validated['thread_id']
             );
             
             return $result;
@@ -79,14 +80,20 @@ class AgentToolAdapter
 
     protected function validateArguments(array $arguments): array
     {
+        Log::info(__METHOD__ . __LINE__ . ' Validando argumentos de identify vehicle');
         $rules = [
-            'patente' => 'required|regex:/^([A-Z]{3}\s?\d{3}|[A-Z]{2}\s?\d{3}\s?[A-Z]{2})$/i',
+            'patente' => [
+                'required',
+                'string',
+                'regex:/^([A-Z]{3}\s?\d{3}|[A-Z]{2}\s?\d{3}\s?[A-Z]{2})$/i'
+            ],
             'marca' => 'required|string|max:100',
             'modelo' => 'required|string|max:100',
             'version' => 'required|string|max:100',
             'anio' => 'required|integer|min:1900|max:' . (date('Y') + 1),
-            'combustible' => 'required|string|in:Nafta,Diesel,GNC,Eléctrico,Híbrido',
+            'combustible' => 'required|string|in:nafta,Nafta,diesel,Diesel,gnc,GNC,electrico,Electrico,hibrido,Hibrido',
             'codigo_postal' => 'required|string|max:10',
+            'thread_id' => 'required|string|max:100',
         ];
 
         $validator = validator($arguments, $rules);

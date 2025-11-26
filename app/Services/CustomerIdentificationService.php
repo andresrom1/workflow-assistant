@@ -45,6 +45,9 @@ class CustomerIdentificationService
             'thread_id' => $threadId,
         ]);
 
+        // 1. Buscar o crear conversación por thread_id
+        $conversation = $this->conversationRepo->findOrCreateByThreadId($threadId);
+
         $this->validateIdentifier($type, $value);
 
         // PASO 1: Buscar customer existente
@@ -65,15 +68,26 @@ class CustomerIdentificationService
             }
         }
 
-        // PASO 3: Si encontró customer, manejar como existente
+        // PASO 3:  Si encontró customer, manejar como existente
+        //          Si no encontró nada, crear nuevo (puede ser anónimo)
         if ($customer) {
             Log::info(__METHOD__. __LINE__ . ' Cliente existente encontrado', ['customer_id' => $customer->id]);
-            return $this->handleExistingCustomer($customer, $identifiedVehicle, $threadId);
+            $prepCustomer = $this->handleExistingCustomer($customer, $identifiedVehicle, $threadId);
+        } else {
+            Log::info(__METHOD__. __LINE__ . ' No se encontró cliente, creando nuevo');
+            $prepCustomer = $this->handleNewCustomer($type, $value, $threadId);
         }
 
-        // PASO 4: Si no encontró nada, crear nuevo (puede ser anónimo)
-        Log::info(__METHOD__. __LINE__ . ' No se encontró cliente, creando nuevo');
-        return $this->handleNewCustomer($type, $value, $threadId);
+        // 3. Vincular conversación con cliente (si aún no está vinculada)
+        if (!$conversation->customer_id) {
+            $this->conversationRepo->linkCustomer($conversation->id, $customer->id);
+            $conversation->refresh();
+        }
+
+        // 4. Actualizar actividad
+        $this->conversationRepo->updateActivity($threadId);
+
+        return $prepCustomer;
     }
     
     /**

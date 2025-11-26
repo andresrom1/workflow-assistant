@@ -32,6 +32,8 @@ class ToolsController extends Controller
         // El adapter se encarga de todo
         $result = $this->adapter->identifyCustomer($request->all());
 
+        //deberia crearse una coversacion si no existe
+
         //$statusCode = $result['success'] ? 200 : ($result['error_code'] === 'validation_error' ? 422 : 500);
 
         return $this->jsonResponse($result);

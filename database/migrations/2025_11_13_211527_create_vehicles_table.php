@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('vehicles', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('customer_id')->constrained()->onDelete('set null');
+            $table->foreignId('customer_id')->constrained();
             $table->string('patente')->nullable()->unique();
             $table->string('marca')->nullable(); // VW, Ford, Fiat, etc.
             $table->string('modelo')->nullable(); // Gol, Focus, Palio

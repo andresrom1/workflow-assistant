@@ -123,4 +123,24 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | LOGGIN
+    |--------------------------------------------------------------------------
+    |
+    | Maneja granularmente el logeos 
+    |
+    */ 
+    'logs' => [
+        'log_customer' => env('LOG_CUSTOMER', false),
+        'log_vehicle'  => env('LOG_VEHICLE', false),
+        'log_conversation' => env('LOG_CONVERSATION', false),
+        'log_quotes' => env('LOG_QUOTES', false),
+        // 'log_customer' => env(true),
+        // 'log_vehicle'  => env(true),
+        // 'log_conversation' => env(true),
+        // 'log_quotes' => env(true),
+        ]
+  
+
 ];
