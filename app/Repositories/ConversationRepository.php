@@ -4,9 +4,11 @@ namespace App\Repositories;
 
 use Illuminate\Support\Facades\Log;
 use App\Models\Conversation;
+use App\Traits\ConditionalLogger;
 
 class ConversationRepository
 {
+    use ConditionalLogger;
     protected bool $log;
 
     public function __construct()
@@ -25,7 +27,7 @@ class ConversationRepository
      */
     public function findOrCreateByThreadId(string $threadId): Conversation
     {
-        $this->log && Log::info(__METHOD__ . __LINE__ . 'Find or create Conversation by id', ['thread_id' => $threadId]);
+        $this->logConversation('Entrada a findOrCreateByThreadId con threadId: ' . $threadId);
         
         $conversation = Conversation::where('thread_id', $threadId)->firstOrCreate(
             ['thread_id' => $threadId],
@@ -35,7 +37,7 @@ class ConversationRepository
             ]
         );
 
-        $this->log && Log::info(__METHOD__ . __LINE__ , ['conversation' => $conversation]);
+        $this->logConversation('Conversación encontrada o creada', ['conversation_id' => $conversation->id]);
         return $conversation;
     }
 

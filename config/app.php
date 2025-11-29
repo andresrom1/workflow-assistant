@@ -131,15 +131,15 @@ return [
     | Maneja granularmente el logeos 
     |
     */ 
-    'logs' => [
-        'log_customer' => env('LOG_CUSTOMER', false),
-        'log_vehicle'  => env('LOG_VEHICLE', false),
-        'log_conversation' => env('LOG_CONVERSATION', false),
-        'log_quotes' => env('LOG_QUOTES', false),
-        // 'log_customer' => env(true),
-        // 'log_vehicle'  => env(true),
-        // 'log_conversation' => env(true),
-        // 'log_quotes' => env(true),
+    'log' => [
+        'customer' => env('LOG_CUSTOMER', false),
+        'vehicle'  => env('LOG_VEHICLE', false),
+        'conversation' => env('LOG_CONVERSATION', false),
+        'quotes' => env('LOG_QUOTES', false),
+        // 'customer' => env(true),
+        // 'vehicle'  => env(true),
+        // 'conversation' => env(true),
+        // 'quotes' => env(true),
         ]
   
 

@@ -7,9 +7,11 @@ use App\Models\Customer;
 use App\Models\Vehicle;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use App\Traits\ConditionalLogger;
 
 class CustomerRepository
 {
+    use ConditionalLogger;
     public function findByDni(string $dni): ?Customer
     {
         Log::info( __METHOD__ . ' Buscando customer por DNI', ['dni' => $dni]);
@@ -25,6 +27,18 @@ class CustomerRepository
     {
         $normalized = $this->normalizePhone($phone);
         return Customer::where('phone', $normalized)->first();
+    }
+
+    /**
+     * Summary of findByType
+     * @param string $type
+     * @param string $value
+     * @return Customer|null
+     */
+    public function findByType(string $type, string $value): ?Customer
+    {
+        $this->logCustomer(' Buscando customer por ',[$type => $value]);
+        return Customer::where($type, $value)->first();
     }
 
     /**
