@@ -51,8 +51,12 @@ class CustomerIdentificationTest extends TestCase
             'identifier_type' => 'email',
             'identifier_value' => 'juan@gmail.com',
             'thread_id' => 'thread_test_2',
+            "ai_provider" => "openai-chatkit",
+            "openai_user_id" => "user"
         ]);
 
+        $response->assertStatus(200);
+        
         $response->assertStatus(200)
             ->assertJson([
                 'success' => true,

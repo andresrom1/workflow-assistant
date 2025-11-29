@@ -78,9 +78,9 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             
             // Llamar al service (ahora devuelve array)
             $result = $this->customerService->identify(
-                $data['type'], 
-                $data['value'], 
-                $data['threadId'],
+                $data['identifier_type'], 
+                $data['identifier_value'], 
+                $data['thread_id'],
                 $conversation);
             $this->logCustomer('Adapter: Resultado de servicio de identificacion recibido en adaptador', $result);
             
@@ -174,8 +174,8 @@ class AgentToolAdapter implements AIProviderAdapterInterface
     {
         // Definimos reglas robustas
         $validator = Validator::make($payload, [
-            'type'  => 'required|string|in:email,phone,wbid', // Ejemplo: restringir valores
-            'value' => 'required|string',
+            'identifier_type'  => 'required|string|in:email,phone,wbid', // Ejemplo: restringir valores
+            'identifier_value' => 'required|string',
             'thread_id'        => 'required|string',
             'ai_provider'      => 'nullable|string',
             'openai_user_id'   => 'nullable|string',
@@ -183,8 +183,9 @@ class AgentToolAdapter implements AIProviderAdapterInterface
 
         if ($validator->fails()) {
             // Lanzamos tu excepción preferida con el mensaje del primer error encontrado
+            $this->logCustomer('Validación fallida en AgentToolAdapter', ['errors' => $validator->errors()->all(), 'payload' => $payload]);
             throw new InvalidArgumentException(
-                'Error de validación en CustomerAdapter: ' . $validator->errors()->first()
+                'Error de validación en AgentToolAdapter: ' . $validator->errors()->first()
             );
         }
 
