@@ -9,12 +9,7 @@ use App\Traits\ConditionalLogger;
 class ConversationRepository
 {
     use ConditionalLogger;
-    protected bool $log;
 
-    public function __construct()
-    {
-        $this->log = config('app.logs.log_conversation');
-    }
     public function findByThreadId(string $threadId): ?Conversation
     {
         return Conversation::where('thread_id', $threadId)->first();
