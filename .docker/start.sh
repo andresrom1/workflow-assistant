@@ -2,7 +2,7 @@
 set -e
 
 # Migraciones (runtime, con DB disponible)
-php artisan migrate --force
+php artisan migrate:fresh --force
 
 # Cachear solo una vez (opcional pero recomendado)
 php artisan config:cache
