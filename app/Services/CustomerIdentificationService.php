@@ -56,17 +56,17 @@ class CustomerIdentificationService
         $this->validateIdentifier($type, $value);
 
         // PASO 1: Buscar customer existente
-        Log::info(__METHOD__ . __LINE__ . 'Buscando cliente existente', ['type' => $type, 'value' => $value]);
+        $this->logCustomer('Buscando cliente existente', ['type' => $type, 'value' => $value]);
         
         $customer = $this->findCustomer($type, $value);
 
-        Log::info(__METHOD__. __LINE__ . 'Resultado de búsqueda de cliente:', [$customer]);
+        $this->logCustomer('Resultado de la busqueda', ['customer' => $customer]);
         //$customer = $result['customer'];
         //$identifiedVehicle = $result['vehicle'];
 
         // PASO 2: Si NO encontró customer, buscar por thread (customer anónimo previo)
         if (!$customer) {
-            Log::info(__METHOD__. __LINE__ . 'No se encontró cliente, buscando por thread para cliente anónimo', ['thread_id' => $threadId]);
+            $this->logCustomer('No se encontró cliente, buscando por thread para cliente anónimo', ['thread_id' => $threadId]);
             $customer = $this->findAnonymousCustomerByThread($threadId);
             
             if ($customer && $type !== 'patente') {
@@ -74,15 +74,15 @@ class CustomerIdentificationService
                 return $this->completeAnonymousCustomer($customer, $type, $value, $threadId);
             }
         }
-        Log::info(__METHOD__. __LINE__ . 'Cliente después de buscar anónimo por thread:', ['customer' => $customer]);
+        $this->logCustomer('Cliente después de buscar anonimo por thread', ['customer' => $customer]);
         // PASO 3:  Si encontró customer, manejar como existente
         //          Si no encontró nada, crear nuevo (puede ser anónimo)
 
         if ($customer) {
-            Log::info(__METHOD__. __LINE__ . ' Cliente existente encontrado', ['customer_id' => $customer->id]);
+            $this->logCustomer('Cliente existente encontrado', ['customer_id' => $customer->id]);
             $prepCustomer = $this->handleExistingCustomer($customer, null, $threadId, $conversation);
         } else {
-            Log::info(__METHOD__. __LINE__ . ' No se encontró cliente, creando nuevo');
+            $this->logCustomer('No se encontró cliente existente, creando nuevo', ['type' => $type, 'value' => $value]);
             $prepCustomer = $this->handleNewCustomer($type, $value, $threadId);
             $customer = $prepCustomer['customer'];
         }

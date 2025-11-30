@@ -43,6 +43,7 @@ class ToolsController extends Controller
         }
         
         $result = $adapter->handleToolCall($request->all(), 'identify_customer');
+        $this->logCustomer('Resultado de handleToolCall', $result);
         // El adapter se encarga de todo
 
         //deberia crearse una coversacion si no existe

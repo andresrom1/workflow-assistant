@@ -13,12 +13,12 @@ class Conversation extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'thread_id',
+        'external_conversation_id',
         'customer_id',
         'status',
         'metadata',
-        'started_at',
         'ended_at',
+        'external_user_id',
     ];
 
     protected $casts = [
