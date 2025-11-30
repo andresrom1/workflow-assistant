@@ -25,12 +25,8 @@ class ToolsController extends Controller
      */
     public function identifyCustomer(Request $request)
     {    
-        // DEBUG: Ver TODO el request para encontrar el thread_id
-        $this->logCustomer('HTTP Tool Request recibido: identify_customer', [
-            'body' => $request->all(),
-            'headers' => $request->headers->all(),
-            'raw_body' => $request->getContent(),
-        ]);
+        // Ver TODO el request para encontrar el thread_id
+        $this->logCustomer('HTTP Tool Request recibido: identify_customer', ['body' => $request->all()]);
 
         //Detección: El Controller pregunta "¿Quién envía esto?"
         $providerName = $request->input('ai_provider', 'openai');
@@ -44,39 +40,12 @@ class ToolsController extends Controller
         
         $result = $adapter->handleToolCall($request->all(), 'identify_customer');
         $this->logCustomer('Resultado de handleToolCall', $result);
-        // El adapter se encarga de todo
 
         //deberia crearse una coversacion si no existe
 
-        //$statusCode = $result['success'] ? 200 : ($result['error_code'] === 'validation_error' ? 422 : 500);
-
         return $this->jsonResponse($result);
-        //return response()->json($result, $statusCode);
     }
 
-    // public function identifyVehicle(Request $request)
-    // {
-    //     $openaiUserId = $this->extractOpenAIUserId($request);
-
-    //     if (!$openaiUserId) {
-    //         return $this->errorResponse('OpenAI User ID is required', 400);
-    //     }
-
-    //     Log::info('identify_vehicle called', [
-    //         'openai_user_id' => $openaiUserId,
-    //         'body' => $request->all(),
-    //     ]);
-
-    //     $result = $this->adapter->identifyVehicle(
-    //         $request->all(),
-    //         $openaiUserId
-    //     );
-
-    //     // $statusCode = $result['success'] ? 200 : ($result['error_code'] === 'validation_error' ? 422 : 500);
-
-    //     // return response()->json($result, $statusCode);
-    //     return $this->jsonResponse($result);
-    // }
     protected function extractOpenAIUserId(Request $request): ?string
     {
         return $request->header('X-OpenAI-User-ID') 

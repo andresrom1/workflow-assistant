@@ -25,78 +25,75 @@ class CustomerIdentificationService
     ) {}
 
     /**
-     * Identificar cliente por tipo y valor
-     * @param string $type El tipo de identificador
-     * @param string  $value El el valor del identificador
-     * @param string  $threadId El treadId
-     * @param Conversation $conversation
-     * 
-     * @return array{
-     *   success:bool,
-     *   customer_id:int,
-     *   name:?string,
-     *   email:?string,
-     *   phone:?string,
-     *   dni:?string,
-     *   is_new:bool,
-     *   previous_conversations:Collection<int,array{thread_id:string,date:string,status:string,vehicle_count:int}>,
-     *   vehicles:Collection<int,array{id:int,patente:string,marca:string,modelo:string,año:int,is_identified:bool}>,
-     *   message:string
-     * }
+     * Identificar cliente por tipo y valor.
+     * Busca al cliente y si no existe, lo crea.
+     * @param string $type 
+     * @param string $value 
+     * @return Customer (Nunca null, siempre devuelve una instancia válida)
      */
-    public function identify(string $type, string $value, string $threadId, $conversation): array
+    public function findOrCreate(string $type, string $value): Customer
     {
-        $this->logCustomer('Service: Iniciando identificación', [
-            'type' => $type,
-            'value' => $value,
-            'thread_id' => $threadId,
-        ]);
-
+        $this->logCustomer('Service: Iniciando identificación', ['type' => $type, 'value' => $value]);
     
         $this->validateIdentifier($type, $value);
 
         // PASO 1: Buscar customer existente
-        $this->logCustomer('Buscando cliente existente', ['type' => $type, 'value' => $value]);
-        
         $customer = $this->findCustomer($type, $value);
 
-        $this->logCustomer('Resultado de la busqueda', ['customer' => $customer]);
-        //$customer = $result['customer'];
-        //$identifiedVehicle = $result['vehicle'];
-
-        // PASO 2: Si NO encontró customer, buscar por thread (customer anónimo previo)
-        if (!$customer) {
-            $this->logCustomer('No se encontró cliente, buscando por thread para cliente anónimo', ['thread_id' => $threadId]);
-            $customer = $this->findAnonymousCustomerByThread($threadId);
-            
-            if ($customer && $type !== 'patente') {
-                // Es un customer anónimo que ahora da su identificador
-                return $this->completeAnonymousCustomer($customer, $type, $value, $threadId);
-            }
-        }
-        $this->logCustomer('Cliente después de buscar anonimo por thread', ['customer' => $customer]);
-        // PASO 3:  Si encontró customer, manejar como existente
-        //          Si no encontró nada, crear nuevo (puede ser anónimo)
-
         if ($customer) {
-            $this->logCustomer('Cliente existente encontrado', ['customer_id' => $customer->id]);
-            $prepCustomer = $this->handleExistingCustomer($customer, null, $threadId, $conversation);
-        } else {
-            $this->logCustomer('No se encontró cliente existente, creando nuevo', ['type' => $type, 'value' => $value]);
-            $prepCustomer = $this->handleNewCustomer($type, $value, $threadId);
-            $customer = $prepCustomer['customer'];
+            $this->logCustomer('Cliente encontrado', ['id' => $customer->id]);
+            return $customer;
         }
 
-        // 3. Vincular conversación con cliente (si aún no está vinculada)
-        if (!$conversation->customer_id) {
-            $this->conversationRepo->linkCustomer($conversation->id, $customer->id);
-            $conversation->refresh();
-        }
+        // PASO 2: Si no existe, CREARLO (Restauramos esta lógica)
+        $this->logCustomer('Cliente no encontrado, creando nuevo', ['type' => $type]);
 
-        // 4. Actualizar actividad
-        $this->conversationRepo->updateActivity($threadId);
+        // if ($customer) {
+        //     $this->logCustomer('Cliente existente encontrado', ['customer_id' => $customer->id]);
+        //     $prepCustomer = $this->handleExistingCustomer($customer, null, $external_conversation_id, $conversation);
+        // } else {
+        //     $this->logCustomer('No se encontró cliente existente, creando nuevo', ['type' => $type, 'value' => $value]);
+        //     $prepCustomer = $this->createCustomer($type, $value);
+        //     $customer = $prepCustomer['customer'];
+        // }
+        
+        return $this->createCustomer($type, $value);
+    
 
-        return $prepCustomer;
+        // // PASO 2: Si NO encontró customer, buscar por thread (customer anónimo previo)
+        // if (!$customer) {
+        //     $this->logCustomer('No se encontró cliente, buscando por thread para cliente anónimo', ['thread_id' => $external_conversation_id]);
+        //     $customer = $this->findAnonymousCustomerByThread($external_conversation_id);
+            
+        //     if ($customer && $type !== 'patente') {
+        //         // Es un customer anónimo que ahora da su identificador
+        //         return $this->completeAnonymousCustomer($customer, $type, $value, $external_conversation_id);
+        //     }
+        // }
+
+        // $this->logCustomer('Cliente después de buscar anonimo por thread', ['customer' => $customer]);
+        // // PASO 3:  Si encontró customer, manejar como existente
+        // //          Si no encontró nada, crear nuevo (puede ser anónimo)
+
+        // if ($customer) {
+        //     $this->logCustomer('Cliente existente encontrado', ['customer_id' => $customer->id]);
+        //     $prepCustomer = $this->handleExistingCustomer($customer, null, $external_conversation_id, $conversation);
+        // } else {
+        //     $this->logCustomer('No se encontró cliente existente, creando nuevo', ['type' => $type, 'value' => $value]);
+        //     $prepCustomer = $this->createCustomer($type, $value);
+        //     $customer = $prepCustomer['customer'];
+        // }
+
+        // // 3. Vincular conversación con cliente (si aún no está vinculada)
+        // if (!$conversation->customer_id) {
+        //     $this->conversationRepo->linkCustomer($conversation->id, $customer->id);
+        //     $conversation->refresh();
+        // }
+
+        // // 4. Actualizar actividad
+        // $this->conversationRepo->updateActivity($external_conversation_id);
+
+        // return $prepCustomer;
     }
     
     /**
@@ -160,7 +157,7 @@ class CustomerIdentificationService
         }
 
     /**
-     * Buscar cliente o vehículo según el tipo y valor
+     * Buscar cliente según el tipo y valor
      * 
      * @return Customer|null
      */
@@ -168,120 +165,37 @@ class CustomerIdentificationService
     {
         $this->logCustomer('Service: Buscando cliente', ['type' => $type, 'value' => $value]);
         
-        // $customer = match ($type) {
-        //     'patente' => [
-        //         'vehicle' => $vehicle = $this->vehicleRepo->findByPatente($value),
-        //         'customer' => $vehicle?->customer ?? $this->handleOrphanVehicle($vehicle),
-        //     ],
-        //     'dni' => [
-        //         'vehicle' => null,
-        //         'customer' => $this->customerRepo->findByDni($value),
-        //     ],
-        //     'email' => [
-        //         'vehicle' => null,
-        //         'customer' => $this->customerRepo->findByEmail($value),
-        //     ],
-        //     'phone' => [
-        //         'vehicle' => null,
-        //         'customer' => $this->customerRepo->findByPhone($value),
-        //     ],
-        // };
-
         $customer = $this->customerRepo->findByType($type, $value);
 
         $this->logCustomer('Cliente encontrado por tipo', ['customer' => $customer]);
         return $customer;
     }
 
-    private function handleExistingCustomer(Customer $customer, ?Vehicle $identifiedVehicle, string $threadId, Conversation $conversation): array
+    /**
+     * Crear un nuevo cliente
+     * 
+     * @param string $type Tipo de identificador
+     * @param string $value Valor del identificador
+     * @return Customer
+     */
+    private function createCustomer(string $type, string $value): Customer
     {
-        Log::info('Cliente existente', ['customer_id' => $customer->id]);
-
-        $conversations = $this->customerRepo->getConversations($customer);
-        $vehicles = $this->customerRepo->getVehicles($customer, $identifiedVehicle);
-
-        //$conv = $this->conversationRepo->createOrUpdate($threadId, $customer->id); //Ya esta creada
-        if ($identifiedVehicle) {
-            $this->conversationRepo->attachVehicle($conversation, $identifiedVehicle->id, true);
-        }
-
-        return [
-            'success'                 => true,
-            'customer_id'             => $customer->id,
-            'name'                    => $customer->name,
-            'email'                   => $customer->email,
-            'phone'                   => $customer->phone,
-            'dni'                     => $customer->dni,
-            'is_new'                  => false,
-            'is_anonymous'            => $customer->is_anonymous,
-            'previous_conversations'  => $conversations,
-            'vehicles'                => $vehicles,
-            'message'                 => $customer->name
-                ? "Bienvenido de vuelta, {$customer->name}!"
-                : 'Cliente identificado correctamente',
-        ];
-    }
-
-    private function handleNewCustomer(string $type, string $value, string $threadId): array
-    {
-        Log::info('Nuevo cliente', [$type => $value]);
-
         // Crear customer según el tipo de identificador
         $customerData = match($type) {
             'email' => ['email' => $value],
-            'dni' => ['dni' => $value],
-            'phone' => ['phone' => $value],
-            'patente' => [
-                'metadata' => json_encode([
-                    'initial_identifier' => 'patente',
-                    'initial_value' => strtoupper($value),
-                ])
-            ], // Sin datos de contacto → será anónimo
+            'phone' => ['phone' => $value],        
         };
-        Log::info(__METHOD__ . __LINE__ . ' Datos para nuevo cliente:', $customerData);
+        $this->logCustomer('Service: Datos para nuevo cliente', $customerData);
 
         $customer = $this->customerRepo->create($customerData);
-
-        Log::info(__METHOD__ . __LINE__ . ' Cliente creado', ['customer' => $customer]);
         
-        // Si es patente, crear vehicle
-        $vehicle = null;
-        if ($type === 'patente') {
-            $vehicle = $this->vehicleRepo->create([
-                'customer_id' => $customer->id,
-                'patente'     => strtoupper($value),
-            ]);
-        }
+        $this->logCustomer('Service: Cliente creado', ['customer' => $customer]);
+        
 
-        // Crear conversation
-        $conv = $this->conversationRepo->createOrUpdate($threadId, $customer->id);
-        if ($vehicle) {
-            $this->conversationRepo->attachVehicle($conv, $vehicle->id, true);
-        }
+        // Crear conversation esto hay que sacarlo al nivel del adapter
+        //$conv = $this->conversationRepo->createOrUpdate($threadId, $customer->id);
 
-        return [
-            'success'                => true,
-            'customer'               => $customer,
-            'customer_id'            => $customer->id,
-            'name'                   => null,
-            'email'                  => $type === 'email' ? $value : null,
-            'phone'                  => null,
-            'dni'                    => $type === 'dni' ? $value : null,
-            'is_new'                 => true,
-            'is_anonymous'           => $customer->is_anonymous,
-            'previous_conversations' => collect([]),
-            'vehicles'               => $vehicle
-                ? collect([[
-                    'id'            => $vehicle->id,
-                    'patente'       => $vehicle->patente,
-                    'marca'         => $vehicle->marca ?? '',
-                    'modelo'        => $vehicle->modelo ?? '',
-                    'año'           => $vehicle->año ?? 0,
-                    'is_identified' => true,
-                ]])
-                : collect([]),
-            'message' => '¡Bienvenido! Eres un cliente nuevo',
-        ];
+        return $customer;
         
     }
 

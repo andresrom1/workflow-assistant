@@ -16,23 +16,25 @@ class ConversationRepository
     }
 
     /**
-     * Summary of findOrCreateByThreadId
-     * @param string $threadId
+     * Summary of findOrCreateByExternalConversationId
+     * @param string $externalId El ID externo de la conversación (OpenAi: thread_id)
      * @return Conversation
      */
-    public function findOrCreateByThreadId(string $threadId): Conversation
+    public function findOrCreateByExternalId(string $externalId): Conversation
     {
-        $this->logConversation('Entrada a findOrCreateByThreadId con threadId: ' ,['thread_id'=>$threadId]);
+        $this->logConversation(
+            'Entrada a findOrCreateById con external_conversation_id: ' ,
+            ['external_conversation_id'=>$externalId]);
         
-        $conversation = Conversation::where('external_conversation_id', $threadId)->firstOrCreate(
-            ['external_conversation_id' => $threadId],
+        $conversation = Conversation::where('external_conversation_id', $externalId)->firstOrCreate(
+            ['external_conversation_id' => $externalId],
             [
-                'external_conversation_id' => $threadId,
+                'external_conversation_id' => $externalId,
                 'status' => 'active',
+                'last_message_at' => now(),
             ]
         );
 
-        $this->logConversation('Conversación encontrada o creada', ['conversation_id' => $conversation->id]);
         return $conversation;
     }
 

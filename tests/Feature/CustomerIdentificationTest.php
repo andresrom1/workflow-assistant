@@ -59,9 +59,8 @@ class CustomerIdentificationTest extends TestCase
         
         $response->assertStatus(200)
             ->assertJson([
-                'success' => true,
-                'is_new' => true,
-                'is_anonymous' => false,  // ✅ Tiene email → no anónimo
+                "success" => true,
+                "tool_output" => "Cliente identificado correctamente"
             ]);
 
         $customer = Customer::first();

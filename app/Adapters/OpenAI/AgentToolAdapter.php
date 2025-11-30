@@ -3,6 +3,7 @@
 namespace App\Adapters\OpenAI;
 
 use App\Contracts\AIProviderAdapterInterface;
+use App\Models\Customer;
 use App\Repositories\ConversationRepository;
 use App\Services\CustomerIdentificationService;
 use App\Services\VehicleIdentificationService;
@@ -11,6 +12,7 @@ use App\Traits\ConditionalLogger;
 use Illuminate\Support\Facades\Validator;
 use InvalidArgumentException;
 use App\Models\Conversation;
+use Illuminate\Http\Request;
 
 class AgentToolAdapter implements AIProviderAdapterInterface
 {
@@ -21,7 +23,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         private readonly VehicleIdentificationService $vehicleService,
         private readonly ConversationRepository $conversationRepo,
     ) {}
-
+        
     /**
      * Implementación obligatoria del método handleToolCall (ENTRY POINT).
      * Este método recibe el payload y delega la ejecución al método de herramienta correspondiente.
@@ -29,29 +31,33 @@ class AgentToolAdapter implements AIProviderAdapterInterface
      * @param string $toolName Nombre de la herramienta a ejecutar
      * @return array La respuesta formateada para el proveedor de IA
      */
-    public function handleToolCall(array $payload, $toolName): array
+    public function handleToolCall(array $payload, string $toolName): array
     {
-        // 1. Extraemos datos del contexto
-        $openaiUserId = $payload['openai_user_id'] ?? null; //Posiblemente esto nunca sea necesario
-        $threadId = $payload['thread_id'] ?? null;
-        
-        if (empty($threadId)) {
-            throw new InvalidArgumentException("Falta el thread_id para establecer el contexto de la conversación.");
-        }
-        // Nunca deberia ser empty ya que se valida en el controller
+        // 1- Validar que el request tiene todos los datos necesarios
+        Validator::make($payload, [
+            'thread_id'      => 'required|string',
+            'openai_user_id' => 'required|string',
+        ])->validate();
 
-        // 2. RESOLVER EL CONTEXTO (Elevado al Orquestador - ÚNICO LUGAR)
+        // Transformaciones necesarias para continuar agnostico
+        $data = $payload;
+        $data['external_conversation_id'] = $data['thread_id'];
+        $data['external_user_id'] = $data['openai_user_id'];
+        unset($data['thread_id']);
+        unset($data['openai_user_id']);
+        unset($data['ai_provider']);
 
-        /** @var Conversation $conversation */
-        $conversation = $this->conversationRepo->findOrCreateByThreadId($threadId);
+        $conversation = $this->conversationRepo
+            ->findOrCreateByExternalId($data['external_conversation_id']);
 
-        // 3. Logueamos y despachamos
-        $this->logCustomer("HTTP Tool Request recibido: {$toolName}", ['payload' => $payload, 'conversation_id' => $conversation->id]);
+        $this->logCustomer(
+            "HTTP Tool Request recibido: {$toolName}", 
+            ['payload' => $payload, 'conversation_id' => $conversation->id]);
 
         try {
             return match ($toolName) {
-                'identify_customer' => $this->IdentifyCustomer($payload, $conversation),
-                'identify_vehicle' => $this->IdentifyVehicle($payload, $openaiUserId),
+                'identify_customer' => $this->IdentifyCustomer($data, $conversation),
+                'identify_vehicle' => $this->IdentifyVehicle($data), // Aun no implementada
                 default => $this->formatError("Herramienta no soportada: {$toolName}", 'tool_not_found'),
             };
         } catch (InvalidArgumentException $e) {
@@ -64,47 +70,65 @@ class AgentToolAdapter implements AIProviderAdapterInterface
     }
     
     /**
+     * Identifica cliente y lo vincula a la conversación actual.
      * @param array $payload
-     * @param Conversation $conversation
-     * @return array 
+     * @param Conversation  $conversation
+     * Retorna ARRAY para la IA (No el objeto Customer).
      */
-    protected function IdentifyCustomer(array $payload, Conversation $conversation): array
+    protected function identifyCustomer(array $payload, Conversation $conversation): array
     {
         $this->logCustomer('Adapter: Iniciando identificación de cliente', $payload);
         
-        try {
-            // Validamos 
-            $data = $this->validateCustomer($payload);
-            
-            // Llamar al service (ahora devuelve array)
-            $result = $this->customerService->identify(
-                $data['identifier_type'], 
-                $data['identifier_value'], 
-                $data['thread_id'],
-                $conversation);
-            $this->logCustomer('Adapter: Resultado de servicio de identificacion recibido en adaptador', $result);
-            
-            // El array ya viene en formato “OpenAI-friendly”
-            return array_merge(['success' => true], $result);
+        // 1. Validamos y Obtenemos el Cliente (Si falla, deja que la excepción suba)
+        // No uses try/catch aquí si vas a silenciar el error. 
+        // Deja que handleToolCall capture la excepción y devuelva el error formateado.
+        
+        $data = $this->validateCustomer($payload); // Usamos el método validador privado
 
-        } catch (InvalidArgumentException $e) {
-            Log::warning('Validación', ['error' => $e->getMessage()]);
-            return $this->formatError($e->getMessage(), 'validation_error');
-        } catch (\Exception $e) {
-            Log::error('Server', ['msg' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-            return $this->formatError('Error interno', 'server_error');
+        $customer = $this->customerService->findOrCreate(
+            $data['identifier_type'], 
+            $data['identifier_value']
+        );
+
+        $this->logCustomer('Adapter: Cliente obtenido del servicio', ['id' => $customer->id]);
+
+        // 2. ORQUESTACIÓN Y VINCULACIÓN
+        // Lógica: Siempre vinculamos el cliente actual a la conversación.
+        // Esto cubre:
+        // A. Conversación nueva (Anónimo -> Identificado)
+        // B. Corrección de error (Dueño A -> Dueño B)
+        
+        $currentOwnerId = $conversation->customer_id;
+
+        // Solo auditamos si hubo un cambio real de dueño
+        if ($currentOwnerId && $currentOwnerId !== $customer->id) {
+            $this->logCustomer('Cambio de titularidad en conversación', [
+                'conversation_id' => $conversation->id,
+                'from' => $currentOwnerId,
+                'to' => $customer->id]);
         }
+
+        // Ejecutamos la vinculación (Si ya es el mismo, el update es barato o el repo lo maneja)
+        $this->conversationRepo->linkCustomer($conversation->id, $customer->id);
+        
+        // 3. CONSTRUCCIÓN DE MEMORIA (Opcional, si usas la lógica de vehículos/quotes)
+        // ... (Aquí iría la lógica de buildCustomerHistoryContext) ...
+
+        // 4. RETORNO BLINDADO (Array para la IA)
+        return [
+            'success' => true,
+            'tool_output' => "Cliente identificado correctamente",
+        ];
     }
 
     /**
      * @param array $arguments
-     * @param string|null $openaiUserId
      * @return array
      */
-    protected function IdentifyVehicle(array $arguments, ?string $openaiUserId): array
+    protected function IdentifyVehicle(array $arguments): array
     {
         // El AgentToolAdapter ya validó que $openaiUserId no sea nulo si es necesario
-        if (empty($openaiUserId)) {
+        if (empty($arguments['openai_user_id'])) {
             throw new InvalidArgumentException("Falta el identificador de usuario de la IA (openaiUserId).");
         }
 
@@ -123,7 +147,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             year: $validated['anio'],
             combustible: $validated['combustible'],
             codigoPostal: $validated['codigo_postal'],
-            openaiUserId: $openaiUserId, // Usamos el ID que extrajimos en handleToolCall
+            openaiUserId: $arguments['openai_user_id'], // Usamos el ID que extrajimos en handleToolCall
             threadId: $validated['thread_id']
         );
         
@@ -176,9 +200,9 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         $validator = Validator::make($payload, [
             'identifier_type'  => 'required|string|in:email,phone,wbid', // Ejemplo: restringir valores
             'identifier_value' => 'required|string',
-            'thread_id'        => 'required|string',
+            'external_conversation_id' => 'required|string',
             'ai_provider'      => 'nullable|string',
-            'openai_user_id'   => 'nullable|string',
+            'external_user_id'   => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
