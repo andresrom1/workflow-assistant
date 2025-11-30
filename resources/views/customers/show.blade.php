@@ -207,7 +207,7 @@
                                 <div class="border border-gray-200 rounded-lg p-4 hover:border-green-300 transition-colors">
                                     <div class="flex items-center justify-between">
                                         <div>
-                                            <p class="text-sm font-medium text-gray-900">Thread ID <span class="font-normal text-blue-600">Última actividad: {{ $conversation->last_message_at->format('d/m/Y H:i') }} </p>
+                                            <p class="text-sm font-medium text-gray-900">Thread ID <span class="font-normal text-blue-600">Última actividad: {{ $conversation->last_message_at }} </p>
                                             <p class="text-xs text-gray-500 font-mono mt-1">{{ $conversation->external_conversation_id }}</p>
                                         </div>
                                         <div class="text-right">
