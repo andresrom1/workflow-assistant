@@ -45,6 +45,31 @@ class ToolsController extends Controller
 
         return $this->jsonResponse($result);
     }
+    /**
+     * Identificar vehículo (Webhook) -> ¡FALTABA ESTE!
+     */
+    public function identifyVehicle(Request $request)
+    {
+        // Ver TODO el request para encontrar el thread_id
+        $this->logCustomer('HTTP Tool Request recibido: identify_customer', ['body' => $request->all()]);
+
+        //Detección: El Controller pregunta "¿Quién envía esto?"
+        $providerName = $request->input('ai_provider', 'openai');
+
+        // El Factory instancia la clase correcta (AgentToolAdapter, ClaudeAdapter, etc.)
+        try {
+            $adapter = $this->factory->make($providerName);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => 'Proveedor de IA no soportado'], 400);
+        }
+        
+        $result = $adapter->handleToolCall($request->all(), 'identify_vehicle');
+        $this->logCustomer('Resultado de handleToolCall', $result);
+
+        //deberia crearse una coversacion si no existe
+
+        return $this->jsonResponse($result);
+    }
 
     protected function extractOpenAIUserId(Request $request): ?string
     {

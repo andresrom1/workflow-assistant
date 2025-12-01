@@ -51,7 +51,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         $conversation = $this->conversationRepo
             ->findOrCreateByExternalId($data['external_conversation_id']);
 
-        $this->logCustomer(
+        $this->logAdapter(
             "HTTP Tool Request recibido: {$toolName}", 
             ['payload' => $payload, 'conversation_id' => $conversation->id]);
 

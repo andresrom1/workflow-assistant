@@ -7,6 +7,15 @@ use Illuminate\Support\Facades\Log;
 trait ConditionalLogger
 {
     /**
+     * Loguea información del ADAPTER si 'app.log.customer' es true.
+     *  @param string $message El mensaje principal
+     * @param array $context Datos adicionales (array)
+     */
+    protected function logaDAPTER(string $message, array $context = []): void
+    {
+        $this->writeLog('adapter', '[Adapter]', $message, $context);
+    }
+    /**
      * Loguea información del CLIENTE si 'app.log.customer' es true.
      *  @param string $message El mensaje principal
      * @param array $context Datos adicionales (array)

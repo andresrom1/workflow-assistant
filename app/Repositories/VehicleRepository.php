@@ -49,7 +49,7 @@ class VehicleRepository
                 'year' => $specs['year'],
                 'combustible' => $specs['combustible'] ?? null,
                 'codigo_postal' => $specs['codigo_postal'] ?? null,
-                'customer_id' => $customer,
+                'customer_id' => $customer->id,
             ]
         );
     }

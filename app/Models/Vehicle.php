@@ -18,7 +18,7 @@ class Vehicle extends Model
         'marca',
         'modelo',
         'version',
-        'año',
+        'year',
         'combustible',
         'codigo_postal',
         'uso',
