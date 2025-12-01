@@ -3,6 +3,7 @@
 
 namespace App\Repositories;
 
+use App\Models\Customer;
 use App\Models\Vehicle;
 use Log;
 
@@ -29,8 +30,12 @@ class VehicleRepository
         Log::info(__METHOD__ . __LINE__ . ' Buscando cliente', ['patente' => $patente]);
         return Vehicle::where('patente', strtoupper($patente))->first();
     }
-
-    public function findOrCreate(array $specs): Vehicle
+    /**
+     * Busca un vehículo por sus especificaciones o lo crea si no existe.
+     * @param array $specs Las especificaciones del vehiculo
+     * @param Customer $customer
+     */
+    public function findOrCreate(array $specs, Customer $customer): Vehicle
     {
         return Vehicle::firstOrCreate(
             [
@@ -44,8 +49,7 @@ class VehicleRepository
                 'year' => $specs['year'],
                 'combustible' => $specs['combustible'] ?? null,
                 'codigo_postal' => $specs['codigo_postal'] ?? null,
-                'customer_id' => $specs['customer_id'] ?? null,
-                'thread_id' => $specs['thread_id'] ?? null,
+                'customer_id' => $customer,
             ]
         );
     }

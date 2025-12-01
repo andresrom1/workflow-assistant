@@ -4,6 +4,7 @@ namespace App\Adapters\OpenAI;
 
 use App\Contracts\AIProviderAdapterInterface;
 use App\Models\Customer;
+use App\Models\Vehicle;
 use App\Repositories\ConversationRepository;
 use App\Services\CustomerIdentificationService;
 use App\Services\VehicleIdentificationService;
@@ -56,8 +57,8 @@ class AgentToolAdapter implements AIProviderAdapterInterface
 
         try {
             return match ($toolName) {
-                'identify_customer' => $this->IdentifyCustomer($data, $conversation),
-                'identify_vehicle' => $this->IdentifyVehicle($data), // Aun no implementada
+                'identify_customer' => $this->identifyCustomer($data, $conversation),
+                'identify_vehicle' => $this->identifyVehicle($data, $conversation), // Aun no implementada
                 default => $this->formatError("Herramienta no soportada: {$toolName}", 'tool_not_found'),
             };
         } catch (InvalidArgumentException $e) {
@@ -122,36 +123,43 @@ class AgentToolAdapter implements AIProviderAdapterInterface
     }
 
     /**
-     * @param array $arguments
+     * @param array $data
+     * @param Conversation  $conversation
      * @return array
      */
-    protected function IdentifyVehicle(array $arguments): array
+    protected function identifyVehicle(array $data, Conversation $conversation): array
     {
-        // El AgentToolAdapter ya validó que $openaiUserId no sea nulo si es necesario
-        if (empty($arguments['openai_user_id'])) {
-            throw new InvalidArgumentException("Falta el identificador de usuario de la IA (openaiUserId).");
+        // 1. Cargar el Customer (Garantizado por el flujo)
+        // Usamos la relación para cargar el modelo Customer.
+        /** @var Customer $customer */
+        $customer = $conversation->customer;
+        
+        if (!$customer) {
+            // Defensa en profundidad: aunque el flujo lo garantice, el código se protege.
+            return $this->formatError("No se ha identificado un cliente para asignar el vehículo.", "missing_customer");
+        } 
+        
+        // 2. Validar Payload (Patente, Marca, etc.)
+        $data = $this->validateVehicle($data);
+
+        // 3. Servicio PURO (Find or Create, con lógica de transferencia de propiedad)
+        /** @var Vehicle $vehicle */
+        $vehicle = $this->vehicleService->findOrCreate($customer, $data);
+
+        // 4. Lógica de Actualización / Transferencia (Decisión del Orquestador)
+        // Si el vehículo ya existía (no es nuevo), aprovechamos para actualizar datos permitidos
+        // (como CP o Versión) y transferir la propiedad si el dueño era otro.
+        if ($vehicle->wasRecentlyCreated === false) {
+             // El servicio updateVehicle maneja la lógica restrictiva de qué campos tocar
+             $this->vehicleService->updateVehicle($vehicle, $customer, $data);
+             $this->logCustomer('Adapter: Datos de vehículo actualizados/transferidos.', ['patente' => $vehicle->patente]);
         }
 
-        // Normalizar patente: mayúsculas y sin espacios
-        $arguments['patente'] = strtoupper(str_replace(' ', '', $arguments['patente'] ?? ''));
-        
-        // Validar argumentos
-        $validated = $this->validateVehicle($arguments);
-        
-        // Llamar al service
-        $result = $this->vehicleService->identifyVehicle(
-            patente: $validated['patente'] ,
-            marca: $validated['marca'],
-            modelo: $validated['modelo'],
-            version: $validated['version'],
-            year: $validated['anio'],
-            combustible: $validated['combustible'],
-            codigoPostal: $validated['codigo_postal'],
-            openaiUserId: $arguments['openai_user_id'], // Usamos el ID que extrajimos en handleToolCall
-            threadId: $validated['thread_id']
-        );
-        
-        return $result;
+        // 5. Salida Blindada
+        return [
+            'success' => true,
+            'tool_output' => "Vehículo registrado correctamente."
+        ];
     }
 
     /**
@@ -171,10 +179,9 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             'marca'         => 'required|string|max:100',
             'modelo'        => 'required|string|max:100',
             'version'       => 'required|string|max:100',
-            'anio'          => 'required|integer|min:1900|max:' . (date('Y') + 1),
+            'year'          => 'required|integer|min:1900|max:' . (date('Y') + 1),
             'combustible'   => 'required|string|in:nafta,Nafta,diesel,Diesel,gnc,GNC,electrico,Electrico,hibrido,Hibrido',
             'codigo_postal' => 'required|string|max:10',
-            'thread_id'     => 'required|string|max:100',
         ];
 
         $validator = Validator::make($arguments, $rules);
