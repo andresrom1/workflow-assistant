@@ -52,7 +52,7 @@ class ToolsController extends Controller
     {
         // Ver TODO el request para encontrar el thread_id
         $this->logCustomer('HTTP Tool Request recibido: identify_customer', ['body' => $request->all()]);
-
+        Log::warning(__METHOD__.__LINE__.'Identificacion de vehiculo recibido', ['request' => $request->all()]);
         //Detección: El Controller pregunta "¿Quién envía esto?"
         $providerName = $request->input('ai_provider', 'openai');
 

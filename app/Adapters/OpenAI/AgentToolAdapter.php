@@ -139,6 +139,9 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             return $this->formatError("No se ha identificado un cliente para asignar el vehículo.", "missing_customer");
         } 
         
+        $this->logAdapter('Adapter: Iniciando identificación de vehículo', [
+            'data' => $data,
+        ]);
         // 2. Validar Payload (Patente, Marca, etc.)
         $data = $this->validateVehicle($data);
 
@@ -152,7 +155,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         if ($vehicle->wasRecentlyCreated === false) {
              // El servicio updateVehicle maneja la lógica restrictiva de qué campos tocar
              $this->vehicleService->updateVehicle($vehicle, $customer, $data);
-             $this->logCustomer('Adapter: Datos de vehículo actualizados/transferidos.', ['patente' => $vehicle->patente]);
+             $this->logAdapter('Adapter: Datos de vehículo actualizados/transferidos.', ['patente' => $vehicle->patente]);
         }
 
         // 5. Salida Blindada
