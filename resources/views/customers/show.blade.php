@@ -24,7 +24,7 @@
                             </svg>
                         </div>
                         <div>
-                            <h1 class="text-2xl font-bold text-gray-900">{{ $customer->name }}</h1>
+                            <h1 class="text-2xl font-bold text-gray-900">Juan Perez {{ $customer->name }}</h1>
                             <p class="text-sm text-gray-500">DNI: {{ $customer->dni }}</p>
                         </div>
                     </div>
@@ -42,13 +42,14 @@
                     <h2 class="text-lg font-semibold text-gray-900 mb-4">Información del Cliente</h2>
                     
                     <div class="space-y-4">
+                        
                         <div class="flex items-start space-x-3">
                             <svg class="w-5 h-5 text-gray-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                             </svg>
                             <div>
-                                <p class="text-sm font-medium text-gray-500">DNI</p>
-                                <p class="text-sm text-gray-900 font-mono">{{ $customer->dni }}</p>
+                                <p class="text-sm font-medium text-gray-500">Nombre</p>
+                                <p class="text-sm text-gray-900">{{ $customer->name ?? 'No registrado' }}</p>
                             </div>
                         </div>
 
@@ -61,7 +62,7 @@
                                 <p class="text-sm text-gray-900">{{ $customer->email ?? 'No registrado' }}</p>
                             </div>
                         </div>
-
+                        
                         <div class="flex items-start space-x-3">
                             <svg class="w-5 h-5 text-gray-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -69,6 +70,16 @@
                             <div>
                                 <p class="text-sm font-medium text-gray-500">Teléfono</p>
                                 <p class="text-sm text-gray-900">{{ $customer->phone ?? 'No registrado' }}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-start space-x-3">
+                            <svg class="w-5 h-5 text-gray-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                            </svg>
+                            <div>
+                                <p class="text-sm font-medium text-gray-500">DNI</p>
+                                <p class="text-sm text-gray-900 font-mono">{{ $customer->dni }}</p>
                             </div>
                         </div>
 
@@ -141,16 +152,16 @@
                                         <div class="flex-1">
                                             <div class="flex items-center space-x-3 mb-2">
                                                 <span class="text-lg font-semibold text-gray-900 font-mono">
-                                                    {{ $vehicle->plate }}
+                                                    {{ $vehicle->patente }}
                                                 </span>
                                                 <span class="px-2 py-1 text-xs font-medium rounded-full {{ $vehicle->is_complete ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800' }}">
                                                     {{ $vehicle->is_complete ? 'Completo' : 'Incompleto' }}
                                                 </span>
-                                                @if($vehicle->usage)
+                                                @if($vehicle->uso)
                                                     <span class="px-2 py-1 text-xs font-medium rounded-full
-                                                        @if($vehicle->usage === 'particular') bg-green-100 text-green-800
-                                                        @elseif($vehicle->usage === 'comercial') bg-blue-100 text-blue-800
-                                                        @elseif($vehicle->usage === 'taxi') bg-yellow-100 text-yellow-800
+                                                        @if($vehicle->uso === 'particular') bg-green-100 text-green-800
+                                                        @elseif($vehicle->uso === 'comercial') bg-blue-100 text-blue-800
+                                                        @elseif($vehicle->uso === 'taxi') bg-yellow-100 text-yellow-800
                                                         @else bg-gray-100 text-gray-800
                                                         @endif">
                                                         {{ ucfirst($vehicle->usage) }}
@@ -160,11 +171,15 @@
                                             <div class="grid grid-cols-3 gap-4 text-sm">
                                                 <div>
                                                     <p class="text-gray-500">Marca</p>
-                                                    <p class="text-gray-900 font-medium">{{ $vehicle->brand ?? 'N/A' }}</p>
+                                                    <p class="text-gray-900 font-medium">{{ $vehicle->marca ?? 'N/A' }}</p>
                                                 </div>
                                                 <div>
                                                     <p class="text-gray-500">Modelo</p>
-                                                    <p class="text-gray-900 font-medium">{{ $vehicle->model ?? 'N/A' }}</p>
+                                                    <p class="text-gray-900 font-medium">{{ $vehicle->modelo ?? 'N/A' }}</p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-gray-500">Versión</p>
+                                                    <p class="text-gray-900 font-medium">{{ $vehicle->version ?? 'N/A' }}</p>
                                                 </div>
                                                 <div>
                                                     <p class="text-gray-500">Año</p>
