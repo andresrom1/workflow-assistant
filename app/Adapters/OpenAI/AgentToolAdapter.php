@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\Vehicle;
 use App\Repositories\ConversationRepository;
 use App\Services\CustomerIdentificationService;
+use App\Services\QuoteService;
 use App\Services\VehicleIdentificationService;
 use Illuminate\Support\Facades\Log;
 use App\Traits\ConditionalLogger;
@@ -23,6 +24,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         private readonly CustomerIdentificationService $customerService,
         private readonly VehicleIdentificationService $vehicleService,
         private readonly ConversationRepository $conversationRepo,
+        private readonly QuoteService $quoteService
     ) {}
         
     /**
@@ -157,11 +159,18 @@ class AgentToolAdapter implements AIProviderAdapterInterface
              $this->vehicleService->updateVehicle($vehicle, $customer, $data);
              $this->logAdapter('Adapter: Datos de vehículo actualizados/transferidos.', ['patente' => $vehicle->patente]);
         }
+        
+        // ORQUESTACIÓN CRÍTICA: Iniciar Cotización Asíncrona
+        $quote = $this->quoteService->createPendingQuote($conversation, $customer, $vehicle);
+        
+        $this->logAdapter('Adapter: Cotización asíncrona iniciada.', ['quote_id' => $quote->id, 'status' => $quote->status]);
 
-        // 5. Salida Blindada
+        // 4. RETORNO BLINDADO A LA IA (UX Conversacional)
+        // El Agente NO queda bloqueado y puede dar el mensaje de preparación.
         return [
             'success' => true,
-            'tool_output' => "Vehículo registrado correctamente."
+            'tool_output' => "Vehículo registrado correctamente. Se ha iniciado el proceso de cotización {$quote->id} en estado 'pending'. Por favor, indaga al cliente sobre la cobertura deseada para proceder al match cuando la cotización esté disponible.",
+            'quote_id' => $quote->id,
         ];
     }
 

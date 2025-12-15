@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Estructura Normalizada de Cotización",
+  "description": "Schema para validar el output del parser antes de persistir en Quotes y QuoteAlternatives",
+  "type": "object",
+  "required": [
+    "external_ref_id",
+    "status",
+    "alternatives"
+  ],
+  "properties": {
+    "external_ref_id": {
+      "type": "string",
+      "description": "El ID de la tarea o transacción del proveedor (ej: task_id del JSON original). Se guarda en quotes.external_ref_id."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["SUCCESS", "FAILED", "PENDING"],
+      "description": "Estado de la respuesta del proveedor. Se mapea a quotes.status."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Datos extra técnicos del proveedor (tiempos, debug). Se guarda en quotes.metadata."
+    },
+    "alternatives": {
+      "type": "array",
+      "description": "Lista de opciones de cobertura extraídas. Se guardan en quote_alternatives.",
+      "items": {
+        "type": "object",
+        "required": [
+          "external_code",
+          "external_quote_id",
+          "aseguradora",
+          "descripcion",
+          "normalized_grade",
+          "precio",
+          "moneda"
+        ],
+        "properties": {
+          "external_code": {
+            "type": "string",
+            "description": "Código interno del producto o SKU. Si no existe, usar external_quote_id."
+          },
+          "external_quote_id": {
+            "type": "string",
+            "description": "El ID crítico para la emisión (atributo 'data-cover' del HTML)."
+          },
+          "aseguradora": {
+            "type": "string",
+            "description": "Nombre de la compañía (ej: Triunfo).",
+            "default": "Triunfo"
+          },
+          "descripcion": {
+            "type": "string",
+            "description": "Nombre completo del plan (ej: 'C1 - Terceros Completos')."
+          },
+          "titulo": {
+            "type": ["string", "null"],
+            "description": "Código corto del plan (ej: 'C1', 'B1')."
+          },
+          "marketing_title": {
+            "type": ["string", "null"],
+            "description": "Título comercial atractivo (ej: 'Pack Ahorro'). Si no hay, null."
+          },
+          "normalized_grade": {
+            "type": "string",
+            "enum": [
+              "liability",
+              "basic",
+              "third_party_complete",
+              "all_risk"
+            ],
+            "description": "Clasificación normalizada basada en el grupo (Group 1->liability, 2->basic, 3/6->third_party_complete)."
+          },
+          "precio": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Valor numérico limpio (sin símbolos de moneda). Atributo 'data-price'."
+          },
+          "moneda": {
+            "type": "string",
+            "default": "ARS",
+            "description": "Código ISO de la moneda."
+          },
+          "sum_insured_text": {
+            "type": ["string", "null"],
+            "description": "Texto de la suma asegurada extraído del modal (ej: '$ 9.600.000,00')."
+          },
+          "features_tags": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "string"
+            },
+            "description": "Lista simple de características clave detectadas (ej: ['Granizo', 'Cristales', 'Ruedas'])."
+          },
+          "full_details": {
+            "type": ["object", "null"],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Diccionario Clave-Valor con el detalle fino del modal. Ej: {'Granizo': 'Hasta suma asegurada', 'Ruedas': '1 evento'}."
+          }
+        }
+      }
+    }
+  }
+}

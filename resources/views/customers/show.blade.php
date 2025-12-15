@@ -164,7 +164,7 @@
                                                         @elseif($vehicle->uso === 'taxi') bg-yellow-100 text-yellow-800
                                                         @else bg-gray-100 text-gray-800
                                                         @endif">
-                                                        {{ ucfirst($vehicle->usage) }}
+                                                        {{ ucfirst($vehicle->uso) }}
                                                     </span>
                                                 @endif
                                             </div>
