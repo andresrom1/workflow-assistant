@@ -23,7 +23,7 @@ class QuotingEngine
         
         // --- SIMULACIÓN DE LATENCIA ---
         $this->logQuote('Simulando latencia' );
-        sleep(10);
+        sleep(90);
 
         // POR AHORA: Usamos el generador mock interno
         return $this->runMockSimulation($snapshot);
