@@ -17,12 +17,13 @@ class QuotingEngine
      */
     public function generateAlternatives(RiskSnapshot $snapshot): array
     {
+        Log::info(__METHOD__.__line__." Generating alternatives for RiskSnapshot ID: {$snapshot->id}");
         // 1. Orquestación de fuentes (APIs, Tablas internas, Mocks)
         // En el futuro: $results = $this->apiClient->fetch($snapshot);
         
         // --- SIMULACIÓN DE LATENCIA ---
         $this->logQuote('Simulando latencia' );
-        sleep(180);
+        sleep(10);
 
         // POR AHORA: Usamos el generador mock interno
         return $this->runMockSimulation($snapshot);
@@ -85,7 +86,8 @@ class QuotingEngine
                 ];
             }
         }
-
+        
+        Log::info("Alternatives", ['alternatives' => $alternatives]);
         return [
             'task_id' => $taskId,
             'status'  => 'SUCCESS',

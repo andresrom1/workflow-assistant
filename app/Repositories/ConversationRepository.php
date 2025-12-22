@@ -18,9 +18,11 @@ class ConversationRepository
     /**
      * Summary of findOrCreateByExternalConversationId
      * @param string $externalId El ID externo de la conversación (OpenAi: thread_id)
+     * @param string $channel El channel del cual proviene ['web', 'whatsapp', 'telegram', etc...]
+     * @param array|null $metadata 
      * @return Conversation
      */
-    public function findOrCreateByExternalId(string $externalId): Conversation
+    public function findOrCreateByExternalId(string $externalId, $channel, $metadata = null ): Conversation
     {
         $this->logConversation(
             'Entrada a findOrCreateById con external_conversation_id: ' ,
@@ -30,7 +32,9 @@ class ConversationRepository
             ['external_conversation_id' => $externalId],
             [
                 'external_conversation_id' => $externalId,
+                'channel' => $channel,   
                 'status' => 'active',
+                'metadata' => $metadata,
                 'last_message_at' => now(),
             ]
         );

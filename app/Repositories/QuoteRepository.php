@@ -35,7 +35,7 @@ class QuoteRepository
      * * @param Quote $quote
      * @param array $engineResult El resultado raw del QuotingEngine
      */
-    public function saveSimulationResults(Quote $quote, array $engineResult): void
+    public function saveResults(Quote $quote, array $engineResult): void
     {
         DB::transaction(function () use ($quote, $engineResult) {
             
@@ -47,7 +47,13 @@ class QuoteRepository
             $quote->update([
                 'status'          => 'processed',
                 'external_ref_id' => $engineResult['task_id'] ?? null,
-                'raw_response'    => $engineResult['raw'] ?? [],
+                //'raw_response'    => $engineResult['raw'] ?? [],
+                'raw_response'    => [
+                    'external_ref_id' => $engineResult['task_id'] ?? null,
+                    'status'         => $engineResult['status'] ?? null,
+                    'metadata' => $engineResult['metadata'] ?? null,
+                    'alternatives' => $engineResult['parsed_alternatives']
+                    ] ?? [],
                 'expires_at'      => now()->addDays(7),
             ]);
 

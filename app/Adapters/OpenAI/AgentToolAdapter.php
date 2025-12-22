@@ -40,6 +40,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         Validator::make($payload, [
             'thread_id'      => 'required|string',
             'openai_user_id' => 'required|string',
+            'channel'        => 'nullable|string|in:web,whatsapp,telegram',
         ])->validate();
 
         // Transformaciones necesarias para continuar agnostico
@@ -50,8 +51,10 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         unset($data['openai_user_id']);
         unset($data['ai_provider']);
 
+        $channel = $payload['channel'] ?? 'web';
+
         $conversation = $this->conversationRepo
-            ->findOrCreateByExternalId($data['external_conversation_id']);
+            ->findOrCreateByExternalId($data['external_conversation_id'], $channel);
 
         $this->logAdapter(
             "HTTP Tool Request recibido: {$toolName}", 

@@ -46,10 +46,10 @@ class QuoteService
         });
 
         $this->logQuotes("[QuoteService🫰] Created pending Quote ID: {$quote->id} for Conversation ID: {$conversation->id}");
+        
         // 2. DISPARAR PROCESO ASÍNCRONO
         // Usamos un Job para hacer el trabajo pesado (consultar a proveedores, parsear HTML).
         // Esto libera inmediatamente al AgentToolAdapter y evita el bloqueo.
-        
         RequestQuotesFromProviders::dispatch($quote);
 
         return $quote;

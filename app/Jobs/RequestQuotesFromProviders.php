@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Quote;
 use App\Repositories\QuoteRepository;
 use App\Services\QuotingEngine;
+use App\Events\QuoteProcessed;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -36,12 +37,17 @@ class RequestQuotesFromProviders implements ShouldQueue
         try {
             // 1. CÁLCULO (Sin efectos secundarios)
             $result = $engine->generateAlternatives($snapshot);
+            Log::info(__METHOD__.__line__."[Job] QuotingEngine finalizó para Quote ID: {$this->quote->id}", ['result' => $result]);
             
             // 2. PERSISTENCIA (Delegada al Repo)
             // El repo maneja internamente la transacción, limpieza e inserción.
-            $quoteRepo->saveSimulationResults($this->quote, $result);
+            $quoteRepo->saveResults($this->quote, $result);
 
             Log::info("[Job] Cotización finalizada exitosamente.");
+
+            // 3. TRANSMISIÓN REAL-TIME (Solo Reverb)
+            // Disparamos el evento. No hay notificaciones de base de datos.
+            QuoteProcessed::dispatch($this->quote);
 
         } catch (Throwable $e) {
             Log::error("[Job] Fallo crítico: " . $e->getMessage(), [

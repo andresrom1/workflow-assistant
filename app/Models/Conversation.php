@@ -16,6 +16,7 @@ class Conversation extends Model
     protected $fillable = [
         'external_conversation_id',
         'customer_id',
+        'channel',
         'status',
         'metadata',
         'ended_at',
