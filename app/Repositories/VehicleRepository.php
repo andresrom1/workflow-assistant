@@ -48,6 +48,7 @@ class VehicleRepository
                 'version' => $specs['version'],
                 'year' => $specs['year'],
                 'combustible' => $specs['combustible'] ?? null,
+                'uso' => $specs['uso'] ?? 'particular',
                 'codigo_postal' => $specs['codigo_postal'] ?? null,
                 'customer_id' => $customer->id,
             ]
