@@ -24,7 +24,7 @@ class ToolsController extends Controller
      * Este controller solo recibe HTTP y delega al adapter
      */
     public function identifyCustomer(Request $request)
-    {    
+    {    Log::info('Identificacion de cliente recibido', ['request' => $request->all()]);
         // Ver TODO el request para encontrar el thread_id
         $this->logCustomer('HTTP Tool Request recibido: identify_customer', ['body' => $request->all()]);
 
@@ -51,7 +51,7 @@ class ToolsController extends Controller
     public function identifyVehicle(Request $request)
     {
         // Ver TODO el request para encontrar el thread_id
-        $this->logCustomer('HTTP Tool Request recibido: identify_customer', ['body' => $request->all()]);
+        $this->logCustomer('HTTP Tool Request recibido: identify_vehicle', ['body' => $request->all()]);
         Log::warning(__METHOD__.__LINE__.'Identificacion de vehiculo recibido', ['request' => $request->all()]);
         //Detección: El Controller pregunta "¿Quién envía esto?"
         $providerName = $request->input('ai_provider', 'openai');

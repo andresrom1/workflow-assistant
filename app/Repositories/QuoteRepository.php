@@ -18,11 +18,13 @@ class QuoteRepository
      * Crea la cabecera de la cotización en estado pendiente.
      * @param RiskSnapshot $snapshot // El snapshot del riesgo
      * @param Conversation $conversation // La conversacion en donde se crea la cotización
+     * @param string $sessionUuid El UUID de la sesión para rastreo.
      * @return Quote
      */
-    public function createPending(RiskSnapshot $snapshot, Conversation $conversation): Quote
+    public function createPending(RiskSnapshot $snapshot, Conversation $conversation, string $sessionUuid): Quote
     {
         return Quote::create([
+            'session_uuid'      => $sessionUuid,
             'risk_snapshot_id' => $snapshot->id,
             'conversation_id'  => $conversation->id,
             'status'           => 'pending',
@@ -76,5 +78,10 @@ class QuoteRepository
             'status'   => 'failed',
             'metadata' => ['error' => $errorMessage]
         ]);
+    }
+
+    public function getRawJson(Quote $quote)
+    {
+        return $quote->raw_response;
     }
 }

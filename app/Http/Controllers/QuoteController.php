@@ -3,10 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Quote;
+use App\Services\QuoteService;
 use Illuminate\Http\Request;
 
 class QuoteController extends Controller
 {
+    public function __construct(
+            protected QuoteService $quoteService,
+        ) {}
     /**
      * Muestra el listado de todas las cotizaciones ordenadas por fecha.
      */
@@ -35,5 +39,12 @@ class QuoteController extends Controller
         }]);
 
         return view('quotes.show', compact('quote'));
+    }
+
+    public function showRaw(Quote $quote)
+    {
+        return response()->json(
+            $this->quoteService->getRaw($quote)
+        );
     }
 }

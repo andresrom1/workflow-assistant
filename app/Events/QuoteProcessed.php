@@ -32,13 +32,14 @@ class QuoteProcessed implements ShouldBroadcast
     {
         // Canal Seguro: private-chat.{thread_id}
         // Usamos loadMissing para asegurar que tenemos la relación
+        Log::info(__METHOD__.__LINE__." [Event] Valor de Quote: {$this->quote}");
         $this->quote->loadMissing('conversation');
-        $channelName = 'chat.' . $this->quote->conversation->external_conversation_id;
+        $channelName = 'chat.' . $this->quote->session_uuid;
         
-        Log::info(__METHOD__.__LINE__." [Event] Broadcasting QuoteProcessed en canal: private-{$channelName}");
+        Log::info(__METHOD__.__LINE__." [Event] Broadcasting QuoteProcessed en canal: {$channelName}");
 
         return [
-            new PrivateChannel($channelName),
+            new Channel($channelName), // Canal público
         ];
     }
 
@@ -51,35 +52,11 @@ class QuoteProcessed implements ShouldBroadcast
     {
         $this->quote->load('alternatives');
 
-        // Mapeo limpio de alternativas para la IA
-        // $aiContext = $this->quote->alternatives->map(function ($alt) {
-        //     return [
-        //         'aseguradora' => $alt->aseguradora,
-        //         'plan'        => $alt->descripcion,
-        //         'precio'      => (float) $alt->precio,
-        //         'moneda'      => $alt->moneda,
-        //         'cobertura'   => $alt->normalized_grade,
-        //         'features'    => $alt->features_tags,
-        //     ];
-        // })->toArray();
-
-        //$aiContext = $this->quote->raw_response;
-
-        // Estructura Final del JSON WebSocket
         return [
             'type'     => 'QUOTE_READY',
             'quote_id' => $this->quote->id,
-            'summary'  => "Se generaron {$this->quote->alternatives->count()} opciones.",
-            
-            // Flag para el Frontend
-            'requires_ai_injection' => true,
-            
-            // Payload para System Injection
-            'ai_payload' => [
-                'event' => 'QUOTES_RECEIVED',
-                'source' => 'backend',
-                'data'  => $this->quote->raw_response
-            ]
+            'requires_ai_injection' => true, // Flag para el Frontend  
+            'thread_id' => $this->quote->conversation->external_conversation_id,     
         ];
     }
 }

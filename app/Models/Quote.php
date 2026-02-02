@@ -12,6 +12,7 @@ class Quote extends Model
     use SoftDeletes;
 
     protected $fillable = [
+        'session_uuid',
         'risk_snapshot_id',
         'conversation_id',
         'status',                // 'pending', 'processed', 'failed', 'expired'

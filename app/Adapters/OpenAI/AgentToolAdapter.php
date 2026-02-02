@@ -36,8 +36,11 @@ class AgentToolAdapter implements AIProviderAdapterInterface
      */
     public function handleToolCall(array $payload, string $toolName): array
     {
+        Log::warning(__METHOD__.__LINE__.'handleToolCall invocado para la herramienta: '.$toolName, ['payload' => $payload]);
+        $this->logAdapter("handleToolCall invocado para la herramienta: {$toolName}", ['payload' => $payload]);
         // 1- Validar que el request tiene todos los datos necesarios
         Validator::make($payload, [
+            'sessionUuid'      => 'required|string',
             'thread_id'      => 'required|string',
             'openai_user_id' => 'required|string',
             'channel'        => 'nullable|string|in:web,whatsapp,telegram',
@@ -52,6 +55,11 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         unset($data['ai_provider']);
 
         $channel = $payload['channel'] ?? 'web';
+        $data['sessionUuid'] = $payload['sessionUuid'];
+
+        Log::warning(__METHOD__.__LINE__.'Buscando o creando conversación externa', [
+            '$data' => $data,
+        ]);
 
         $conversation = $this->conversationRepo
             ->findOrCreateByExternalId($data['external_conversation_id'], $channel);
@@ -134,6 +142,13 @@ class AgentToolAdapter implements AIProviderAdapterInterface
      */
     protected function identifyVehicle(array $data, Conversation $conversation): array
     {
+        Log::error('DEBUG identifyVehicle data keys', [
+            'keys' => array_keys($data),
+            'data' => $data,
+        ]);
+
+        $sessionUuid = $data['sessionUuid'];
+
         // 1. Cargar el Customer (Garantizado por el flujo)
         // Usamos la relación para cargar el modelo Customer.
         /** @var Customer $customer */
@@ -164,7 +179,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         }
         
         // ORQUESTACIÓN CRÍTICA: Iniciar Cotización Asíncrona
-        $quote = $this->quoteService->createPendingQuote($conversation, $customer, $vehicle);
+        $quote = $this->quoteService->createPendingQuote($conversation, $customer, $vehicle, $sessionUuid);
         
         $this->logAdapter('Adapter: Cotización asíncrona iniciada.', ['quote_id' => $quote->id, 'status' => $quote->status]);
 

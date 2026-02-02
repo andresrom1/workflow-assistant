@@ -15,6 +15,7 @@ return new class extends Migration
         // Objetivo: Trazabilidad, Estado y Auditoría.
         Schema::create('quotes', function (Blueprint $table) {
             $table->id();
+            $table->uuid('session_uuid');
             
             // Contexto del Negocio (Vínculos Fuertes)
             // Relación con el Snapshot (1 a N, aunque usualmente 1 a 1 por llamada)

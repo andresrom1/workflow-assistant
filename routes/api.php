@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\TestingController;
 use App\Http\Controllers\ToolsController;
 use Illuminate\Http\Request;
@@ -24,9 +25,10 @@ Route::post('/tools/test', function (Request $request) {
 Route::post('tools/identify-customer', [ToolsController::class, 'identifyCustomer']);
 Route::post('tools/identify-vehicle', [ToolsController::class, 'identifyVehicle']);
 
+Route::get('quotes/{quote}/raw', [QuoteController::class, 'showRaw']);
+
 #Sin imnplementar aún
 Route::post('tools/save-vehicle-data',   [ToolsController::class, 'saveVehicleData']);
-Route::post('tools/get-coverage-options', [ToolsController::class, 'getCoverageOptions']);
 Route::post('tools/create-pending-quote', [ToolsController::class, 'createPendingQuote']);
 Route::post('tools/show-data-form',        [ToolsController::class, 'showDataForm']);
 Route::post('tools/show-vehicle-photos-form', [ToolsController::class, 'showVehiclePhotosForm']);

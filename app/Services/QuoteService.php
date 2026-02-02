@@ -27,20 +27,21 @@ class QuoteService
      * @param Conversation $conversation
      * @param Customer $customer
      * @param Vehicle $vehicle
+     * @param string $sessionUuid El UUID de la sesión para rastreo.
      * @return Quote La instancia de la Quote creada.
      */
     
-    public function createPendingQuote(Conversation $conversation, Customer $customer, Vehicle $vehicle): Quote
+    public function createPendingQuote(Conversation $conversation, Customer $customer, Vehicle $vehicle, string $sessionUuid): Quote
     {
         // 1. Bloque de Transacción para garantizar Atomicidad
         // Si falla la creación del Snapshot, no se crea la Quote.
-        $quote = DB::transaction(function () use ($conversation, $customer, $vehicle) {
+        $quote = DB::transaction(function () use ($conversation, $customer, $vehicle, $sessionUuid) {
 
             // 1.1. CONGELAR EL RIESGO (SNAPSHOT)
             $snapshot = $this->snapshotRepo->createFromEntities($customer, $vehicle);
 
             // 1.2. INICIAR LA TRANSACCIÓN (QUOTE en estado PENDING)
-            $quote    = $this->quoteRepo->createPending($snapshot, $conversation);
+            $quote    = $this->quoteRepo->createPending($snapshot, $conversation, $sessionUuid);
 
             return $quote;
         });
@@ -53,5 +54,21 @@ class QuoteService
         RequestQuotesFromProviders::dispatch($quote);
 
         return $quote;
+    }
+    /**
+     * Devuelve el Raw Response 
+     * @param Quote $quote
+     * @return array
+     */
+    public function getRaw(Quote $quote)
+    {
+        if (!$quote->raw_response) {
+            return [
+                'status' => 'pending',
+                'message' => 'La cotización aún está en proceso. Por favor, inténtelo más tarde.'
+            ];
+        }
+        
+        return $this->quoteRepo->getRawJson($quote);
     }
 }
