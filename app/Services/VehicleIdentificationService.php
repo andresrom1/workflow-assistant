@@ -8,7 +8,8 @@ use App\Repositories\VehicleRepository;
 //use App\Repositories\ConversationRepository;
 use Illuminate\Support\Facades\Log;
 use App\Traits\ConditionalLogger;
-
+use App\Services\PlateNormalizerService;
+use Illuminate\Support\Facades\Validator;
 class VehicleIdentificationService
 {
     use ConditionalLogger;
@@ -16,12 +17,13 @@ class VehicleIdentificationService
 
     public function __construct(
         private readonly VehicleRepository $vehicleRepo,
+        private readonly PlateNormalizerService $plate,
         //ConversationRepository $conversationRepository
     ) {
-        
+
         //$this->conversationRepository = $conversationRepository;
     }
-    
+
     /**
      * Busca un vehículo por patente o lo crea si no existe.
      * NO actualiza datos si el vehículo ya existe.
@@ -29,8 +31,8 @@ class VehicleIdentificationService
     public function findOrCreate(Customer $customer, array $data): Vehicle
     {
         // 1. Pre-procesamiento de datos crudos
-        $data['patente'] = strtoupper(str_replace(' ', '', $data['patente']));
-        
+        $data['patente'] = $this->plate->normalize($data['patente']);
+
         // Mapeamos 'anio' (del JSON tool) a 'year' (de la BD) si existe
         if (isset($data['anio'])) {
             $data['year'] = $data['anio'];
@@ -45,10 +47,9 @@ class VehicleIdentificationService
     }
 
     /**
-     * Actualiza un vehículo existente aplicando política restrictiva pero confiada.
-     * Al ser strict: true, sabemos que los datos vienen completos.
-     * Actualizamos: Dueño, CP, Versión y Combustible.
-     * Inmutables: Marca, Modelo, Año (Preservamos la integridad del "casco" del auto).
+     * Actualiza un vehículo existente aplicando política de actualización.
+     * Actualizamos: Dueño, CP, Versión, Combustible, Marca y Modelo.
+     * Inmutable: Año (Preservamos la integridad temporal del registro).
      * @param Vehicle  $vehicle El vehículo a actualizar
      * @param Customer $newOwner El nuevo dueño del vehículo
      * @param array  $data Datos validados y completos del vehículo
@@ -57,19 +58,21 @@ class VehicleIdentificationService
     public function updateVehicle(Vehicle $vehicle, Customer $newOwner, array $data): Vehicle
     {
         $updates = [
-            'customer_id'   => $newOwner->id,      // Transferencia de propiedad
+            'customer_id' => $newOwner->id,      // Transferencia de propiedad
             'codigo_postal' => $data['codigo_postal'], // Actualización de zona de riesgo
-            'version'       => $data['version'],       // Refinamiento de versión
+            'version' => $data['version'],       // Refinamiento de versión
+            'marca' => $data['marca'],           // Corrección de marca
+            'modelo' => $data['modelo'],         // Corrección de modelo
         ];
 
         // Normalizamos combustible y lo actualizamos (ej: el usuario agregó GNC)
         if (isset($data['combustible'])) {
-             $updates['combustible'] = strtolower($data['combustible']);
+            $updates['combustible'] = strtolower($data['combustible']);
         }
 
         $this->vehicleRepo->update($vehicle, $updates);
         $vehicle->refresh();
-        
+
         return $vehicle;
     }
 
@@ -82,15 +85,21 @@ class VehicleIdentificationService
         if (isset($data['combustible'])) {
             $data['combustible'] = strtolower($data['combustible']);
         }
-        
+
         // Si ya mapeamos anio -> year arriba, nos aseguramos de que year pase
         // y anio se quede afuera (gracias al array_flip de allowedFields).
-        
+
         $allowedFields = [
-            'customer_id', 'patente', 'marca', 'modelo', 'version', 
-            'year', 'combustible', 'codigo_postal'
+            'customer_id',
+            'patente',
+            'marca',
+            'modelo',
+            'version',
+            'year',
+            'combustible',
+            'codigo_postal'
         ];
-        
+
         return array_intersect_key($data, array_flip($allowedFields));
     }
 }

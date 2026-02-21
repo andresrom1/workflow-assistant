@@ -59,10 +59,30 @@
                     </ul>
                 </div>
 
-                 <!-- Cliente Snapshot -->
+                 <!-- Cliente Snapshot & Preferencia -->
                  <div>
-                    <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Cliente al Cotizar</h3>
+                    <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Cliente & Preferencia</h3>
                     <p class="text-gray-900">DNI: {{ $quote->riskSnapshot->dni ?? 'No especificado' }}</p>
+                    
+                    @if($coveragePreference)
+                        <div class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <h4 class="text-xs font-bold text-blue-600 uppercase tracking-wide mb-1">Preferencia de Cobertura</h4>
+                            <div class="flex items-center">
+                                <span class="text-lg font-bold text-blue-800">{{ $coveragePreference->preference }}</span>
+                                @php
+                                    $preferenceMapping = [
+                                        'A' => 'Responsabilidad Civil',
+                                        'B' => 'Terceros Básico',
+                                        'C' => 'Terceros Completos',
+                                        'D' => 'Todo Riesgo',
+                                        'TR' => 'Todo Riesgo',
+                                    ];
+                                    $preferenceLabel = $preferenceMapping[strtoupper($coveragePreference->preference)] ?? 'Otras';
+                                @endphp
+                                <span class="ml-2 text-sm text-blue-700">({{ $preferenceLabel }})</span>
+                            </div>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>

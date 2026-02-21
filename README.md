@@ -1,59 +1,65 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Workflow Assistant - Sistema de Cotización de Seguros
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Este proyecto es un asistente inteligente diseñado para automatizar y agilizar el proceso de cotización y emisión de seguros, integrando inteligencia artificial con flujos de trabajo robustos en el backend.
 
-## About Laravel
+## 🚀 Funcionalidades Implementadas
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+### 1. Asistente Basado en IA (Agente)
+- **Integración con OpenAI**: El sistema utiliza un `AgentToolAdapter` para que modelos de lenguaje (GPT) interactúen con la lógica de negocio mediante herramientas específicas.
+- **Orquestación de Herramientas**: Capacidad de la IA para ejecutar acciones como identificar clientes, vehículos y registrar preferencias de forma autónoma durante la conversación.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+### 2. Gestión de Clientes
+- **Identificación Multi-canal**: Soporte para identificar clientes mediante Email, Teléfono o IDs externos (`wbid`).
+- **Persistencia y Vinculación**: Creación automática de perfiles de clientes y vinculación con la sesión de conversación actual.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### 3. Gestión de Vehículos
+- **Identificación de Vehículos**: Registro detallado de vehículos (patente, marca, modelo, versión, año, combustible y código postal).
+- **Normalización de Patentes**: Servicio especializado para estandarizar diferentes formatos de matrículas.
+- **Transferencia de Propiedad**: Lógica para manejar vehículos que cambian de dueño dentro del sistema.
 
-## Learning Laravel
+### 4. Motor de Cotización (Quoting Engine)
+- **Cotización Asíncrona**: Al identificar un vehículo, el sistema inicia automáticamente un proceso de cotización en segundo plano (`RequestQuotesFromProviders`).
+- **Snapshots de Riesgo**: Captura del estado del riesgo en el momento de la cotización para auditoría y consistencia.
+- **Alternativas de Cobertura**: Generación automática de múltiples opciones de cobertura (Responsabilidad Civil, Terceros, Todo Riesgo, etc.).
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+### 5. Preferencias de Cobertura
+- **Captura de Preferencias**: Permite al usuario (a través de la IA) definir qué tipo de cobertura desea, lo cual se persiste para refinar el match con las alternativas generadas.
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### 6. Infraestructura y Tiempo Real
+- **Broadcasting (Reverb)**: Notificaciones en tiempo real al frontend cuando las cotizaciones asíncronas son procesadas y están listas.
+- **Arquitectura Basada en Trabajos (Jobs)**: Uso intensivo de colas para procesos pesados, garantizando una respuesta rápida al usuario.
 
-## Laravel Sponsors
+### 7. Herramientas de Desarrollo
+- **Consola de Testing**: Endpoints dedicados para ejecutar tests, limpiar la base de datos y verificar el estado del sistema en entornos de desarrollo.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+---
 
-### Premium Partners
+## 🔮 Funcionalidades Futuras (Roadmap)
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+### 1. Completado de Datos de Riesgo
+- **`save-vehicle-data`**: Implementación de formularios extendidos para capturar datos adicionales del vehículo (accesorios, estado general, etc.).
 
-## Contributing
+### 2. Formularios Dinámicos e Interactivos
+- **`show-data-form`**: Capacidad del asistente de presentar formularios UI específicos al usuario para recolección de datos que la IA no pudo capturar por chat.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### 3. Inspección Digital (Fotos de Unidad)
+- **`show-vehicle-photos-form`**: Integración de un flujo para que el cliente cargue fotos del vehículo para validación de estado antes de la emisión.
 
-## Code of Conduct
+### 4. Procesamiento de Pagos
+- **`show-payment-form`**: Integración con pasarelas de pago para asegurar la primera cuota o el pago total de la póliza.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### 5. Emisión Final de Póliza
+- **`finalize-policy`**: Cierre del ciclo de venta con la generación y envío de la póliza digital al cliente.
 
-## Security Vulnerabilities
+### 6. Soporte Multi-canal Avanzado
+- **WhatsApp & Telegram**: Refinar la integración con n8n para una experiencia fluida en aplicaciones de mensajería, manteniendo la paridad de funciones con el chat web.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+---
 
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## 🛠️ Stack Tecnológico
+- **Backend**: Laravel 11.x (PHP 8.3+)
+- **IA**: OpenAI API (con Assistant API o Tool Calling)
+- **Base de Datos**: PostgreSQL / MySQL
+- **Tiempo Real**: Laravel Reverb
+- **Colas**: Redis / Database Queue
+- **Integraciones**: n8n (para canales de mensajería)

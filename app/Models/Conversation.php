@@ -34,7 +34,6 @@ class Conversation extends Model
         return $this->belongsTo(Customer::class);
     }
 
-    // ✨ NUEVO: Relación many-to-many con vehicles
     public function vehicles(): BelongsToMany
     {
         return $this->belongsToMany(Vehicle::class)
@@ -42,14 +41,13 @@ class Conversation extends Model
             ->withTimestamps();
     }
 
-    // Helper: Obtener el vehículo principal
-    public function primaryVehicle()
-    {
-        return $this->vehicles()->wherePivot('is_primary', true)->first();
-    }
-
     public function quotes(): HasMany
     {
         return $this->hasMany(Quote::class);
+    }
+
+    public function coveragePreferences(): HasMany
+    {
+        return $this->hasMany(CoveragePreference::class);
     }
 }

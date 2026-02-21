@@ -3,14 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\Quote;
+use App\Models\CoveragePreference;
 use App\Services\QuoteService;
 use Illuminate\Http\Request;
 
 class QuoteController extends Controller
 {
     public function __construct(
-            protected QuoteService $quoteService,
-        ) {}
+        protected QuoteService $quoteService,
+        protected CoveragePreference $coveragePreference,
+    ) {
+    }
     /**
      * Muestra el listado de todas las cotizaciones ordenadas por fecha.
      */
@@ -34,11 +37,24 @@ class QuoteController extends Controller
     public function show(Quote $quote)
     {
         // Cargamos las alternativas ordenadas por precio
-        $quote->load(['riskSnapshot', 'alternatives' => function ($query) {
-            $query->orderBy('precio', 'asc');
-        }]);
+        $quote->load([
+            'riskSnapshot',
+            'alternatives' => function ($query) {
+                $query->orderBy('precio', 'asc');
+            }
+        ]);
 
-        return view('quotes.show', compact('quote'));
+        // Buscamos la preferencia de cobertura para esta conversación y vehículo
+        $coveragePreference = $this->coveragePreference->where('conversation_id', $quote->conversation_id)
+            ->where('vehicle_id', $quote->riskSnapshot->vehicle_id)
+            ->first();
+
+        return view('quotes.show', compact('quote', 'coveragePreference'));
+    }
+    public function store(Request $request)
+    {
+        $quote = $this->quoteService->create($request->all());
+        return response()->json($quote);
     }
 
     public function showRaw(Quote $quote)

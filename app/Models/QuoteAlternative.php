@@ -5,11 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class QuoteAlternative extends Model
 {
-    // Nota: No usamos SoftDeletes aquí porque si se borra la cabecera (Quote),
-    // se borran los detalles en cascada por la FK de base de datos.
+    use SoftDeletes;
+
+    // Nota: Usamos SoftDeletes aquí para mantener la consistencia con la cabecera (Quote).
+    // Aunque BD tenga cascade delete físico, el soft delete permite auditoría completa.
 
     protected $fillable = [
         'quote_id',

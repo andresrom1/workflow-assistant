@@ -22,17 +22,18 @@ class ConversationRepository
      * @param array|null $metadata 
      * @return Conversation
      */
-    public function findOrCreateByExternalId(string $externalId, $channel, $metadata = null ): Conversation
+    public function findOrCreateByExternalId(string $externalId, $channel, $metadata = null): Conversation
     {
         $this->logConversation(
-            'Entrada a findOrCreateById con external_conversation_id: ' ,
-            ['external_conversation_id'=>$externalId]);
-        
+            'Entrada a findOrCreateById con external_conversation_id: ',
+            ['external_conversation_id' => $externalId]
+        );
+
         $conversation = Conversation::where('external_conversation_id', $externalId)->firstOrCreate(
             ['external_conversation_id' => $externalId],
             [
                 'external_conversation_id' => $externalId,
-                'channel' => $channel,   
+                'channel' => $channel,
                 'status' => 'active',
                 'metadata' => $metadata,
                 'last_message_at' => now(),
@@ -58,9 +59,9 @@ class ConversationRepository
 
     public function createOrUpdate(string $threadId, int $customerId): Conversation
     {
-        $this->logConversation('Entrada a createOrUpdate con threadId: ' ,['thread_id'=>$threadId]);
+        $this->logConversation('Entrada a createOrUpdate con threadId: ', ['thread_id' => $threadId]);
         $existing = $this->findByThreadId($threadId);
-        
+
         if ($existing && $existing->customer_id !== $customerId) {
             Log::warning('Thread ID conflict', [
                 'external_conversation_id' => $threadId,
@@ -69,7 +70,7 @@ class ConversationRepository
             ]);
             // Decide: ¿crear nueva conversación o actualizar?
         }
-        
+
         return Conversation::updateOrCreate(
             ['external_conversation_id' => $threadId],
             [
@@ -104,5 +105,18 @@ class ConversationRepository
         Conversation::where('external_user_id', $openaiUserId)
             ->where('status', 'active')
             ->update(['last_message_at' => now()]);
+    }
+
+    public function saveCoveragePreference(int $conversationId, int $vehicleId, string $preference): void
+    {
+        \App\Models\CoveragePreference::updateOrCreate(
+            [
+                'conversation_id' => $conversationId,
+                'vehicle_id' => $vehicleId,
+            ],
+            [
+                'preference' => $preference,
+            ]
+        );
     }
 }

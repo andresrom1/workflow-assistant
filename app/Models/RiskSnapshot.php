@@ -5,8 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
 class RiskSnapshot extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'vehicle_id',
         'customer_id',
@@ -19,6 +23,7 @@ class RiskSnapshot extends Model
         'codigo_postal',
         'dni',
         'edad_conductor',
+        'coverage_preference',
     ];
 
     protected $casts = [

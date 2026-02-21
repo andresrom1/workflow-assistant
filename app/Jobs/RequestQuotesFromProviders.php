@@ -3,9 +3,8 @@
 namespace App\Jobs;
 
 use App\Models\Quote;
-use App\Repositories\QuoteRepository;
-use App\Services\QuotingEngine;
-use App\Events\QuoteProcessed;
+use App\Models\RiskSnapshot;
+use App\Services\QuoteService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -18,47 +17,26 @@ class RequestQuotesFromProviders implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $tries = 3;
-    public $backoff = [2, 5, 10];
-
     public function __construct(
         protected Quote $quote,
-    ) {}
+        protected RiskSnapshot $snapshot
+    ) {
+    }
 
     /**
-     * El Job ahora es un orquestador puro entre el Motor de Cálculo y el Repositorio de Persistencia.
+     * El Job ahora delega la resolución al QuoteService,
+     * el cual orquestará la estrategia adecuada (Mobile o API).
      */
-    public function handle(QuotingEngine $engine, QuoteRepository $quoteRepo): void
+    public function handle(QuoteService $quoteService): void
     {
-        Log::info(__METHOD__.__line__."[Job] Iniciando QuotingEngine para Quote ID: {$this->quote->id}");
-
-        $snapshot = $this->quote->riskSnapshot;
+        Log::info("[Job] Iniciando resolución para Quote ID: {$this->quote->id}");
 
         try {
-            // 1. CÁLCULO (Sin efectos secundarios)
-            $result = $engine->generateAlternatives($snapshot);
-            Log::info(__METHOD__.__line__."[Job] QuotingEngine finalizó para Quote ID: {$this->quote->id}", ['result' => $result]);
-            
-            // 2. PERSISTENCIA (Delegada al Repo)
-            // El repo maneja internamente la transacción, limpieza e inserción.
-            $quoteRepo->saveResults($this->quote, $result);
-
-            Log::info("[Job] Cotización finalizada exitosamente.");
-
-            // 3. TRANSMISIÓN REAL-TIME (Solo Reverb)
-            // Disparamos el evento. No hay notificaciones de base de datos.
-            QuoteProcessed::dispatch($this->quote);
-
+            $quoteService->resolveQuote($this->quote, $this->snapshot);
+            Log::info("[Job] Resolución completada exitosamente.");
         } catch (Throwable $e) {
-            Log::error("[Job] Fallo crítico: " . $e->getMessage(), [
-                'quote_id' => $this->quote->id,
-                'trace'    => $e->getTraceAsString()
-            ]);
-            
-            // El Repo maneja la lógica de marcar como fallido
-            $quoteRepo->markAsFailed($this->quote, $e->getMessage());
-            
-            $this->fail($e); 
+            Log::error("[Job] Fallo en la resolución: " . $e->getMessage());
+            $this->fail($e);
         }
     }
 }

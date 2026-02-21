@@ -24,10 +24,10 @@ class QuoteRepository
     public function createPending(RiskSnapshot $snapshot, Conversation $conversation, string $sessionUuid): Quote
     {
         return Quote::create([
-            'session_uuid'      => $sessionUuid,
+            'session_uuid' => $sessionUuid,
             'risk_snapshot_id' => $snapshot->id,
-            'conversation_id'  => $conversation->id,
-            'status'           => 'pending',
+            'conversation_id' => $conversation->id,
+            'status' => 'pending',
         ]);
     }
 
@@ -40,23 +40,23 @@ class QuoteRepository
     public function saveResults(Quote $quote, array $engineResult): void
     {
         DB::transaction(function () use ($quote, $engineResult) {
-            
+
             // 1. Limpieza Preventiva (Idempotencia para reintentos del Job)
             // Delegamos al modelo la relación, pero la acción es del repo.
             $quote->alternatives()->delete();
 
             // 2. Actualizar Cabecera
             $quote->update([
-                'status'          => 'processed',
+                'status' => 'processed',
                 'external_ref_id' => $engineResult['task_id'] ?? null,
                 //'raw_response'    => $engineResult['raw'] ?? [],
-                'raw_response'    => [
+                'raw_response' => [
                     'external_ref_id' => $engineResult['task_id'] ?? null,
-                    'status'         => $engineResult['status'] ?? null,
+                    'status' => $engineResult['status'] ?? null,
                     'metadata' => $engineResult['metadata'] ?? null,
                     'alternatives' => $engineResult['parsed_alternatives']
-                    ] ?? [],
-                'expires_at'      => now()->addDays(7),
+                ] ?? [],
+                'expires_at' => now()->addDays(7),
             ]);
 
             // 3. Insertar Nuevas Alternativas
@@ -65,7 +65,7 @@ class QuoteRepository
                 $quote->alternatives()->createMany($engineResult['parsed_alternatives']);
             }
         });
-        
+
         $this->logQuote("[QuoteRepo] Resultados guardados para Quote ID: {$quote->id}");
     }
 
@@ -75,7 +75,7 @@ class QuoteRepository
     public function markAsFailed(Quote $quote, string $errorMessage): void
     {
         $quote->update([
-            'status'   => 'failed',
+            'status' => 'failed',
             'metadata' => ['error' => $errorMessage]
         ]);
     }
@@ -83,5 +83,18 @@ class QuoteRepository
     public function getRawJson(Quote $quote)
     {
         return $quote->raw_response;
+    }
+    /**
+     * Obtiene una cotización por ID con o sin alternativas.
+     * 
+     * @param int $id El id de la Quote
+     * @param bool $withAlternatives Indica si se quieren las alternativas de la Quote
+     * @return Quote|null
+     */
+    public function getById(int $id, bool $withAlternatives = false): ?Quote
+    {
+        return $withAlternatives
+            ? Quote::with('alternatives')->find($id)
+            : Quote::find($id);
     }
 }

@@ -50,16 +50,21 @@ class Vehicle extends Model
         return $this->hasMany(Quote::class);
     }
 
+    public function coveragePreferences(): HasMany
+    {
+        return $this->hasMany(CoveragePreference::class);
+    }
+
     // Verificar si el vehículo tiene todos los datos requeridos
     public function checkCompleteness(): void
     {
-        $this->is_complete = !empty($this->marca) 
-            && !empty($this->modelo) 
-            && !empty($this->version) 
-            && !empty($this->year) 
+        $this->is_complete = !empty($this->marca)
+            && !empty($this->modelo)
+            && !empty($this->version)
+            && !empty($this->year)
             && !empty($this->combustible)
             && !empty($this->codigo_postal);
-        
+
         $this->save();
     }
 }
