@@ -119,6 +119,23 @@ class ToolsController extends Controller
         return $this->jsonResponse($result);
     }
 
+    public function checkout(Request $request)
+    {
+        $this->logCustomer('HTTP Tool Request recibido: checkout', ['body' => $request->all()]);
+        $providerName = $request->input('ai_provider', 'openai');
+
+        try {
+            $adapter = $this->factory->make($providerName);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => 'Proveedor de IA no soportado'], 400);
+        }
+
+        $result = $adapter->handleToolCall($request->all(), 'checkout');
+        $this->logCustomer('Resultado de handleToolCall checkout', $result);
+
+        return $this->jsonResponse($result);
+    }
+
     protected function extractOpenAIUserId(Request $request): ?string
     {
         return $request->header('X-OpenAI-User-ID')
