@@ -3,10 +3,13 @@
 namespace App\Adapters\OpenAI;
 
 use App\Contracts\AIProviderAdapterInterface;
+use App\Models\CheckoutSession;
 use App\Models\Customer;
 use App\Models\Quote;
+use App\Models\QuoteAlternative;
 use App\Models\Vehicle;
 use App\Repositories\ConversationRepository;
+use Illuminate\Support\Facades\URL;
 use App\Services\CoveragePreferenceService;
 use App\Services\CustomerIdentificationService;
 use App\Services\PlateNormalizerService;
@@ -93,6 +96,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
                 'identify_vehicle' => $this->identifyVehicle($data, $conversation),
                 'coverage_preference' => $this->coveragePreference($data, $conversation),
                 'get_quote' => $this->getQuote($data, true),
+                'checkout' => $this->checkout($data, $conversation),
                 default => $this->formatError("Herramienta no soportada: {$toolName}", 'tool_not_found'),
             };
         } catch (InvalidArgumentException $e) {
@@ -496,6 +500,79 @@ class AgentToolAdapter implements AIProviderAdapterInterface
 
         // Retorna SOLO los campos definidos en las reglas (seguridad)
         return $validator->validated();
+    }
+
+    /**
+     * Genera un link de checkout firmado para que el usuario complete sus datos,
+     * fotos de inspección y datos de tarjeta de crédito.
+     *
+     * @param array $data Payload transformado (incluye quoteId y quote_alternative_id)
+     * @param Conversation $conversation Conversación activa
+     * @return array Respuesta para la IA con checkout_url
+     */
+    protected function checkout(array $data, Conversation $conversation): array
+    {
+        $this->logAdapter('Adapter: Iniciando checkout', ['data' => $data]);
+
+        // Aceptar quote_id directo o el valor ya mapeado como quoteId
+        $quoteId = $data['quoteId'] ?? $data['quote_id'] ?? null;
+        $alternativeId = $data['quote_alternative_id'] ?? $data['alternative_id'] ?? null;
+
+        if (! $quoteId || ! $alternativeId) {
+            return $this->formatError(
+                'Se requieren quote_id y quote_alternative_id para iniciar el checkout.',
+                'missing_params'
+            );
+        }
+
+        // Verificar que el quote pertenece a esta conversación
+        $quote = Quote::where('id', $quoteId)
+            ->where('conversation_id', $conversation->id)
+            ->whereIn('status', ['processed', 'offered_pas'])
+            ->first();
+
+        if (! $quote) {
+            return $this->formatError(
+                'No se encontró una cotización válida con ese ID para esta sesión.',
+                'quote_not_found'
+            );
+        }
+
+        // Verificar que la alternativa pertenece al quote
+        $alternative = QuoteAlternative::where('id', $alternativeId)
+            ->where('quote_id', $quote->id)
+            ->first();
+
+        if (! $alternative) {
+            return $this->formatError(
+                'La alternativa seleccionada no corresponde a la cotización indicada.',
+                'alternative_not_found'
+            );
+        }
+
+        // Generar URL firmada válida por 48 horas
+        $checkoutUrl = URL::temporarySignedRoute(
+            'checkout.show',
+            now()->addHours(48),
+            [
+                'quote'       => $quote->id,
+                'alternative' => $alternative->id,
+            ]
+        );
+
+        // Transicionar el estado del quote
+        $quote->update(['status' => 'checkout_pending']);
+
+        $this->logAdapter('Adapter: Checkout URL generada', [
+            'quote_id'       => $quote->id,
+            'alternative_id' => $alternative->id,
+        ]);
+
+        return [
+            'success'      => true,
+            'checkout_url' => $checkoutUrl,
+            'tool_output'  => "Tu link de checkout está listo. Completá tus datos de contratación aquí: {$checkoutUrl}",
+        ];
     }
 
     private function formatError(string $msg, string $code): array

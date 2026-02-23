@@ -30,6 +30,7 @@ Route::prefix('web-chat/v1/tools')->group(function () {
     Route::post('/identify-vehicle', [ToolsController::class, 'identifyVehicle']);
     Route::post('/coverage-preference', [ToolsController::class, 'coveragePreference']);
     Route::post('/get-quote', [ToolsController::class, 'getQuote']);
+    Route::post('/checkout', [ToolsController::class, 'checkout']);
 });
 
 
