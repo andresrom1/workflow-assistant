@@ -18,6 +18,14 @@ class CheckoutSession extends Model
         'nombre',
         'dni',
         'domicilio',
+        'domicilio_calle',
+        'domicilio_numero',
+        'domicilio_cp',
+        'domicilio_provincia',
+        'domicilio_localidad',
+        'vehiculo_uso',
+        'vehiculo_nro_chasis',
+        'vehiculo_nro_motor',
         'email',
         'telefono',
         'cc_brand',
@@ -45,11 +53,11 @@ class CheckoutSession extends Model
     ];
 
     protected $casts = [
-        'photo_paths'      => 'array',
-        'submitted_at'     => 'datetime',
-        'expires_at'       => 'datetime',
-        'cc_processed_at'  => 'datetime',
-        'cc_cleared_at'    => 'datetime',
+        'photo_paths' => 'array',
+        'submitted_at' => 'datetime',
+        'expires_at' => 'datetime',
+        'cc_processed_at' => 'datetime',
+        'cc_cleared_at' => 'datetime',
     ];
 
     // ─── Accessors de descifrado (solo para uso interno — vista admin) ────────

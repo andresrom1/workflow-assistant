@@ -16,8 +16,6 @@ class QuoteAlternative extends Model
 
     protected $fillable = [
         'quote_id',
-        'external_code',    // ID para contratar (SKU)
-        'external_quote_id',// ID Externo de la opción específica
         'aseguradora',     // "Sancor"
         'descripcion',    // "C1 - Terceros Completos"
         'titulo',         // "C1"
@@ -40,6 +38,7 @@ class QuoteAlternative extends Model
     {
         return $this->belongsTo(Quote::class);
     }
+
     /**
      * Scope para filtrar por grado normalizado (ej: solo terceros completos)
      */

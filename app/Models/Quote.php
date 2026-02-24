@@ -21,15 +21,15 @@ class Quote extends Model
         'resolution_method',     // 'api', 'mobile'
         'mobile_opportunity_id',
         'mobile_reference',
-        'raw_response',          // JSON crudo para auditoría
         'metadata',
         'expires_at',
         'sent_to_mobile_at',
         'expected_resolution_at',
+        'checkout_token',
+        'checkout_alternative_id',
     ];
 
     protected $casts = [
-        'raw_response' => 'array',
         'metadata' => 'array',
         'expires_at' => 'datetime',
         'sent_to_mobile_at' => 'datetime',
@@ -59,5 +59,10 @@ class Quote extends Model
     public function checkoutSession(): HasOne
     {
         return $this->hasOne(CheckoutSession::class);
+    }
+
+    public function providerRef(): HasOne
+    {
+        return $this->hasOne(QuoteProviderRef::class);
     }
 }

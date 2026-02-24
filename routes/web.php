@@ -15,16 +15,17 @@ Route::get('/customers/{customer}', [App\Http\Controllers\CustomerController::cl
 // Rutas de Cotizaciones (NUEVO)
 Route::resource('quotes', QuoteController::class)->only(['index', 'show']);
 
-// ─── Checkout (URL firmada — el middleware 'signed' valida HMAC + expiración) ───
-Route::get('/checkout/{quote}', [CheckoutController::class, 'show'])
-    ->name('checkout.show')
-    ->middleware('signed');
+// ─── Checkout: URL limpia via token opaco (UUID) ──────────────────────────────
+// GET  /checkout/{token}   → muestra el formulario (token en el path)
+// POST /checkout/submit    → procesa el envío   (token en el body como campo oculto)
 
-Route::post('/checkout/{quote}/submit', [CheckoutController::class, 'submit'])
-    ->name('checkout.submit')
-    ->middleware('signed');
+Route::get('/checkout/{token}', [CheckoutController::class, 'show'])
+    ->name('checkout.show');
 
-// Pantalla de confirmación (sin firma — el quote ID ya está procesado)
+Route::post('/checkout/submit', [CheckoutController::class, 'submit'])
+    ->name('checkout.submit');
+
+// Pantalla de confirmación post-checkout
 Route::get('/checkout/{quote}/success', [CheckoutController::class, 'success'])
     ->name('checkout.success');
 

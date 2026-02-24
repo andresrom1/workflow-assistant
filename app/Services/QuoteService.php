@@ -8,7 +8,6 @@ use App\Models\Customer;
 use App\Models\Quote;
 use App\Models\RiskSnapshot;
 use App\Models\Vehicle;
-use App\Jobs\RequestQuotesFromProviders;
 use App\Repositories\QuoteRepository;
 use App\Repositories\RiskSnapshotRepository;
 use App\Services\Quote\QuoteResolutionStrategyInterface;
@@ -27,12 +26,11 @@ class QuoteService
         private readonly QuoteRepository $quoteRepo,
         private readonly ApiQuoteResolution $apiStrategy,
         private readonly MobileAppQuoteResolution $mobileStrategy,
-        //private readonly CheckQuoteAcceptance $checkQuoteAcceptance, //Se elimina para ser despachado estaticamente.
-    ) {
-    }
+        // private readonly CheckQuoteAcceptance $checkQuoteAcceptance, //Se elimina para ser despachado estaticamente.
+    ) {}
 
     /**
-     * Inicia el proceso de cotización tomando un snapshot del riesgo actual 
+     * Inicia el proceso de cotización tomando un snapshot del riesgo actual
      * y creando una Quote en estado 'pending'.
      */
     public function createPendingQuote(Conversation $conversation, Customer $customer, Vehicle $vehicle, string $sessionUuid, ?string $coveragePreference = null): Quote
@@ -40,22 +38,22 @@ class QuoteService
         $transaction = DB::transaction(function () use ($conversation, $customer, $vehicle, $sessionUuid, $coveragePreference) {
             $snapshot = $this->snapshotRepo->createFromEntities($customer, $vehicle, $coveragePreference);
             $quote = $this->quoteRepo->createPending($snapshot, $conversation, $sessionUuid);
+
             return ['quote' => $quote, 'snapshot' => $snapshot];
         });
 
         $quote = $transaction['quote'];
         $snapshot = $transaction['snapshot'];
 
-
         $this->logQuotes("[QuoteService🫰] Created pending Quote ID: {$quote->id}");
         // Programar el Job de Fallback (Vigilante) desde ahora.
         $timeout = (int) config('services.mobile_app.timeout_minutes', 30);
-        Log::info("El tipo de deto de timeout es: ", [gettype($timeout)]);
+        Log::info('El tipo de deto de timeout es: ', [gettype($timeout)]);
 
         // $this->checkQuoteAcceptance::dispatch($quote, $snapshot)
         //     ->delay(now()->addMinutes($timeout));
 
-        CheckQuoteAcceptance::dispatch($quote, $snapshot) //Se elimina del constructor. Se despacha estaticamente
+        CheckQuoteAcceptance::dispatch($quote, $snapshot) // Se elimina del constructor. Se despacha estaticamente
             ->delay(now()->addMinutes($timeout));
 
         return $quote;
@@ -80,12 +78,14 @@ class QuoteService
 
         try {
             $strategy->resolve($quote, $snapshot);
+
             return true;
         } catch (\Throwable $e) {
             Log::error("[QuoteService] Error resolviendo Quote #{$quote->id}", [
                 'strategy' => $strategy->getName(),
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -119,22 +119,29 @@ class QuoteService
         return $this->apiStrategy;
     }
 
-    public function getRaw(Quote $quote)
+    public function getRaw(Quote $quote): array
     {
-        if (!$quote->raw_response) {
+        $quote->loadMissing('providerRef', 'alternatives');
+
+        if ($quote->alternatives->isEmpty()) {
             return [
                 'status' => $quote->status,
-                'message' => 'La cotización aún está en proceso.'
+                'message' => 'La cotización aún está en proceso.',
             ];
         }
 
-        return $this->quoteRepo->getRawJson($quote);
+        return [
+            'external_quote_id' => $quote->providerRef?->external_quote_id,
+            'raw_response' => $quote->providerRef?->raw_response,
+            'alternatives' => $quote->alternatives->toArray(),
+        ];
     }
 
     /**
      * Obtiene una cotización por ID.
-     * @param int $quote ID de la cotización.
-     * @param bool $withAlternatives Indica si se deben incluir las alternativas.
+     *
+     * @param  int  $quote  ID de la cotización.
+     * @param  bool  $withAlternatives  Indica si se deben incluir las alternativas.
      * @return Quote La cotización obtenida.
      */
     public function getQuote(int $quote, bool $withAlternatives = false): Quote
