@@ -1,373 +1,411 @@
 <template>
-  <div class="min-h-screen bg-gray-50 py-8 px-4">
-    <div class="max-w-2xl mx-auto">
-
-      <!-- Header con resumen de la cobertura seleccionada -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-        <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">Cobertura seleccionada</p>
-        <h1 class="text-2xl font-bold text-gray-900">{{ alternative.aseguradora }}</h1>
-        <p class="text-gray-600">{{ alternative.titulo }} — {{ alternative.marketing_title }}</p>
-        <div class="mt-3 flex items-center gap-4">
-          <span class="text-3xl font-bold text-gray-900">
-            $ {{ formatPrice(alternative.precio) }}
-          </span>
-          <span class="text-sm text-gray-500">/mes</span>
+  <!-- ══════ FALLBACK: no es dispositivo móvil ══════ -->
+  <div v-if="!isMobile" class="min-h-screen bg-gray-900 flex items-center justify-center p-6">
+    <div class="text-center max-w-sm">
+      <div class="text-6xl mb-6">📱</div>
+      <h1 class="text-2xl font-bold text-white mb-3">Abrí este link desde tu celular</h1>
+      <p class="text-gray-400 text-sm leading-relaxed">
+        Este formulario fue diseñado para completarse desde un dispositivo móvil
+        <strong class="text-gray-200">(Android o iOS)</strong>.<br><br>
+        Por favor, copiá el link y abrilo desde tu teléfono.
+      </p>
+      <div class="mt-8 flex justify-center gap-4">
+        <div class="flex items-center gap-2 bg-gray-800 rounded-xl px-4 py-3">
+          <span class="text-2xl">🤖</span>
+          <span class="text-sm text-gray-300 font-medium">Android</span>
         </div>
-        <p class="mt-1 text-sm text-gray-500">
-          {{ risk.marca }} {{ risk.modelo }} {{ risk.year }}
-          <span v-if="risk.patente" class="ml-1 font-medium">— {{ risk.patente }}</span>
-        </p>
-        <!-- Tags de cobertura -->
-        <div v-if="alternative.features_tags?.length" class="mt-3 flex flex-wrap gap-1">
-          <span
-            v-for="tag in alternative.features_tags"
-            :key="tag"
-            class="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full border border-blue-100"
-          >{{ tag }}</span>
+        <div class="flex items-center gap-2 bg-gray-800 rounded-xl px-4 py-3">
+          <span class="text-2xl">🍎</span>
+          <span class="text-sm text-gray-300 font-medium">iOS</span>
         </div>
       </div>
-
-      <!-- Indicador de pasos -->
-      <div class="flex items-center justify-center mb-8 gap-2">
-        <div
-          v-for="(label, i) in stepLabels"
-          :key="i"
-          class="flex items-center gap-2"
-        >
-          <div
-            class="flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold transition-colors"
-            :class="stepCircleClass(i + 1)"
-          >{{ i + 1 }}</div>
-          <span
-            class="text-sm font-medium hidden sm:block"
-            :class="step === i + 1 ? 'text-blue-700' : 'text-gray-400'"
-          >{{ label }}</span>
-          <div v-if="i < stepLabels.length - 1" class="w-8 h-0.5 bg-gray-200 hidden sm:block" />
-        </div>
-      </div>
-
-      <form :action="submitUrl" method="POST" enctype="multipart/form-data" ref="formRef">
-        <input type="hidden" name="_token" :value="csrfToken" />
-
-        <!-- ══════════ PASO 1: Datos personales ══════════ -->
-        <div v-show="step === 1" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 class="text-lg font-bold text-gray-800 mb-6">Datos del tomador</h2>
-
-          <div class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Nombre completo *</label>
-              <input
-                v-model="form.nombre"
-                type="text"
-                name="nombre"
-                placeholder="Juan Alberto Pérez"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :class="{ 'border-red-400': errors.nombre }"
-              />
-              <p v-if="errors.nombre" class="mt-1 text-xs text-red-600">{{ errors.nombre }}</p>
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">DNI *</label>
-              <input
-                v-model="form.dni"
-                type="text"
-                name="dni"
-                placeholder="30000000"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :class="{ 'border-red-400': errors.dni }"
-              />
-              <p v-if="errors.dni" class="mt-1 text-xs text-red-600">{{ errors.dni }}</p>
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Domicilio *</label>
-              <input
-                v-model="form.domicilio"
-                type="text"
-                name="domicilio"
-                placeholder="Av. Siempreviva 742, CABA"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :class="{ 'border-red-400': errors.domicilio }"
-              />
-              <p v-if="errors.domicilio" class="mt-1 text-xs text-red-600">{{ errors.domicilio }}</p>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                <input
-                  v-model="form.email"
-                  type="email"
-                  name="email"
-                  placeholder="juan@ejemplo.com"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  :class="{ 'border-red-400': errors.email }"
-                />
-                <p v-if="errors.email" class="mt-1 text-xs text-red-600">{{ errors.email }}</p>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono *</label>
-                <input
-                  v-model="form.telefono"
-                  type="tel"
-                  name="telefono"
-                  placeholder="+54 9 11 1234-5678"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  :class="{ 'border-red-400': errors.telefono }"
-                />
-                <p v-if="errors.telefono" class="mt-1 text-xs text-red-600">{{ errors.telefono }}</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-6 flex justify-end">
-            <button
-              type="button"
-              @click="goToStep(2)"
-              class="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-semibold text-sm hover:bg-blue-700 transition-colors"
-            >
-              Siguiente →
-            </button>
-          </div>
-        </div>
-
-        <!-- ══════════ PASO 2: Fotos de inspección ══════════ -->
-        <div v-show="step === 2" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 class="text-lg font-bold text-gray-800 mb-2">Fotos de inspección</h2>
-          <p class="text-sm text-gray-500 mb-6">Subí fotos del vehículo para la inspección. Formatos: JPG, PNG, HEIC, PDF. Máx. 10 MB por archivo.</p>
-
-          <!-- Zona de drop -->
-          <div
-            class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
-            :class="{ 'border-blue-400 bg-blue-50': isDragging }"
-            @dragover.prevent="isDragging = true"
-            @dragleave="isDragging = false"
-            @drop.prevent="onDrop"
-            @click="$refs.photoInput.click()"
-          >
-            <svg class="w-10 h-10 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
-            </svg>
-            <p class="text-sm text-gray-600 font-medium">Arrastrá fotos aquí o <span class="text-blue-600">elegí archivos</span></p>
-            <p class="text-xs text-gray-400 mt-1">Hasta 10 fotos</p>
-          </div>
-          <input
-            ref="photoInput"
-            type="file"
-            name="photos[]"
-            multiple
-            accept=".jpg,.jpeg,.png,.heic,.pdf"
-            class="hidden"
-            @change="onFileSelect"
-          />
-
-          <!-- Previews -->
-          <div v-if="photoFiles.length" class="mt-4 grid grid-cols-3 gap-3">
-            <div
-              v-for="(preview, i) in photoFiles"
-              :key="i"
-              class="relative group rounded-lg overflow-hidden border border-gray-200 aspect-square bg-gray-100 flex items-center justify-center"
-            >
-              <img
-                v-if="preview.url"
-                :src="preview.url"
-                class="w-full h-full object-cover"
-                :alt="`foto-${i + 1}`"
-              />
-              <div v-else class="text-xs text-gray-500 text-center px-2">
-                <svg class="w-6 h-6 mx-auto mb-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                </svg>
-                {{ preview.name }}
-              </div>
-              <button
-                type="button"
-                @click="removePhoto(i)"
-                class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-              >×</button>
-            </div>
-          </div>
-
-          <div class="mt-6 flex justify-between">
-            <button
-              type="button"
-              @click="step = 1"
-              class="text-gray-600 px-6 py-2.5 rounded-lg font-semibold text-sm hover:bg-gray-100 transition-colors"
-            >
-              ← Atrás
-            </button>
-            <button
-              type="button"
-              @click="goToStep(3)"
-              class="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-semibold text-sm hover:bg-blue-700 transition-colors"
-            >
-              Siguiente →
-            </button>
-          </div>
-        </div>
-
-        <!-- ══════════ PASO 3: Tarjeta de crédito ══════════ -->
-        <div v-show="step === 3" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 class="text-lg font-bold text-gray-800 mb-6">Datos de pago</h2>
-
-          <div class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Marca de tarjeta *</label>
-              <select
-                v-model="form.cc_brand"
-                name="cc_brand"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :class="{ 'border-red-400': errors.cc_brand }"
-              >
-                <option value="" disabled>Seleccioná la marca</option>
-                <option value="visa">Visa</option>
-                <option value="mastercard">Mastercard</option>
-                <option value="amex">American Express</option>
-                <option value="naranja">Naranja</option>
-                <option value="cabal">Cabal</option>
-                <option value="maestro">Maestro</option>
-              </select>
-              <p v-if="errors.cc_brand" class="mt-1 text-xs text-red-600">{{ errors.cc_brand }}</p>
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Número de tarjeta *</label>
-              <input
-                v-model="form.cc_pan"
-                type="text"
-                name="cc_pan"
-                placeholder="1234 5678 9012 3456"
-                maxlength="19"
-                @input="formatPan"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :class="{ 'border-red-400': errors.cc_pan }"
-                autocomplete="off"
-              />
-              <p v-if="errors.cc_pan" class="mt-1 text-xs text-red-600">{{ errors.cc_pan }}</p>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Vencimiento *</label>
-                <input
-                  v-model="form.cc_expiry"
-                  type="text"
-                  name="cc_expiry"
-                  placeholder="MM/AA"
-                  maxlength="5"
-                  @input="formatExpiry"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  :class="{ 'border-red-400': errors.cc_expiry }"
-                  autocomplete="off"
-                />
-                <p v-if="errors.cc_expiry" class="mt-1 text-xs text-red-600">{{ errors.cc_expiry }}</p>
-              </div>
-              <div class="flex items-end">
-                <p class="text-xs text-gray-400 pb-2">No se solicita el código de seguridad (CVV).</p>
-              </div>
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del titular *</label>
-              <input
-                v-model="form.cc_holder_name"
-                type="text"
-                name="cc_holder_name"
-                placeholder="Juan Alberto Pérez"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :class="{ 'border-red-400': errors.cc_holder_name }"
-                autocomplete="off"
-              />
-              <p v-if="errors.cc_holder_name" class="mt-1 text-xs text-red-600">{{ errors.cc_holder_name }}</p>
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">DNI del titular *</label>
-              <input
-                v-model="form.cc_holder_dni"
-                type="text"
-                name="cc_holder_dni"
-                placeholder="30000000"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :class="{ 'border-red-400': errors.cc_holder_dni }"
-                autocomplete="off"
-              />
-              <p class="mt-1 text-xs text-gray-400">El titular puede ser una persona diferente al tomador del seguro.</p>
-              <p v-if="errors.cc_holder_dni" class="mt-1 text-xs text-red-600">{{ errors.cc_holder_dni }}</p>
-            </div>
-          </div>
-
-          <!-- Resumen final -->
-          <div class="mt-6 bg-gray-50 rounded-lg p-4 border border-gray-200 text-sm">
-            <p class="font-semibold text-gray-700 mb-2">Resumen</p>
-            <div class="space-y-1 text-gray-600">
-              <p><span class="text-gray-400">Tomador:</span> {{ form.nombre || '—' }}</p>
-              <p><span class="text-gray-400">Vehículo:</span> {{ risk.marca }} {{ risk.modelo }} {{ risk.year }}</p>
-              <p><span class="text-gray-400">Cobertura:</span> {{ alternative.aseguradora }} — {{ alternative.titulo }}</p>
-              <p><span class="text-gray-400">Prima mensual:</span> $ {{ formatPrice(alternative.precio) }}</p>
-              <p><span class="text-gray-400">Fotos adjuntas:</span> {{ photoFiles.length }}</p>
-            </div>
-          </div>
-
-          <div class="mt-6 flex justify-between">
-            <button
-              type="button"
-              @click="step = 2"
-              class="text-gray-600 px-6 py-2.5 rounded-lg font-semibold text-sm hover:bg-gray-100 transition-colors"
-            >
-              ← Atrás
-            </button>
-            <button
-              type="submit"
-              :disabled="submitting"
-              class="bg-green-600 text-white px-8 py-2.5 rounded-lg font-semibold text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              @click.prevent="submitForm"
-            >
-              <span v-if="submitting">Enviando…</span>
-              <span v-else>Confirmar y enviar</span>
-            </button>
-          </div>
-        </div>
-
-      </form>
     </div>
+  </div>
+
+  <!-- ══════ FORMULARIO PRINCIPAL (mobile only) ══════ -->
+  <div v-else class="min-h-screen bg-gray-50">
+
+    <!-- Header sticky con cobertura -->
+    <div class="bg-white border-b border-gray-200 px-4 py-4 sticky top-0 z-10 shadow-sm">
+      <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider">Cobertura seleccionada</p>
+      <div class="flex items-center justify-between mt-1">
+        <div>
+          <p class="font-bold text-gray-900 text-sm">{{ alternative.aseguradora }} — {{ alternative.titulo }}</p>
+          <p class="text-xs text-gray-500">{{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }} <span v-if="vehicle.patente">· {{ vehicle.patente }}</span></p>
+        </div>
+        <div class="text-right">
+          <span class="text-lg font-bold text-gray-900">${{ formatPrice(alternative.precio) }}</span>
+          <span class="text-xs text-gray-400 block">/mes</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Indicador de pasos -->
+    <div class="bg-white border-b border-gray-100 px-4 py-3">
+      <div class="flex items-center justify-between">
+        <div v-for="(label, i) in stepLabels" :key="i" class="flex items-center">
+          <div class="flex flex-col items-center">
+            <div
+              class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200"
+              :class="stepCircleClass(i + 1)"
+            >
+              <span v-if="step > i + 1">✓</span>
+              <span v-else>{{ i + 1 }}</span>
+            </div>
+            <span class="text-xs mt-1 font-medium" :class="step === i + 1 ? 'text-blue-600' : 'text-gray-400'">{{ label }}</span>
+          </div>
+          <div v-if="i < stepLabels.length - 1" class="w-6 h-px bg-gray-200 mb-4 mx-1" />
+        </div>
+      </div>
+    </div>
+
+    <form :action="submitUrl" method="POST" enctype="multipart/form-data" ref="formRef" class="pb-8">
+      <input type="hidden" name="_token" :value="csrfToken" />
+      <input type="hidden" name="checkout_token" :value="checkoutToken" />
+
+      <!-- ══════════ PASO 1: Datos personales ══════════ -->
+      <div v-show="step === 1" class="px-4 pt-6 space-y-4">
+        <h2 class="text-base font-bold text-gray-800">Datos del tomador</h2>
+
+        <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+          <Field label="Nombre completo *" :error="errors.nombre">
+            <input v-model="form.nombre" type="text" name="nombre" placeholder="Juan Alberto Pérez"
+              class="field" :class="{ 'field-error': errors.nombre }" autocomplete="name" />
+          </Field>
+
+          <Field label="DNI *" :error="errors.dni">
+            <input v-model="form.dni" type="text" name="dni" placeholder="30000000" inputmode="numeric"
+              class="field" :class="{ 'field-error': errors.dni }" />
+          </Field>
+
+          <Field label="Email *" :error="errors.email">
+            <input v-model="form.email" type="email" name="email" placeholder="juan@ejemplo.com"
+              class="field" :class="{ 'field-error': errors.email }" autocomplete="email" />
+          </Field>
+
+          <Field label="Teléfono *" :error="errors.telefono">
+            <input v-model="form.telefono" type="tel" name="telefono" placeholder="+54 9 11 1234-5678"
+              class="field" :class="{ 'field-error': errors.telefono }" autocomplete="tel" />
+          </Field>
+        </div>
+
+        <h2 class="text-base font-bold text-gray-800 pt-2">Domicilio</h2>
+        <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+          <Field label="Calle *" :error="errors.domicilio_calle">
+            <input v-model="form.domicilio_calle" type="text" name="domicilio_calle" placeholder="Av. Siempreviva"
+              class="field" :class="{ 'field-error': errors.domicilio_calle }" autocomplete="street-address" />
+          </Field>
+
+          <div class="grid grid-cols-2 gap-3">
+            <Field label="Número *" :error="errors.domicilio_numero">
+              <input v-model="form.domicilio_numero" type="text" name="domicilio_numero" placeholder="742"
+                class="field" :class="{ 'field-error': errors.domicilio_numero }" inputmode="numeric" />
+            </Field>
+            <Field label="Código Postal *" :error="errors.domicilio_cp">
+              <input v-model="form.domicilio_cp" type="text" name="domicilio_cp" placeholder="1414"
+                class="field" :class="{ 'field-error': errors.domicilio_cp }" inputmode="numeric" autocomplete="postal-code" />
+            </Field>
+          </div>
+
+          <Field label="Provincia *" :error="errors.domicilio_provincia">
+            <select v-model="form.domicilio_provincia" name="domicilio_provincia"
+              class="field" :class="{ 'field-error': errors.domicilio_provincia }">
+              <option value="" disabled>Seleccioná la provincia</option>
+              <option v-for="p in provincias" :key="p" :value="p">{{ p }}</option>
+            </select>
+          </Field>
+
+          <Field label="Localidad *" :error="errors.domicilio_localidad">
+            <input v-model="form.domicilio_localidad" type="text" name="domicilio_localidad" placeholder="Buenos Aires"
+              class="field" :class="{ 'field-error': errors.domicilio_localidad }" autocomplete="address-level2" />
+          </Field>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <button type="button" @click="goToStep(2)" class="btn-primary">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- ══════════ PASO 2: Datos de pago ══════════ -->
+      <div v-show="step === 2" class="px-4 pt-6 space-y-4">
+        <h2 class="text-base font-bold text-gray-800">Datos de pago</h2>
+
+        <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+          <Field label="Marca de tarjeta *" :error="errors.cc_brand">
+            <select v-model="form.cc_brand" name="cc_brand"
+              class="field" :class="{ 'field-error': errors.cc_brand }">
+              <option value="" disabled>Seleccioná la marca</option>
+              <option value="visa">Visa</option>
+              <option value="mastercard">Mastercard</option>
+              <option value="amex">American Express</option>
+              <option value="naranja">Naranja</option>
+              <option value="cabal">Cabal</option>
+              <option value="maestro">Maestro</option>
+            </select>
+          </Field>
+
+          <Field label="Número de tarjeta *" :error="errors.cc_pan">
+            <input v-model="form.cc_pan" type="text" name="cc_pan"
+              placeholder="1234 5678 9012 3456" maxlength="19" inputmode="numeric"
+              @input="formatPan" @blur="validatePanLuhn"
+              class="field font-mono tracking-widest" :class="{ 'field-error': errors.cc_pan }"
+              autocomplete="off" />
+          </Field>
+
+          <div class="grid grid-cols-2 gap-3">
+            <Field label="Vencimiento *" :error="errors.cc_expiry">
+              <input v-model="form.cc_expiry" type="text" name="cc_expiry"
+                placeholder="MM/AA" maxlength="5" inputmode="numeric"
+                @input="formatExpiry"
+                class="field font-mono" :class="{ 'field-error': errors.cc_expiry }"
+                autocomplete="off" />
+            </Field>
+            <div class="flex items-end pb-1">
+              <p class="text-xs text-gray-400">No se solicita CVV.</p>
+            </div>
+          </div>
+
+          <Field label="Nombre del titular *" :error="errors.cc_holder_name">
+            <input v-model="form.cc_holder_name" type="text" name="cc_holder_name"
+              placeholder="Juan Alberto Pérez"
+              class="field" :class="{ 'field-error': errors.cc_holder_name }"
+              autocomplete="off" />
+          </Field>
+
+          <Field label="DNI del titular *" :error="errors.cc_holder_dni">
+            <input v-model="form.cc_holder_dni" type="text" name="cc_holder_dni"
+              placeholder="30000000" inputmode="numeric"
+              class="field" :class="{ 'field-error': errors.cc_holder_dni }"
+              autocomplete="off" />
+            <p class="text-xs text-gray-400 mt-1">Puede diferir del tomador del seguro.</p>
+          </Field>
+        </div>
+
+        <div class="flex justify-between pt-2">
+          <button type="button" @click="step = 1" class="btn-ghost">← Atrás</button>
+          <button type="button" @click="goToStep(3)" class="btn-primary">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- ══════════ PASO 3: Verificación del vehículo ══════════ -->
+      <div v-show="step === 3" class="px-4 pt-6 space-y-4">
+        <h2 class="text-base font-bold text-gray-800">Verificación del vehículo</h2>
+        <p class="text-xs text-gray-500">Confirmá que los datos del vehículo sean correctos. Estos datos son inmutables y provienen del snapshot de cotización.</p>
+
+        <!-- Datos inmutables del snapshot -->
+        <div class="bg-blue-50 rounded-xl border border-blue-100 p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-blue-600 font-semibold uppercase tracking-wider">Datos del snapshot</span>
+            <span class="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-medium">Solo lectura</span>
+          </div>
+          <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            <ReadOnlyField v-if="vehicle.patente" label="Patente" :value="vehicle.patente" />
+            <ReadOnlyField label="Marca" :value="vehicle.marca" />
+            <ReadOnlyField label="Modelo" :value="vehicle.modelo" />
+            <ReadOnlyField label="Año" :value="String(vehicle.year)" />
+            <ReadOnlyField label="Versión" :value="vehicle.version" />
+            <ReadOnlyField label="Combustible" :value="vehicle.combustible" />
+          </div>
+        </div>
+
+        <!-- Datos adicionales que ingresa el cliente -->
+        <h3 class="text-sm font-bold text-gray-700 pt-1">Datos adicionales</h3>
+        <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+          <Field label="Uso del vehículo *" :error="errors.vehiculo_uso">
+            <div class="grid grid-cols-2 gap-3 mt-1">
+              <label
+                class="flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
+                :class="form.vehiculo_uso === 'particular' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'"
+              >
+                <input type="radio" v-model="form.vehiculo_uso" value="particular" name="vehiculo_uso" class="hidden" />
+                <span class="text-xl">🚗</span>
+                <span class="text-sm font-medium">Particular</span>
+              </label>
+              <label
+                class="flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
+                :class="form.vehiculo_uso === 'otro' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'"
+              >
+                <input type="radio" v-model="form.vehiculo_uso" value="otro" name="vehiculo_uso" class="hidden" />
+                <span class="text-xl">🚕</span>
+                <span class="text-sm font-medium">Otro</span>
+              </label>
+            </div>
+            <p v-if="errors.vehiculo_uso" class="text-xs text-red-600 mt-1">{{ errors.vehiculo_uso }}</p>
+          </Field>
+
+          <Field label="Nro. de chasis *" :error="errors.vehiculo_nro_chasis">
+            <input v-model="form.vehiculo_nro_chasis" type="text" name="vehiculo_nro_chasis"
+              placeholder="9BWZZZ377VT004251" class="field font-mono text-sm"
+              :class="{ 'field-error': errors.vehiculo_nro_chasis }" style="text-transform: uppercase"
+              @input="form.vehiculo_nro_chasis = form.vehiculo_nro_chasis.toUpperCase()" />
+          </Field>
+
+          <Field label="Nro. de motor *" :error="errors.vehiculo_nro_motor">
+            <input v-model="form.vehiculo_nro_motor" type="text" name="vehiculo_nro_motor"
+              placeholder="AZD5789" class="field font-mono text-sm"
+              :class="{ 'field-error': errors.vehiculo_nro_motor }" style="text-transform: uppercase"
+              @input="form.vehiculo_nro_motor = form.vehiculo_nro_motor.toUpperCase()" />
+          </Field>
+        </div>
+
+        <div class="flex justify-between pt-2">
+          <button type="button" @click="step = 2" class="btn-ghost">← Atrás</button>
+          <button type="button" @click="goToStep(4)" class="btn-primary">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- ══════════ PASO 4: Inspección fotográfica ══════════ -->
+      <div v-show="step === 4" class="px-4 pt-6 space-y-4">
+        <h2 class="text-base font-bold text-gray-800">Inspección fotográfica</h2>
+        <p class="text-xs text-gray-500 leading-relaxed">
+          Sacá cada foto <strong>en este momento</strong> con la cámara de tu teléfono.
+          No se permite subir imágenes desde la galería.
+        </p>
+
+        <div class="space-y-3">
+          <div
+            v-for="(slot, i) in photoSlots"
+            :key="slot.key"
+            class="bg-white rounded-xl border overflow-hidden transition-colors"
+            :class="photos[slot.key] ? 'border-green-400' : (errors[`photo_${slot.key}`] ? 'border-red-400' : 'border-gray-200')"
+          >
+            <div class="flex items-center gap-3 p-3">
+              <!-- Preview / ícono -->
+              <div class="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                <img v-if="photos[slot.key]" :src="photos[slot.key]" class="w-full h-full object-cover" :alt="slot.label" />
+                <span v-else class="text-2xl">{{ slot.icon }}</span>
+              </div>
+
+              <div class="flex-1 min-w-0">
+                <p class="font-medium text-sm text-gray-800">{{ slot.label }}</p>
+                <p class="text-xs text-gray-500 mt-0.5">{{ slot.hint }}</p>
+                <p v-if="errors[`photo_${slot.key}`]" class="text-xs text-red-600 mt-0.5">{{ errors[`photo_${slot.key}`] }}</p>
+              </div>
+
+              <!-- Botón cámara -->
+              <label class="flex-shrink-0 cursor-pointer">
+                <input
+                  type="file"
+                  :name="`photos[${slot.key}]`"
+                  accept="image/*"
+                  capture="environment"
+                  class="hidden"
+                  @change="onPhotoCapture($event, slot.key)"
+                />
+                <div
+                  class="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+                  :class="photos[slot.key] ? 'bg-green-500' : 'bg-blue-600'"
+                >
+                  <span v-if="photos[slot.key]" class="text-white text-sm">✓</span>
+                  <svg v-else class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  </svg>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progreso de fotos -->
+        <div class="bg-white rounded-xl border border-gray-200 p-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium text-gray-700">Progreso</span>
+            <span class="text-sm font-bold" :class="photoCount === 6 ? 'text-green-600' : 'text-gray-500'">{{ photoCount }}/6</span>
+          </div>
+          <div class="flex gap-1">
+            <div
+              v-for="(slot, i) in photoSlots"
+              :key="slot.key"
+              class="h-1.5 flex-1 rounded-full transition-colors"
+              :class="photos[slot.key] ? 'bg-green-500' : 'bg-gray-200'"
+            />
+          </div>
+        </div>
+
+        <!-- Resumen antes del envío -->
+        <div class="bg-gray-50 rounded-xl border border-gray-200 p-4 text-sm">
+          <p class="font-semibold text-gray-700 mb-2">Resumen final</p>
+          <div class="space-y-1 text-gray-600">
+            <p><span class="text-gray-400">Tomador:</span> {{ form.nombre || '—' }}</p>
+            <p><span class="text-gray-400">Vehículo:</span> {{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }}</p>
+            <p><span class="text-gray-400">Cobertura:</span> {{ alternative.aseguradora }} — {{ alternative.titulo }}</p>
+            <p><span class="text-gray-400">Prima:</span> ${{ formatPrice(alternative.precio) }}/mes</p>
+            <p><span class="text-gray-400">Fotos:</span> {{ photoCount }}/6</p>
+          </div>
+        </div>
+
+        <div class="flex justify-between pt-2">
+          <button type="button" @click="step = 3" class="btn-ghost">← Atrás</button>
+          <button
+            type="submit"
+            :disabled="submitting || photoCount < 6"
+            class="btn-submit"
+            @click.prevent="submitForm"
+          >
+            <span v-if="submitting">Enviando…</span>
+            <span v-else-if="photoCount < 6">Fotos incompletas ({{ photoCount }}/6)</span>
+            <span v-else>Confirmar y enviar ✓</span>
+          </button>
+        </div>
+      </div>
+    </form>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, defineComponent, h } from 'vue'
 
+// ─── Componentes inline ────────────────────────────────────────────────────────
+const Field = defineComponent({
+  props: { label: String, error: String },
+  setup(props, { slots }) {
+    return () => h('div', [
+      h('label', { class: 'block text-sm font-medium text-gray-700 mb-1' }, props.label),
+      slots.default?.(),
+      props.error ? h('p', { class: 'mt-1 text-xs text-red-600' }, props.error) : null,
+    ])
+  }
+})
+
+const ReadOnlyField = defineComponent({
+  props: { label: String, value: String },
+  setup(props) {
+    return () => h('div', [
+      h('p', { class: 'text-xs text-gray-500' }, props.label),
+      h('p', { class: 'font-semibold text-gray-800 truncate' }, props.value || '—'),
+    ])
+  }
+})
+
+// ─── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
   quote: { id: number; status: string }
   alternative: {
-    id: number
-    aseguradora: string
-    titulo: string
-    descripcion: string
-    precio: number
-    moneda: string
-    marketing_title: string
-    features_tags: string[]
-    normalized_grade: string
+    id: number; aseguradora: string; titulo: string; descripcion: string
+    precio: number; moneda: string; marketing_title: string
+    features_tags: string[]; normalized_grade: string
   }
-  risk: {
-    marca: string
-    modelo: string
-    version: string
-    year: number
-    patente: string | null
+  vehicle: {
+    patente: string | null; marca: string; modelo: string
+    version: string; year: number; combustible: string
   }
+  checkoutToken: string
   submitUrl: string
 }>()
 
-// ─── CSRF token desde meta tag ────────────────────────────────────────────────
+// ─── Mobile detection ──────────────────────────────────────────────────────────
+const isMobile = computed(() =>
+  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+)
+
+// ─── CSRF ──────────────────────────────────────────────────────────────────────
 const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? ''
 
-// ─── Estado del wizard ────────────────────────────────────────────────────────
+// ─── Wizard ────────────────────────────────────────────────────────────────────
 const step = ref(1)
-const stepLabels = ['Datos personales', 'Fotos', 'Pago']
+const stepLabels = ['Personal', 'Pago', 'Vehículo', 'Inspección']
 const submitting = ref(false)
 
 const stepCircleClass = (s: number) => {
@@ -376,60 +414,77 @@ const stepCircleClass = (s: number) => {
   return 'bg-gray-200 text-gray-500'
 }
 
-// ─── Form data ────────────────────────────────────────────────────────────────
+// ─── Form data ─────────────────────────────────────────────────────────────────
 const form = reactive({
-  nombre: '',
-  dni: '',
-  domicilio: '',
-  email: '',
-  telefono: '',
-  cc_brand: '',
-  cc_pan: '',
-  cc_expiry: '',
-  cc_holder_name: '',
-  cc_holder_dni: '',
+  nombre: '', dni: '', email: '', telefono: '',
+  domicilio_calle: '', domicilio_numero: '', domicilio_cp: '',
+  domicilio_provincia: '', domicilio_localidad: '',
+  cc_brand: '', cc_pan: '', cc_expiry: '', cc_holder_name: '', cc_holder_dni: '',
+  vehiculo_uso: '' as 'particular' | 'otro' | '',
+  vehiculo_nro_chasis: '', vehiculo_nro_motor: '',
 })
 
 const errors = reactive<Record<string, string>>({})
 
-// ─── Fotos ────────────────────────────────────────────────────────────────────
-const isDragging = ref(false)
-const photoInput = ref<HTMLInputElement | null>(null)
-const photoFiles = ref<Array<{ file: File; url: string | null; name: string }>>([])
-const formRef = ref<HTMLFormElement | null>(null)
+// ─── Provincias ────────────────────────────────────────────────────────────────
+const provincias = [
+  'Buenos Aires', 'CABA', 'Catamarca', 'Chaco', 'Chubut', 'Córdoba',
+  'Corrientes', 'Entre Ríos', 'Formosa', 'Jujuy', 'La Pampa', 'La Rioja',
+  'Mendoza', 'Misiones', 'Neuquén', 'Río Negro', 'Salta', 'San Juan',
+  'San Luis', 'Santa Cruz', 'Santa Fe', 'Santiago del Estero',
+  'Tierra del Fuego', 'Tucumán',
+]
 
-const addFiles = (files: FileList | File[]) => {
-  Array.from(files).forEach(file => {
-    if (photoFiles.value.length >= 10) return
-    const isImage = file.type.startsWith('image/')
-    const entry = { file, url: null as string | null, name: file.name }
-    if (isImage) {
-      const reader = new FileReader()
-      reader.onload = e => { entry.url = e.target?.result as string }
-      reader.readAsDataURL(file)
-    }
-    photoFiles.value.push(entry)
-  })
-}
+// ─── Fotos ─────────────────────────────────────────────────────────────────────
+const photoSlots = [
+  { key: 'frente',    label: 'Frente del vehículo',          icon: '🚗', hint: 'Vista frontal completa' },
+  { key: 'atras',     label: 'Atrás del vehículo',           icon: '🔙', hint: 'Vista trasera completa' },
+  { key: 'lateral_i', label: 'Lateral izquierdo',            icon: '◀️', hint: 'Desde el lado izquierdo' },
+  { key: 'lateral_d', label: 'Lateral derecho',              icon: '▶️', hint: 'Desde el lado derecho' },
+  { key: 'auxilio',   label: 'Rueda de auxilio',             icon: '🔧', hint: 'En su habitáculo / baúl' },
+  { key: 'parabrisas',label: 'Parabrisas desde el interior', icon: '🪟', hint: 'Sentado adentro, mirando adelante' },
+]
 
-const onFileSelect = (e: Event) => {
+const photos = reactive<Record<string, string>>({})   // key → data URL (preview)
+const photoFiles = reactive<Record<string, File>>({}) // key → File (para FormData)
+const photoCount = computed(() => Object.keys(photoFiles).length)
+
+const onPhotoCapture = (e: Event, key: string) => {
   const input = e.target as HTMLInputElement
-  if (input.files) addFiles(input.files)
+  const file = input.files?.[0]
+  if (!file) return
+  photoFiles[key] = file
+  const reader = new FileReader()
+  reader.onload = ev => { photos[key] = ev.target?.result as string }
+  reader.readAsDataURL(file)
+  delete errors[`photo_${key}`]
 }
 
-const onDrop = (e: DragEvent) => {
-  isDragging.value = false
-  if (e.dataTransfer?.files) addFiles(e.dataTransfer.files)
+// ─── Luhn ──────────────────────────────────────────────────────────────────────
+const luhn = (num: string): boolean => {
+  const digits = num.replace(/\D/g, '')
+  if (digits.length === 0) return false
+  let sum = 0, isEven = false
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let n = parseInt(digits[i])
+    if (isEven) { n *= 2; if (n > 9) n -= 9 }
+    sum += n; isEven = !isEven
+  }
+  return sum % 10 === 0
 }
 
-const removePhoto = (i: number) => {
-  photoFiles.value.splice(i, 1)
-}
-
-// ─── Formateo de tarjeta ──────────────────────────────────────────────────────
+// ─── Formateo de tarjeta ───────────────────────────────────────────────────────
 const formatPan = () => {
   const raw = form.cc_pan.replace(/\D/g, '').slice(0, 16)
   form.cc_pan = raw.replace(/(.{4})/g, '$1 ').trim()
+}
+
+const validatePanLuhn = () => {
+  const raw = form.cc_pan.replace(/\s/g, '')
+  if (raw.length > 0 && !luhn(raw))
+    errors.cc_pan = 'Número de tarjeta inválido'
+  else
+    delete errors.cc_pan
 }
 
 const formatExpiry = () => {
@@ -437,56 +492,92 @@ const formatExpiry = () => {
   form.cc_expiry = raw.length > 2 ? `${raw.slice(0, 2)}/${raw.slice(2)}` : raw
 }
 
-// ─── Validación por paso ──────────────────────────────────────────────────────
+// ─── Validación por paso ───────────────────────────────────────────────────────
 const validateStep = (s: number): boolean => {
-  // Limpiar errores previos del paso
-  Object.keys(errors).forEach(k => delete (errors as Record<string, string>)[k])
+  const clear = (keys: string[]) => keys.forEach(k => delete errors[k])
 
   if (s === 1) {
-    if (!form.nombre.trim()) errors.nombre = 'Requerido'
-    if (!form.dni.trim()) errors.dni = 'Requerido'
-    if (!form.domicilio.trim()) errors.domicilio = 'Requerido'
-    if (!form.email.trim()) errors.email = 'Requerido'
-    if (!form.telefono.trim()) errors.telefono = 'Requerido'
+    clear(['nombre','dni','email','telefono','domicilio_calle','domicilio_numero','domicilio_cp','domicilio_provincia','domicilio_localidad'])
+    if (!form.nombre.trim())             errors.nombre = 'Requerido'
+    if (!form.dni.trim())                errors.dni = 'Requerido'
+    if (!form.email.trim())              errors.email = 'Requerido'
+    if (!form.telefono.trim())           errors.telefono = 'Requerido'
+    if (!form.domicilio_calle.trim())    errors.domicilio_calle = 'Requerido'
+    if (!form.domicilio_numero.trim())   errors.domicilio_numero = 'Requerido'
+    if (!form.domicilio_cp.trim())       errors.domicilio_cp = 'Requerido'
+    if (!form.domicilio_provincia)       errors.domicilio_provincia = 'Requerido'
+    if (!form.domicilio_localidad.trim())errors.domicilio_localidad = 'Requerido'
+  }
+
+  if (s === 2) {
+    clear(['cc_brand','cc_pan','cc_expiry','cc_holder_name','cc_holder_dni'])
+    if (!form.cc_brand)                  errors.cc_brand = 'Seleccioná la marca'
+    const pan = form.cc_pan.replace(/\s/g, '')
+    if (pan.length !== 16)               errors.cc_pan = 'Ingresá los 16 dígitos'
+    else if (!luhn(pan))                 errors.cc_pan = 'Número de tarjeta inválido'
+    if (!/^\d{2}\/\d{2}$/.test(form.cc_expiry)) errors.cc_expiry = 'Formato MM/AA'
+    if (!form.cc_holder_name.trim())     errors.cc_holder_name = 'Requerido'
+    if (!form.cc_holder_dni.trim())      errors.cc_holder_dni = 'Requerido'
   }
 
   if (s === 3) {
-    if (!form.cc_brand) errors.cc_brand = 'Seleccioná la marca'
-    const pan = form.cc_pan.replace(/\s/g, '')
-    if (pan.length !== 16) errors.cc_pan = 'Ingresá los 16 dígitos'
-    if (!/^\d{2}\/\d{2}$/.test(form.cc_expiry)) errors.cc_expiry = 'Formato MM/AA'
-    if (!form.cc_holder_name.trim()) errors.cc_holder_name = 'Requerido'
-    if (!form.cc_holder_dni.trim()) errors.cc_holder_dni = 'Requerido'
+    clear(['vehiculo_uso','vehiculo_nro_chasis','vehiculo_nro_motor'])
+    if (!form.vehiculo_uso)             errors.vehiculo_uso = 'Seleccioná el tipo de uso'
+    if (!form.vehiculo_nro_chasis.trim()) errors.vehiculo_nro_chasis = 'Requerido'
+    if (!form.vehiculo_nro_motor.trim()) errors.vehiculo_nro_motor = 'Requerido'
   }
 
-  return Object.keys(errors).length === 0
+  if (s === 4) {
+    photoSlots.forEach(slot => {
+      if (!photoFiles[slot.key]) errors[`photo_${slot.key}`] = 'Foto requerida'
+    })
+  }
+
+  return !Object.keys(errors).some(k => {
+    const step1keys = ['nombre','dni','email','telefono','domicilio_calle','domicilio_numero','domicilio_cp','domicilio_provincia','domicilio_localidad']
+    const step2keys = ['cc_brand','cc_pan','cc_expiry','cc_holder_name','cc_holder_dni']
+    const step3keys = ['vehiculo_uso','vehiculo_nro_chasis','vehiculo_nro_motor']
+    if (s === 1) return step1keys.includes(k)
+    if (s === 2) return step2keys.includes(k)
+    if (s === 3) return step3keys.includes(k)
+    return k.startsWith('photo_')
+  })
 }
 
 const goToStep = (s: number) => {
   if (validateStep(step.value)) step.value = s
 }
 
-// ─── Submit ───────────────────────────────────────────────────────────────────
+// ─── Submit ────────────────────────────────────────────────────────────────────
 const submitForm = () => {
-  if (!validateStep(3)) return
+  if (!validateStep(4) || photoCount.value < 6) return
   submitting.value = true
 
-  const formData = new FormData()
-  formData.append('_token', csrfToken)
-  formData.append('nombre', form.nombre)
-  formData.append('dni', form.dni)
-  formData.append('domicilio', form.domicilio)
-  formData.append('email', form.email)
-  formData.append('telefono', form.telefono)
-  formData.append('cc_brand', form.cc_brand)
-  // Enviamos el PAN sin espacios
-  formData.append('cc_pan', form.cc_pan.replace(/\s/g, ''))
-  formData.append('cc_expiry', form.cc_expiry)
-  formData.append('cc_holder_name', form.cc_holder_name)
-  formData.append('cc_holder_dni', form.cc_holder_dni)
-  photoFiles.value.forEach(({ file }) => formData.append('photos[]', file))
+  const fd = new FormData()
+  fd.append('_token', csrfToken)
+  fd.append('checkout_token', props.checkoutToken)
+  fd.append('nombre', form.nombre)
+  fd.append('dni', form.dni)
+  fd.append('email', form.email)
+  fd.append('telefono', form.telefono)
+  fd.append('domicilio_calle', form.domicilio_calle)
+  fd.append('domicilio_numero', form.domicilio_numero)
+  fd.append('domicilio_cp', form.domicilio_cp)
+  fd.append('domicilio_provincia', form.domicilio_provincia)
+  fd.append('domicilio_localidad', form.domicilio_localidad)
+  fd.append('vehiculo_uso', form.vehiculo_uso)
+  fd.append('vehiculo_nro_chasis', form.vehiculo_nro_chasis)
+  fd.append('vehiculo_nro_motor', form.vehiculo_nro_motor)
+  fd.append('cc_brand', form.cc_brand)
+  fd.append('cc_pan', form.cc_pan.replace(/\s/g, ''))
+  fd.append('cc_expiry', form.cc_expiry)
+  fd.append('cc_holder_name', form.cc_holder_name)
+  fd.append('cc_holder_dni', form.cc_holder_dni)
+  photoSlots.forEach(slot => {
+    if (photoFiles[slot.key]) fd.append(`photos[${slot.key}]`, photoFiles[slot.key])
+  })
 
-  fetch(props.submitUrl, { method: 'POST', body: formData })
+  fetch(props.submitUrl, { method: 'POST', body: fd })
     .then(async res => {
       if (res.redirected) {
         window.location.href = res.url
@@ -494,10 +585,13 @@ const submitForm = () => {
         const data = await res.json().catch(() => ({}))
         if (data.errors) {
           Object.assign(errors, data.errors)
-          // Volver al paso con errores
-          const step1Fields = ['nombre', 'dni', 'domicilio', 'email', 'telefono']
-          if (step1Fields.some(f => data.errors[f])) step.value = 1
-          else step.value = 3
+          const s1 = ['nombre','dni','email','telefono','domicilio_calle','domicilio_numero','domicilio_cp','domicilio_provincia','domicilio_localidad']
+          const s2 = ['cc_brand','cc_pan','cc_expiry','cc_holder_name','cc_holder_dni']
+          const s3 = ['vehiculo_uso','vehiculo_nro_chasis','vehiculo_nro_motor']
+          if (Object.keys(data.errors).some(k => s1.includes(k))) step.value = 1
+          else if (Object.keys(data.errors).some(k => s2.includes(k))) step.value = 2
+          else if (Object.keys(data.errors).some(k => s3.includes(k))) step.value = 3
+          else step.value = 4
         }
         submitting.value = false
       }
@@ -505,7 +599,11 @@ const submitForm = () => {
     .catch(() => { submitting.value = false })
 }
 
-// ─── Formateo de precio ───────────────────────────────────────────────────────
+// ─── Precio ────────────────────────────────────────────────────────────────────
 const formatPrice = (n: number) =>
   new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0 }).format(n)
 </script>
+
+<style scoped>
+/* Usamos clases inline de Tailwind CDN/utility directamente — no @apply */
+</style>

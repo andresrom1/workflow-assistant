@@ -172,7 +172,7 @@
             <details>
                 <summary class="cursor-pointer text-gray-500 hover:text-gray-700 text-sm font-medium">Ver JSON Crudo del Proveedor</summary>
                 <pre class="mt-4 bg-gray-800 text-green-400 p-4 rounded text-xs overflow-x-auto">
-                    {{ json_encode($quote->raw_response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}
+                    {{ json_encode($quote->providerRef?->raw_response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}
                 </pre>
             </details>
         </div>

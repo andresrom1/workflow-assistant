@@ -3,25 +3,24 @@
 namespace App\Adapters\OpenAI;
 
 use App\Contracts\AIProviderAdapterInterface;
-use App\Models\CheckoutSession;
+use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Quote;
 use App\Models\QuoteAlternative;
 use App\Models\Vehicle;
 use App\Repositories\ConversationRepository;
-use Illuminate\Support\Facades\URL;
 use App\Services\CoveragePreferenceService;
 use App\Services\CustomerIdentificationService;
 use App\Services\PlateNormalizerService;
 use App\Services\QuoteService;
 use App\Services\VehicleIdentificationService;
+use App\Traits\ConditionalLogger;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Traits\ConditionalLogger;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Validator;
 use InvalidArgumentException;
-use App\Models\Conversation;
-use Illuminate\Http\Request;
 
 class AgentToolAdapter implements AIProviderAdapterInterface
 {
@@ -34,19 +33,19 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         private readonly QuoteService $quoteService,
         private readonly CoveragePreferenceService $coverageService,
         private readonly PlateNormalizerService $plate,
-    ) {
-    }
+    ) {}
 
     /**
      * Implementación obligatoria del método handleToolCall (ENTRY POINT).
      * Este método recibe el payload y delega la ejecución al método de herramienta correspondiente.
-     * @param array $payload Datos del request HTTP (body)
-     * @param string $toolName Nombre de la herramienta a ejecutar
+     *
+     * @param  array  $payload  Datos del request HTTP (body)
+     * @param  string  $toolName  Nombre de la herramienta a ejecutar
      * @return array La respuesta formateada para el proveedor de IA
      */
     public function handleToolCall(array $payload, string $toolName): array
     {
-        Log::warning(__METHOD__ . __LINE__ . 'handleToolCall invocado para la herramienta: ' . $toolName, ['payload' => $payload]);
+        Log::warning(__METHOD__.__LINE__.'handleToolCall invocado para la herramienta: '.$toolName, ['payload' => $payload]);
         $this->logAdapter("handleToolCall invocado para la herramienta: {$toolName}", ['payload' => $payload]);
 
         // 1- Validar que el request tiene todos los datos necesarios
@@ -65,7 +64,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         unset($data['openai_user_id']);
         unset($data['ai_provider']);
 
-        if (!empty($data['coverage_code'])) {
+        if (! empty($data['coverage_code'])) {
             $data['preference'] = $data['coverage_code'];
             unset($data['coverage_code']);
             // En el servicio de preferencia de cobertura se validara que el valor exista
@@ -74,11 +73,11 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         $channel = $payload['channel'] ?? 'web';
         $data['sessionUuid'] = $payload['sessionUuid'];
 
-        if (!empty($payload['quotation_number'])) {
+        if (! empty($payload['quotation_number'])) {
             $data['quoteId'] = $payload['quotation_number'];
         }
 
-        Log::warning(__METHOD__ . __LINE__ . 'Buscando o creando conversación externa', [
+        Log::warning(__METHOD__.__LINE__.'Buscando o creando conversación externa', [
             '$data' => $data,
         ]);
 
@@ -101,25 +100,27 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             };
         } catch (InvalidArgumentException $e) {
             Log::warning('Validación fallida en Adapter', ['error' => $e->getMessage()]);
+
             return $this->formatError($e->getMessage(), 'validation_error');
         } catch (\Exception $e) {
             Log::error('Server Error en Adapter', ['msg' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+
             return $this->formatError('Error interno del servidor', 'server_error');
         }
     }
 
     /**
      * Identifica cliente y lo vincula a la conversación actual.
-     * @param array $payload
-     * @param Conversation  $conversation
-     * Retorna ARRAY para la IA (No el objeto Customer).
+     *
+     * @param  Conversation  $conversation
+     *                                      Retorna ARRAY para la IA (No el objeto Customer).
      */
     protected function identifyCustomer(array $payload, Conversation $conversation): array
     {
         $this->logCustomer('Adapter: Iniciando identificación de cliente', $payload);
 
         // 1. Validamos y Obtenemos el Cliente (Si falla, deja que la excepción suba)
-        // No uses try/catch aquí si vas a silenciar el error. 
+        // No uses try/catch aquí si vas a silenciar el error.
         // Deja que handleToolCall capture la excepción y devuelva el error formateado.
 
         $data = $this->validateCustomer($payload); // Usamos el método validador privado
@@ -144,7 +145,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             $this->logCustomer('Cambio de titularidad en conversación', [
                 'conversation_id' => $conversation->id,
                 'from' => $currentOwnerId,
-                'to' => $customer->id
+                'to' => $customer->id,
             ]);
         }
 
@@ -157,15 +158,10 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         // 4. RETORNO BLINDADO (Array para la IA)
         return [
             'success' => true,
-            'tool_output' => "Cliente identificado correctamente",
+            'tool_output' => 'Cliente identificado correctamente',
         ];
     }
 
-    /**
-     * @param array $data
-     * @param Conversation  $conversation
-     * @return array
-     */
     protected function identifyVehicle(array $data, Conversation $conversation): array
     {
         Log::error('DEBUG identifyVehicle data keys', [
@@ -180,9 +176,9 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         /** @var Customer $customer */
         $customer = $conversation->customer;
 
-        if (!$customer) {
+        if (! $customer) {
             // Defensa en profundidad: aunque el flujo lo garantice, el código se protege.
-            return $this->formatError("No se ha identificado un cliente para asignar el vehículo.", "missing_customer");
+            return $this->formatError('No se ha identificado un cliente para asignar el vehículo.', 'missing_customer');
         }
 
         $this->logAdapter('Adapter: Iniciando identificación de vehículo', [
@@ -219,9 +215,6 @@ class AgentToolAdapter implements AIProviderAdapterInterface
     }
 
     /** Guarda la preferencia de cobertura del cliente para un determinado vehiculo.
-     * @param array $data
-     * @param Conversation  $conversation
-     * @return array
      */
     // public function coveragePreference(array $data, Conversation $conversation): array
     // {
@@ -286,7 +279,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             ->where('patente', $data['patente'])
             ->first();
 
-        if (!$vehicle) {
+        if (! $vehicle) {
             return $this->formatError(
                 "No se encontró un vehículo con patente '{$data['patente']}' en esta conversación.",
                 'missing_vehicle'
@@ -352,8 +345,9 @@ class AgentToolAdapter implements AIProviderAdapterInterface
      */
     private function tryResolveQuoteById(?int $quoteId, string $preference): bool
     {
-        if (!$quoteId) {
+        if (! $quoteId) {
             $this->logAdapter('CoveragePreference: No hay quote pendiente, se omite resolución.');
+
             return false;
         }
 
@@ -362,10 +356,11 @@ class AgentToolAdapter implements AIProviderAdapterInterface
                 ->where('status', 'pending')
                 ->first();
 
-            if (!$quote) {
+            if (! $quote) {
                 $this->logAdapter('CoveragePreference: Quote ya no está pendiente, se omite resolución.', [
                     'quote_id' => $quoteId,
                 ]);
+
                 return false;
             }
 
@@ -396,29 +391,54 @@ class AgentToolAdapter implements AIProviderAdapterInterface
     {
         if ($resolved) {
             return "Preferencia de cobertura '{$preference}' guardada para el vehículo {$patente}. "
-                . "La oferta fue enviada a los productores.";
+                .'La oferta fue enviada a los productores.';
         }
 
         return "Preferencia de cobertura '{$preference}' guardada para el vehículo {$patente}. "
-            . "La oferta será procesada en breve.";
+            .'La oferta será procesada en breve.';
     }
 
-
-    private function getQuote(array $data, bool $withAlternatives = false)
+    private function getQuote(array $data, bool $withAlternatives = false): array
     {
         $quoteId = $data['quoteId'];
         Log::info('Adapter: Obteniendo cotización', ['quote_id' => $quoteId]);
         $quote = $this->quoteService->getQuote($quoteId, $withAlternatives);
-        if (!$quote) {
-            return $this->formatError("No se encontró una cotización con ID '{$quoteId}'.", "missing_quote");
+        if (! $quote) {
+            return $this->formatError("No se encontró una cotización con ID '{$quoteId}'.", 'missing_quote');
         }
-        return $quote;
+
+        // Usamos directamente la relación Eloquent: cada QuoteAlternative ya tiene su id
+        // de DB (que es el quote_alternative_id) y todos los campos del raw_response.
+        // Esto es más simple y robusto que hacer un join sobre raw_response.
+        $alternatives = $quote->alternatives->map(fn ($alt) => [
+            'quote_id' => $quote->id,
+            'quote_alternative_id' => $alt->id,
+            'aseguradora' => $alt->aseguradora,
+            'titulo' => $alt->titulo,
+            'descripcion' => $alt->descripcion,
+            'normalized_grade' => $alt->normalized_grade,
+            'precio' => $alt->precio,
+            'moneda' => $alt->moneda,
+            'marketing_title' => $alt->marketing_title,
+            'sum_insured_text' => $alt->sum_insured_text,
+            'features_tags' => $alt->features_tags,
+            'full_details' => $alt->full_details,
+            // external_code y external_quote_id excluidos intencionalmente — scope de proveedor (ver quote_provider_refs)
+        ]);
+
+        return [
+            'success' => true,
+            'tool_output' => "Cotización #{$quote->id} obtenida correctamente. Usá quote_id={$quote->id} para el checkout.",
+            'quotes' => json_encode([
+                'quote_id' => $quote->id,
+                'alternatives' => $alternatives,
+            ]),
+        ];
     }
 
     /**
      * Valida y sanea los datos de la preferencia de cobertura.
-     * @param array $data
-     * @return array
+     *
      * @throws \InvalidArgumentException Si la validación falla
      */
     private function validateCoveragePreference(array $data): array
@@ -432,18 +452,18 @@ class AgentToolAdapter implements AIProviderAdapterInterface
 
         if ($validator->fails()) {
             throw new InvalidArgumentException(
-                'Error de validación en validateCoveragePreference: ' . $validator->errors()->first()
+                'Error de validación en validateCoveragePreference: '.$validator->errors()->first()
             );
         }
 
         return $validator->validated();
     }
 
-
     /**
      * Valida y sanea los argumentos del vehículo.
-     * @param array $arguments
+     *
      * @return array Datos validados y limpios
+     *
      * @throws \InvalidArgumentException Si la validación falla
      */
     private function validateVehicle(array $arguments): array
@@ -452,12 +472,12 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             'patente' => [
                 'required',
                 'string',
-                'regex:/^([A-Z]{3}\s?\d{3}|[A-Z]{2}\s?\d{3}\s?[A-Z]{2})$/i'
+                'regex:/^([A-Z]{3}\s?\d{3}|[A-Z]{2}\s?\d{3}\s?[A-Z]{2})$/i',
             ],
             'marca' => 'required|string|max:100',
             'modelo' => 'required|string|max:100',
             'version' => 'required|string|max:100',
-            'year' => 'required|integer|min:1900|max:' . (date('Y') + 1),
+            'year' => 'required|integer|min:1900|max:'.(date('Y') + 1),
             'combustible' => 'required|string|in:nafta,Nafta,diesel,Diesel,gnc,GNC,electrico,Electrico,hibrido,Hibrido',
             'codigo_postal' => 'required|string|max:10',
         ];
@@ -466,7 +486,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
 
         if ($validator->fails()) {
             throw new InvalidArgumentException(
-                'Error de validación en identifyVehicle: ' . $validator->errors()->first()
+                'Error de validación en identifyVehicle: '.$validator->errors()->first()
             );
         }
 
@@ -475,8 +495,9 @@ class AgentToolAdapter implements AIProviderAdapterInterface
 
     /**
      * Valida y sanea el payload de entrada.
-     * @param array $payload
+     *
      * @return array Datos validados y limpios
+     *
      * @throws \InvalidArgumentException Si la validación falla
      */
     private function validateCustomer(array $payload): array
@@ -494,7 +515,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             // Lanzamos tu excepción preferida con el mensaje del primer error encontrado
             $this->logCustomer('Validación fallida en AgentToolAdapter', ['errors' => $validator->errors()->all(), 'payload' => $payload]);
             throw new InvalidArgumentException(
-                'Error de validación en AgentToolAdapter: ' . $validator->errors()->first()
+                'Error de validación en AgentToolAdapter: '.$validator->errors()->first()
             );
         }
 
@@ -506,18 +527,26 @@ class AgentToolAdapter implements AIProviderAdapterInterface
      * Genera un link de checkout firmado para que el usuario complete sus datos,
      * fotos de inspección y datos de tarjeta de crédito.
      *
-     * @param array $data Payload transformado (incluye quoteId y quote_alternative_id)
-     * @param Conversation $conversation Conversación activa
+     * @param  array  $data  Payload transformado (incluye quoteId y quote_alternative_id)
+     * @param  Conversation  $conversation  Conversación activa
      * @return array Respuesta para la IA con checkout_url
      */
     protected function checkout(array $data, Conversation $conversation): array
     {
         $this->logAdapter('Adapter: Iniciando checkout', ['data' => $data]);
+        Log::info('Adapter: Iniciando checkout', ['data' => $data]);
 
+        // Validación básica de entrada (quoteId y quote_alternative_id)
+        if (empty($data['quoteId']) && empty($data['quote_id'])) {
+            return $this->formatError(
+                'Se requiere quoteId para iniciar el checkout.',
+                'missing_quote_id'
+            );
+        }
         // Aceptar quote_id directo o el valor ya mapeado como quoteId
         $quoteId = $data['quoteId'] ?? $data['quote_id'] ?? null;
         $alternativeId = $data['quote_alternative_id'] ?? $data['alternative_id'] ?? null;
-
+        Log::info('Checkout: quoteId y alternativeId extraídos', ['quoteId' => $quoteId, 'alternativeId' => $alternativeId]);
         if (! $quoteId || ! $alternativeId) {
             return $this->formatError(
                 'Se requieren quote_id y quote_alternative_id para iniciar el checkout.',
@@ -527,10 +556,11 @@ class AgentToolAdapter implements AIProviderAdapterInterface
 
         // Verificar que el quote pertenece a esta conversación
         $quote = Quote::where('id', $quoteId)
-            ->where('conversation_id', $conversation->id)
-            ->whereIn('status', ['processed', 'offered_pas'])
+            // ->where('conversation_id', $conversation->id)
+            ->whereIn('status', ['processed', 'offered_pas', 'checkout_pending']) // Aceptamos también checkout_pending para permitir reintentos
             ->first();
 
+        Log::info('Checkout: Quote verificado', ['quote' => $quote]);
         if (! $quote) {
             return $this->formatError(
                 'No se encontró una cotización válida con ese ID para esta sesión.',
@@ -550,28 +580,27 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             );
         }
 
-        // Generar URL firmada válida por 48 horas
-        $checkoutUrl = URL::temporarySignedRoute(
-            'checkout.show',
-            now()->addHours(48),
-            [
-                'quote'       => $quote->id,
-                'alternative' => $alternative->id,
-            ]
-        );
+        // Generar token opaco único y guardarlo en el quote junto con la alternativa
+        $token = \Illuminate\Support\Str::random(10); // 10 chars alfanuméricos, URL-safe
 
-        // Transicionar el estado del quote
-        $quote->update(['status' => 'checkout_pending']);
+        $quote->update([
+            'status' => 'checkout_pending',
+            'checkout_token' => $token,
+            'checkout_alternative_id' => $alternative->id,
+        ]);
+
+        // URL limpia: sin query params, sin firma
+        $checkoutUrl = route('checkout.show', ['token' => $token]);
 
         $this->logAdapter('Adapter: Checkout URL generada', [
-            'quote_id'       => $quote->id,
+            'quote_id' => $quote->id,
             'alternative_id' => $alternative->id,
         ]);
 
         return [
-            'success'      => true,
+            'success' => true,
             'checkout_url' => $checkoutUrl,
-            'tool_output'  => "Tu link de checkout está listo. Completá tus datos de contratación aquí: {$checkoutUrl}",
+            'tool_output' => "Tu link de checkout está listo. Completá tus datos de contratación aquí: {$checkoutUrl}",
         ];
     }
 

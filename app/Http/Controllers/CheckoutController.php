@@ -4,22 +4,21 @@ namespace App\Http\Controllers;
 
 use App\Models\CheckoutSession;
 use App\Models\Quote;
-use App\Models\QuoteAlternative;
+use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
-use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class CheckoutController extends Controller
 {
     /**
      * Muestra el formulario de checkout.
-     * La URL firmada ya fue validada por el middleware 'signed'.
+     * El token opaco identifica unívocamente el par (quote + alternative).
      */
-    public function show(Request $request, Quote $quote): \Inertia\Response
+    public function show(Request $request, string $token): \Inertia\Response
     {
-        $alternativeId = $request->query('alternative');
+        $quote = Quote::where('checkout_token', $token)->firstOrFail();
 
         abort_unless(
             in_array($quote->status, ['checkout_pending', 'checkout_submitted']),
@@ -27,52 +26,56 @@ class CheckoutController extends Controller
             'Esta cotización no está disponible para checkout.'
         );
 
-        $alternative = QuoteAlternative::where('id', $alternativeId)
-            ->where('quote_id', $quote->id)
+        $alternative = $quote->alternatives()
+            ->where('id', $quote->checkout_alternative_id)
             ->firstOrFail();
 
         $quote->load('riskSnapshot');
+        $snap = $quote->riskSnapshot;
 
         return Inertia::render('Checkout/Show', [
-            'quote'       => [
-                'id'     => $quote->id,
+            'quote' => [
+                'id' => $quote->id,
                 'status' => $quote->status,
             ],
             'alternative' => [
-                'id'             => $alternative->id,
-                'aseguradora'    => $alternative->aseguradora,
-                'titulo'         => $alternative->titulo,
-                'descripcion'    => $alternative->descripcion,
-                'precio'         => $alternative->precio,
-                'moneda'         => $alternative->moneda,
-                'marketing_title'=> $alternative->marketing_title,
-                'features_tags'  => $alternative->features_tags,
+                'id' => $alternative->id,
+                'aseguradora' => $alternative->aseguradora,
+                'titulo' => $alternative->titulo,
+                'descripcion' => $alternative->descripcion,
+                'precio' => $alternative->precio,
+                'moneda' => $alternative->moneda,
+                'marketing_title' => $alternative->marketing_title,
+                'features_tags' => $alternative->features_tags,
                 'normalized_grade' => $alternative->normalized_grade,
             ],
-            'risk' => [
-                'marca'    => $quote->riskSnapshot->marca,
-                'modelo'   => $quote->riskSnapshot->modelo,
-                'version'  => $quote->riskSnapshot->version,
-                'year'     => $quote->riskSnapshot->year,
-                'patente'  => $quote->riskSnapshot->patente ?? null,
+            // Datos del snapshot — inmutables, solo lectura en el frontend
+            'vehicle' => [
+                'patente' => $snap->vehicle->patente ?? null,
+                'marca' => $snap->marca,
+                'modelo' => $snap->modelo,
+                'version' => $snap->version,
+                'year' => $snap->year,
+                'combustible' => $snap->combustible,
             ],
-            // Pasamos los query params de la firma para incluirlos en el action del form
-            'submitUrl' => route('checkout.submit', [
-                'quote'       => $quote->id,
-                'alternative' => $alternative->id,
-                'expires'     => $request->query('expires'),
-                'signature'   => $request->query('signature'),
-            ]),
+            // Token que el frontend incluye como campo oculto en el POST
+            'checkoutToken' => $token,
+            // URL fija sin parámetros — el token viaja en el body
+            'submitUrl' => route('checkout.submit'),
         ]);
     }
 
     /**
      * Procesa el envío del formulario de checkout.
-     * La URL firmada ya fue validada por el middleware 'signed'.
+     * El checkout_token llega en el body del request (campo oculto).
      */
-    public function submit(Request $request, Quote $quote): \Illuminate\Http\RedirectResponse
+    public function submit(Request $request): \Illuminate\Http\RedirectResponse
     {
-        $alternativeId = $request->query('alternative');
+        $token = $request->input('checkout_token');
+
+        abort_if(empty($token), 422, 'Token de checkout requerido.');
+
+        $quote = Quote::where('checkout_token', $token)->firstOrFail();
 
         abort_unless(
             in_array($quote->status, ['checkout_pending']),
@@ -80,44 +83,53 @@ class CheckoutController extends Controller
             'Esta cotización ya fue enviada o no está disponible.'
         );
 
-        $alternative = QuoteAlternative::where('id', $alternativeId)
-            ->where('quote_id', $quote->id)
+        $alternative = $quote->alternatives()
+            ->where('id', $quote->checkout_alternative_id)
             ->firstOrFail();
 
         $validated = $request->validate([
             // Datos personales
-            'nombre'           => 'required|string|max:255',
-            'dni'              => 'required|string|max:20',
-            'domicilio'        => 'required|string|max:500',
-            'email'            => 'required|email|max:255',
-            'telefono'         => 'required|string|max:50',
+            'nombre' => 'required|string|max:255',
+            'dni' => 'required|string|max:20',
+            'email' => 'required|email|max:255',
+            'telefono' => 'required|string|max:50',
+            // Domicilio (5 campos)
+            'domicilio_calle' => 'required|string|max:255',
+            'domicilio_numero' => 'required|string|max:20',
+            'domicilio_cp' => 'required|string|max:10',
+            'domicilio_provincia' => 'required|string|max:100',
+            'domicilio_localidad' => 'required|string|max:100',
+            // Vehículo (confirmación)
+            'vehiculo_uso' => 'required|string|in:particular,otro',
+            'vehiculo_nro_chasis' => 'required|string|max:50',
+            'vehiculo_nro_motor' => 'required|string|max:50',
             // Tarjeta de crédito
-            'cc_brand'         => 'required|string|in:visa,mastercard,amex,naranja,cabal,maestro',
-            'cc_pan'           => ['required', 'string', 'regex:/^\d{16}$/'],
-            'cc_expiry'        => ['required', 'string', 'regex:/^\d{2}\/\d{2}$/'],
-            'cc_holder_name'   => 'required|string|max:255',
-            'cc_holder_dni'    => 'required|string|max:20',
-            // Fotos
-            'photos'           => 'nullable|array|max:10',
-            'photos.*'         => 'file|mimes:jpg,jpeg,png,heic,pdf|max:10240',
+            'cc_brand' => 'required|string|in:visa,mastercard,amex,naranja,cabal,maestro',
+            'cc_pan' => ['required', 'string', 'regex:/^\d{16}$/'],
+            'cc_expiry' => ['required', 'string', 'regex:/^\d{2}\/\d{2}$/'],
+            'cc_holder_name' => 'required|string|max:255',
+            'cc_holder_dni' => 'required|string|max:20',
+            // Fotos de inspección (6 requeridas)
+            'photos' => 'required|array|min:6|max:6',
+            'photos.*' => 'required|file|mimes:jpg,jpeg,png,heic|max:10240',
         ]);
 
         // Subir fotos a Cloudinary
         $photoPaths = [];
-        if ($request->hasFile('photos')) {
-            foreach ($request->file('photos') as $photo) {
-                try {
-                    $result = Cloudinary::upload($photo->getRealPath(), [
-                        'folder'         => "checkout/{$quote->id}/photos",
-                        'resource_type'  => 'auto',
-                    ]);
-                    $photoPaths[] = $result->getPublicId();
-                } catch (\Exception $e) {
-                    Log::error('CheckoutController: Error subiendo foto a Cloudinary', [
-                        'quote_id' => $quote->id,
-                        'error'    => $e->getMessage(),
-                    ]);
-                }
+        foreach ($request->file('photos') as $key => $photo) {
+            try {
+                $result = Cloudinary::upload($photo->getRealPath(), [
+                    'folder' => "checkout/{$quote->id}/photos",
+                    'resource_type' => 'image',
+                    'public_id' => "photo_{$key}",
+                ]);
+                $photoPaths[$key] = $result->getPublicId();
+            } catch (\Exception $e) {
+                Log::error('CheckoutController: Error subiendo foto a Cloudinary', [
+                    'quote_id' => $quote->id,
+                    'key' => $key,
+                    'error' => $e->getMessage(),
+                ]);
             }
         }
 
@@ -125,20 +137,30 @@ class CheckoutController extends Controller
         CheckoutSession::updateOrCreate(
             ['quote_id' => $quote->id],
             [
-                'quote_alternative_id'     => $alternative->id,
-                'status'                   => 'submitted',
-                'nombre'                   => $validated['nombre'],
-                'dni'                      => $validated['dni'],
-                'domicilio'                => $validated['domicilio'],
-                'email'                    => $validated['email'],
-                'telefono'                 => $validated['telefono'],
-                'cc_brand'                 => $validated['cc_brand'],
-                'cc_pan_encrypted'         => Crypt::encryptString($validated['cc_pan']),
-                'cc_expiry_encrypted'      => Crypt::encryptString($validated['cc_expiry']),
+                'quote_alternative_id' => $alternative->id,
+                'status' => 'submitted',
+                'nombre' => $validated['nombre'],
+                'dni' => $validated['dni'],
+                'email' => $validated['email'],
+                'telefono' => $validated['telefono'],
+                // Domicilio estructurado
+                'domicilio_calle' => $validated['domicilio_calle'],
+                'domicilio_numero' => $validated['domicilio_numero'],
+                'domicilio_cp' => $validated['domicilio_cp'],
+                'domicilio_provincia' => $validated['domicilio_provincia'],
+                'domicilio_localidad' => $validated['domicilio_localidad'],
+                // Vehículo
+                'vehiculo_uso' => $validated['vehiculo_uso'],
+                'vehiculo_nro_chasis' => $validated['vehiculo_nro_chasis'],
+                'vehiculo_nro_motor' => $validated['vehiculo_nro_motor'],
+                // Tarjeta cifrada
+                'cc_brand' => $validated['cc_brand'],
+                'cc_pan_encrypted' => Crypt::encryptString($validated['cc_pan']),
+                'cc_expiry_encrypted' => Crypt::encryptString($validated['cc_expiry']),
                 'cc_holder_name_encrypted' => Crypt::encryptString($validated['cc_holder_name']),
-                'cc_holder_dni_encrypted'  => Crypt::encryptString($validated['cc_holder_dni']),
-                'photo_paths'              => $photoPaths,
-                'submitted_at'             => now(),
+                'cc_holder_dni_encrypted' => Crypt::encryptString($validated['cc_holder_dni']),
+                'photo_paths' => $photoPaths,
+                'submitted_at' => now(),
             ]
         );
 
