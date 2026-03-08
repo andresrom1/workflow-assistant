@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
+import { env } from 'node:process';
 
 export default defineConfig({
     plugins: [
@@ -26,5 +27,17 @@ export default defineConfig({
     },
     server: {
         port: 5174,
+        // para poder ingresar desde el movil en local
+        strictPort: true,
+        cors: {
+            origin: '*',           // Permite CORS desde cualquier origen
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Authorization'],
+        },
+        hmr: {
+            host: '192.168.0.17',  // IP que ven los clientes
+            port: 5174,
+            protocol: 'ws',        // WebSocket para HMR
+        },
     },
 });
