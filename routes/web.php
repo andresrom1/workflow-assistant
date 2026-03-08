@@ -22,6 +22,9 @@ Route::resource('quotes', QuoteController::class)->only(['index', 'show']);
 Route::get('/checkout/{token}', [CheckoutController::class, 'show'])
     ->name('checkout.show');
 
+Route::post('/checkout/upload-photo', [CheckoutController::class, 'uploadPhoto'])
+    ->name('checkout.upload-photo');
+
 Route::post('/checkout/submit', [CheckoutController::class, 'submit'])
     ->name('checkout.submit');
 
@@ -30,7 +33,8 @@ Route::get('/checkout/{quote}/success', [CheckoutController::class, 'success'])
     ->name('checkout.success');
 
 // ─── Admin: Auditoría de checkout (requiere autenticación) ───────────────────
-Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
+//Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
+Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/checkout-sessions', [CheckoutAuditController::class, 'index'])
         ->name('checkout-sessions.index');
 

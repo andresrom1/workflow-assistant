@@ -87,16 +87,22 @@
       </div>
 
       <!-- Fotos de inspección -->
-      <div v-if="session.photo_paths?.length" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Fotos de inspección ({{ session.photo_paths.length }})</h2>
+      <div v-if="session.photo_paths && Object.keys(session.photo_paths).length" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Fotos de inspección ({{ Object.keys(session.photo_paths).length }})</h2>
         <div class="grid grid-cols-3 gap-3">
           <div
-            v-for="(path, i) in session.photo_paths"
-            :key="i"
-            class="bg-gray-100 rounded-lg aspect-square flex items-center justify-center overflow-hidden"
+            v-for="(path, key) in session.photo_paths"
+            :key="key"
+            class="bg-gray-100 rounded-lg aspect-square overflow-hidden relative"
           >
-            <!-- En producción, usar la URL de Cloudinary para mostrar el thumbnail -->
-            <div class="text-xs text-gray-400 text-center p-2 break-all">{{ path }}</div>
+            <img
+              :src="cloudinaryThumb(path)"
+              :alt="photoLabel(key as string)"
+              class="w-full h-full object-cover"
+            />
+            <span class="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-xs text-center py-1">
+              {{ photoLabel(key as string) }}
+            </span>
           </div>
         </div>
       </div>
@@ -227,4 +233,18 @@ const confirmAndSubmit = (e: Event, message: string) => {
     (e.target as HTMLFormElement).submit()
   }
 }
+
+const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+const cloudinaryThumb = (publicId: string) =>
+  `https://res.cloudinary.com/${cloudName}/image/upload/w_300,h_300,c_fill/${publicId}`
+
+const photoLabel = (key: string) => ({
+  tarjeta_verde: 'Frente Tarjeta Verde',
+  frente:     'Frente',
+  atras:      'Atrás',
+  lateral_i:  'Lateral izq.',
+  lateral_d:  'Lateral der.',
+  auxilio:    'Auxilio',
+  parabrisas: 'Parabrisas',
+}[key] ?? key)
 </script>

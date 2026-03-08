@@ -22,6 +22,18 @@
     </div>
   </div>
 
+  <!-- ══════ ESTADO INVÁLIDO ══════ -->
+  <div v-else-if="quote.status !== 'checkout_pending'"
+    class="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+    <div class="text-center max-w-sm">
+      <div class="text-6xl mb-6">⚠️</div>
+      <h1 class="text-2xl font-bold text-gray-900 mb-3">Link no disponible</h1>
+      <p class="text-gray-500 text-sm leading-relaxed">
+        Este link de checkout ya fue procesado, ha expirado o no es válido para cargar información.
+      </p>
+    </div>
+  </div>
+
   <!-- ══════ FORMULARIO PRINCIPAL (mobile only) ══════ -->
   <div v-else class="min-h-screen bg-gray-50">
 
@@ -31,7 +43,8 @@
       <div class="flex items-center justify-between mt-1">
         <div>
           <p class="font-bold text-gray-900 text-sm">{{ alternative.aseguradora }} — {{ alternative.titulo }}</p>
-          <p class="text-xs text-gray-500">{{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }} <span v-if="vehicle.patente">· {{ vehicle.patente }}</span></p>
+          <p class="text-xs text-gray-500">{{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }} <span
+              v-if="vehicle.patente">· {{ vehicle.patente }}</span></p>
         </div>
         <div class="text-right">
           <span class="text-lg font-bold text-gray-900">${{ formatPrice(alternative.precio) }}</span>
@@ -47,21 +60,19 @@
           <div class="flex flex-col items-center">
             <div
               class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200"
-              :class="stepCircleClass(i + 1)"
-            >
+              :class="stepCircleClass(i + 1)">
               <span v-if="step > i + 1">✓</span>
               <span v-else>{{ i + 1 }}</span>
             </div>
-            <span class="text-xs mt-1 font-medium" :class="step === i + 1 ? 'text-blue-600' : 'text-gray-400'">{{ label }}</span>
+            <span class="text-xs mt-1 font-medium" :class="step === i + 1 ? 'text-blue-600' : 'text-gray-400'">{{ label
+            }}</span>
           </div>
           <div v-if="i < stepLabels.length - 1" class="w-6 h-px bg-gray-200 mb-4 mx-1" />
         </div>
       </div>
     </div>
 
-    <form :action="submitUrl" method="POST" enctype="multipart/form-data" ref="formRef" class="pb-8">
-      <input type="hidden" name="_token" :value="csrfToken" />
-      <input type="hidden" name="checkout_token" :value="checkoutToken" />
+    <div ref="formRef" class="pb-8">
 
       <!-- ══════════ PASO 1: Datos personales ══════════ -->
       <div v-show="step === 1" class="px-4 pt-6 space-y-4">
@@ -69,23 +80,23 @@
 
         <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
           <Field label="Nombre completo *" :error="errors.nombre">
-            <input v-model="form.nombre" type="text" name="nombre" placeholder="Juan Alberto Pérez"
-              class="field" :class="{ 'field-error': errors.nombre }" autocomplete="name" />
+            <input v-model="form.nombre" type="text" name="nombre" placeholder="Juan Alberto Pérez" class="field"
+              :class="{ 'field-error': errors.nombre }" autocomplete="name" />
           </Field>
 
           <Field label="DNI *" :error="errors.dni">
-            <input v-model="form.dni" type="text" name="dni" placeholder="30000000" inputmode="numeric"
-              class="field" :class="{ 'field-error': errors.dni }" />
+            <input v-model="form.dni" type="text" name="dni" placeholder="30000000" inputmode="numeric" class="field"
+              :class="{ 'field-error': errors.dni }" />
           </Field>
 
           <Field label="Email *" :error="errors.email">
-            <input v-model="form.email" type="email" name="email" placeholder="juan@ejemplo.com"
-              class="field" :class="{ 'field-error': errors.email }" autocomplete="email" />
+            <input v-model="form.email" type="email" name="email" placeholder="juan@ejemplo.com" class="field"
+              :class="{ 'field-error': errors.email }" autocomplete="email" />
           </Field>
 
           <Field label="Teléfono *" :error="errors.telefono">
-            <input v-model="form.telefono" type="tel" name="telefono" placeholder="+54 9 11 1234-5678"
-              class="field" :class="{ 'field-error': errors.telefono }" autocomplete="tel" />
+            <input v-model="form.telefono" type="tel" name="telefono" placeholder="+54 9 11 1234-5678" class="field"
+              :class="{ 'field-error': errors.telefono }" autocomplete="tel" />
           </Field>
         </div>
 
@@ -96,20 +107,20 @@
               class="field" :class="{ 'field-error': errors.domicilio_calle }" autocomplete="street-address" />
           </Field>
 
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-2 gap-3 items-start">
             <Field label="Número *" :error="errors.domicilio_numero">
-              <input v-model="form.domicilio_numero" type="text" name="domicilio_numero" placeholder="742"
-                class="field" :class="{ 'field-error': errors.domicilio_numero }" inputmode="numeric" />
+              <input v-model="form.domicilio_numero" type="text" name="domicilio_numero" placeholder="742" class="field"
+                :class="{ 'field-error': errors.domicilio_numero }" inputmode="numeric" />
             </Field>
             <Field label="Código Postal *" :error="errors.domicilio_cp">
-              <input v-model="form.domicilio_cp" type="text" name="domicilio_cp" placeholder="1414"
-                class="field" :class="{ 'field-error': errors.domicilio_cp }" inputmode="numeric" autocomplete="postal-code" />
+              <input v-model="form.domicilio_cp" type="text" name="domicilio_cp" placeholder="1414" class="field"
+                :class="{ 'field-error': errors.domicilio_cp }" inputmode="numeric" autocomplete="postal-code" />
             </Field>
           </div>
 
           <Field label="Provincia *" :error="errors.domicilio_provincia">
-            <select v-model="form.domicilio_provincia" name="domicilio_provincia"
-              class="field" :class="{ 'field-error': errors.domicilio_provincia }">
+            <select v-model="form.domicilio_provincia" name="domicilio_provincia" class="field"
+              :class="{ 'field-error': errors.domicilio_provincia }">
               <option value="" disabled>Seleccioná la provincia</option>
               <option v-for="p in provincias" :key="p" :value="p">{{ p }}</option>
             </select>
@@ -132,8 +143,7 @@
 
         <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
           <Field label="Marca de tarjeta *" :error="errors.cc_brand">
-            <select v-model="form.cc_brand" name="cc_brand"
-              class="field" :class="{ 'field-error': errors.cc_brand }">
+            <select v-model="form.cc_brand" name="cc_brand" class="field" :class="{ 'field-error': errors.cc_brand }">
               <option value="" disabled>Seleccioná la marca</option>
               <option value="visa">Visa</option>
               <option value="mastercard">Mastercard</option>
@@ -145,38 +155,27 @@
           </Field>
 
           <Field label="Número de tarjeta *" :error="errors.cc_pan">
-            <input v-model="form.cc_pan" type="text" name="cc_pan"
-              placeholder="1234 5678 9012 3456" maxlength="19" inputmode="numeric"
-              @input="formatPan" @blur="validatePanLuhn"
-              class="field font-mono tracking-widest" :class="{ 'field-error': errors.cc_pan }"
-              autocomplete="off" />
+            <input v-model="form.cc_pan" type="text" name="cc_pan" placeholder="4111 1111 1111 1111" maxlength="19"
+              inputmode="numeric" @input="formatPan" @blur="validatePanLuhn" class="field font-mono"
+              :class="{ 'field-error': errors.cc_pan }" autocomplete="off" />
           </Field>
 
-          <div class="grid grid-cols-2 gap-3">
+          <div class="max-w-[150px]">
             <Field label="Vencimiento *" :error="errors.cc_expiry">
-              <input v-model="form.cc_expiry" type="text" name="cc_expiry"
-                placeholder="MM/AA" maxlength="5" inputmode="numeric"
-                @input="formatExpiry"
-                class="field font-mono" :class="{ 'field-error': errors.cc_expiry }"
-                autocomplete="off" />
+              <input v-model="form.cc_expiry" type="text" name="cc_expiry" placeholder="MM/AA" maxlength="5"
+                inputmode="numeric" @input="formatExpiry" class="field font-mono"
+                :class="{ 'field-error': errors.cc_expiry }" autocomplete="off" />
             </Field>
-            <div class="flex items-end pb-1">
-              <p class="text-xs text-gray-400">No se solicita CVV.</p>
-            </div>
           </div>
 
           <Field label="Nombre del titular *" :error="errors.cc_holder_name">
-            <input v-model="form.cc_holder_name" type="text" name="cc_holder_name"
-              placeholder="Juan Alberto Pérez"
-              class="field" :class="{ 'field-error': errors.cc_holder_name }"
-              autocomplete="off" />
+            <input v-model="form.cc_holder_name" type="text" name="cc_holder_name" placeholder="Juan Alberto Pérez"
+              class="field" :class="{ 'field-error': errors.cc_holder_name }" autocomplete="off" />
           </Field>
 
           <Field label="DNI del titular *" :error="errors.cc_holder_dni">
-            <input v-model="form.cc_holder_dni" type="text" name="cc_holder_dni"
-              placeholder="30000000" inputmode="numeric"
-              class="field" :class="{ 'field-error': errors.cc_holder_dni }"
-              autocomplete="off" />
+            <input v-model="form.cc_holder_dni" type="text" name="cc_holder_dni" placeholder="30000000"
+              inputmode="numeric" class="field" :class="{ 'field-error': errors.cc_holder_dni }" autocomplete="off" />
             <p class="text-xs text-gray-400 mt-1">Puede diferir del tomador del seguro.</p>
           </Field>
         </div>
@@ -190,7 +189,8 @@
       <!-- ══════════ PASO 3: Verificación del vehículo ══════════ -->
       <div v-show="step === 3" class="px-4 pt-6 space-y-4">
         <h2 class="text-base font-bold text-gray-800">Verificación del vehículo</h2>
-        <p class="text-xs text-gray-500">Confirmá que los datos del vehículo sean correctos. Estos datos son inmutables y provienen del snapshot de cotización.</p>
+        <p class="text-xs text-gray-500">Confirmá que los datos del vehículo sean correctos. Estos datos son inmutables
+          y provienen del snapshot de cotización.</p>
 
         <!-- Datos inmutables del snapshot -->
         <div class="bg-blue-50 rounded-xl border border-blue-100 p-4 space-y-3">
@@ -213,18 +213,14 @@
         <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
           <Field label="Uso del vehículo *" :error="errors.vehiculo_uso">
             <div class="grid grid-cols-2 gap-3 mt-1">
-              <label
-                class="flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
-                :class="form.vehiculo_uso === 'particular' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'"
-              >
+              <label class="flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
+                :class="form.vehiculo_uso === 'particular' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'">
                 <input type="radio" v-model="form.vehiculo_uso" value="particular" name="vehiculo_uso" class="hidden" />
                 <span class="text-xl">🚗</span>
                 <span class="text-sm font-medium">Particular</span>
               </label>
-              <label
-                class="flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
-                :class="form.vehiculo_uso === 'otro' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'"
-              >
+              <label class="flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
+                :class="form.vehiculo_uso === 'otro' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'">
                 <input type="radio" v-model="form.vehiculo_uso" value="otro" name="vehiculo_uso" class="hidden" />
                 <span class="text-xl">🚕</span>
                 <span class="text-sm font-medium">Otro</span>
@@ -241,9 +237,9 @@
           </Field>
 
           <Field label="Nro. de motor *" :error="errors.vehiculo_nro_motor">
-            <input v-model="form.vehiculo_nro_motor" type="text" name="vehiculo_nro_motor"
-              placeholder="AZD5789" class="field font-mono text-sm"
-              :class="{ 'field-error': errors.vehiculo_nro_motor }" style="text-transform: uppercase"
+            <input v-model="form.vehiculo_nro_motor" type="text" name="vehiculo_nro_motor" placeholder="AZD5789"
+              class="field font-mono text-sm" :class="{ 'field-error': errors.vehiculo_nro_motor }"
+              style="text-transform: uppercase"
               @input="form.vehiculo_nro_motor = form.vehiculo_nro_motor.toUpperCase()" />
           </Field>
         </div>
@@ -263,44 +259,41 @@
         </p>
 
         <div class="space-y-3">
-          <div
-            v-for="(slot, i) in photoSlots"
-            :key="slot.key"
+          <div v-for="(slot, i) in photoSlots" :key="slot.key"
             class="bg-white rounded-xl border overflow-hidden transition-colors"
-            :class="photos[slot.key] ? 'border-green-400' : (errors[`photo_${slot.key}`] ? 'border-red-400' : 'border-gray-200')"
-          >
+            :class="photoIds[slot.key] ? 'border-green-400' : (uploading[slot.key] ? 'border-blue-400' : (errors[`photo_${slot.key}`] ? 'border-red-400' : 'border-gray-200'))">
             <div class="flex items-center gap-3 p-3">
               <!-- Preview / ícono -->
-              <div class="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
-                <img v-if="photos[slot.key]" :src="photos[slot.key]" class="w-full h-full object-cover" :alt="slot.label" />
+              <div
+                class="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                <img v-if="photos[slot.key]" :src="photos[slot.key]" class="w-full h-full object-cover"
+                  :alt="slot.label" />
+                <div v-else-if="uploading[slot.key]"
+                  class="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full"></div>
                 <span v-else class="text-2xl">{{ slot.icon }}</span>
               </div>
 
               <div class="flex-1 min-w-0">
                 <p class="font-medium text-sm text-gray-800">{{ slot.label }}</p>
-                <p class="text-xs text-gray-500 mt-0.5">{{ slot.hint }}</p>
-                <p v-if="errors[`photo_${slot.key}`]" class="text-xs text-red-600 mt-0.5">{{ errors[`photo_${slot.key}`] }}</p>
+                <p v-if="uploading[slot.key]" class="text-xs text-blue-600 mt-0.5">Subiendo foto…</p>
+                <p v-else class="text-xs text-gray-500 mt-0.5">{{ slot.hint }}</p>
+                <p v-if="errors[`photo_${slot.key}`]" class="text-xs text-red-600 mt-0.5">{{ errors[`photo_${slot.key}`]
+                }}</p>
               </div>
 
               <!-- Botón cámara -->
-              <label class="flex-shrink-0 cursor-pointer">
-                <input
-                  type="file"
-                  :name="`photos[${slot.key}]`"
-                  accept="image/*"
-                  capture="environment"
-                  class="hidden"
-                  @change="onPhotoCapture($event, slot.key)"
-                />
-                <div
-                  class="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
-                  :class="photos[slot.key] ? 'bg-green-500' : 'bg-blue-600'"
-                >
-                  <span v-if="photos[slot.key]" class="text-white text-sm">✓</span>
+              <label class="flex-shrink-0 cursor-pointer"
+                :class="{ 'pointer-events-none opacity-50': uploading[slot.key] }">
+                <input type="file" accept="image/*" capture="environment" class="hidden"
+                  @change="onPhotoCapture($event, slot.key)" :disabled="!!uploading[slot.key]" />
+                <div class="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+                  :class="photoIds[slot.key] ? 'bg-green-500' : (uploading[slot.key] ? 'bg-gray-400' : 'bg-blue-600')">
+                  <span v-if="photoIds[slot.key]" class="text-white text-sm">✓</span>
                   <svg v-else class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </div>
               </label>
@@ -312,15 +305,13 @@
         <div class="bg-white rounded-xl border border-gray-200 p-3">
           <div class="flex items-center justify-between mb-2">
             <span class="text-sm font-medium text-gray-700">Progreso</span>
-            <span class="text-sm font-bold" :class="photoCount === 6 ? 'text-green-600' : 'text-gray-500'">{{ photoCount }}/6</span>
+            <span class="text-sm font-bold"
+              :class="photoCount === photoSlots.length ? 'text-green-600' : 'text-gray-500'">{{ photoCount }}/{{
+                photoSlots.length }}</span>
           </div>
           <div class="flex gap-1">
-            <div
-              v-for="(slot, i) in photoSlots"
-              :key="slot.key"
-              class="h-1.5 flex-1 rounded-full transition-colors"
-              :class="photos[slot.key] ? 'bg-green-500' : 'bg-gray-200'"
-            />
+            <div v-for="(slot, i) in photoSlots" :key="slot.key" class="h-1.5 flex-1 rounded-full transition-colors"
+              :class="photoIds[slot.key] ? 'bg-green-500' : 'bg-gray-200'" />
           </div>
         </div>
 
@@ -329,28 +320,27 @@
           <p class="font-semibold text-gray-700 mb-2">Resumen final</p>
           <div class="space-y-1 text-gray-600">
             <p><span class="text-gray-400">Tomador:</span> {{ form.nombre || '—' }}</p>
-            <p><span class="text-gray-400">Vehículo:</span> {{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }}</p>
-            <p><span class="text-gray-400">Cobertura:</span> {{ alternative.aseguradora }} — {{ alternative.titulo }}</p>
+            <p><span class="text-gray-400">Vehículo:</span> {{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }}
+            </p>
+            <p><span class="text-gray-400">Cobertura:</span> {{ alternative.aseguradora }} — {{ alternative.titulo }}
+            </p>
             <p><span class="text-gray-400">Prima:</span> ${{ formatPrice(alternative.precio) }}/mes</p>
-            <p><span class="text-gray-400">Fotos:</span> {{ photoCount }}/6</p>
+            <p><span class="text-gray-400">Fotos:</span> {{ photoCount }}/{{ photoSlots.length }}</p>
           </div>
         </div>
 
         <div class="flex justify-between pt-2">
           <button type="button" @click="step = 3" class="btn-ghost">← Atrás</button>
-          <button
-            type="submit"
-            :disabled="submitting || photoCount < 6"
-            class="btn-submit"
-            @click.prevent="submitForm"
-          >
+          <button type="submit" :disabled="submitting || photoCount < photoSlots.length" class="btn-submit"
+            @click.prevent="submitForm">
             <span v-if="submitting">Enviando…</span>
-            <span v-else-if="photoCount < 6">Fotos incompletas ({{ photoCount }}/6)</span>
+            <span v-else-if="photoCount < photoSlots.length">Fotos incompletas ({{ photoCount }}/{{ photoSlots.length
+            }})</span>
             <span v-else>Confirmar y enviar ✓</span>
           </button>
         </div>
       </div>
-    </form>
+    </div>
   </div>
 </template>
 
@@ -393,13 +383,15 @@ const props = defineProps<{
   }
   checkoutToken: string
   submitUrl: string
+  uploadPhotoUrl: string
 }>()
 
 // ─── Mobile detection ──────────────────────────────────────────────────────────
-const isMobile = computed(() =>
-  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-)
-
+// const isMobile = computed(() =>
+//   /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+// )
+// const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+const isMobile = true  // Forzar mobile durante desarrollo
 // ─── CSRF ──────────────────────────────────────────────────────────────────────
 const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? ''
 
@@ -437,27 +429,93 @@ const provincias = [
 
 // ─── Fotos ─────────────────────────────────────────────────────────────────────
 const photoSlots = [
-  { key: 'frente',    label: 'Frente del vehículo',          icon: '🚗', hint: 'Vista frontal completa' },
-  { key: 'atras',     label: 'Atrás del vehículo',           icon: '🔙', hint: 'Vista trasera completa' },
-  { key: 'lateral_i', label: 'Lateral izquierdo',            icon: '◀️', hint: 'Desde el lado izquierdo' },
-  { key: 'lateral_d', label: 'Lateral derecho',              icon: '▶️', hint: 'Desde el lado derecho' },
-  { key: 'auxilio',   label: 'Rueda de auxilio',             icon: '🔧', hint: 'En su habitáculo / baúl' },
-  { key: 'parabrisas',label: 'Parabrisas desde el interior', icon: '🪟', hint: 'Sentado adentro, mirando adelante' },
+  { key: 'tarjeta_verde', label: 'Frente Tarjeta Verde', icon: '📝', hint: 'Foto de frente' },
+  { key: 'frente', label: 'Frente del vehículo', icon: '🚗', hint: 'Vista frontal completa' },
+  { key: 'atras', label: 'Atrás del vehículo', icon: '🔙', hint: 'Vista trasera completa' },
+  { key: 'lateral_i', label: 'Lateral izquierdo', icon: '◀️', hint: 'Desde el lado izquierdo' },
+  { key: 'lateral_d', label: 'Lateral derecho', icon: '▶️', hint: 'Desde el lado derecho' },
+  { key: 'auxilio', label: 'Rueda de auxilio', icon: '🔧', hint: 'En su habitáculo / baúl' },
+  { key: 'parabrisas', label: 'Parabrisas desde el interior', icon: '🪟', hint: 'Sentado adentro, mirando adelante' },
 ]
 
-const photos = reactive<Record<string, string>>({})   // key → data URL (preview)
-const photoFiles = reactive<Record<string, File>>({}) // key → File (para FormData)
-const photoCount = computed(() => Object.keys(photoFiles).length)
+const photos = reactive<Record<string, string>>({})     // key → preview URL (Cloudinary URL)
+const photoIds = reactive<Record<string, string>>({})   // key → Cloudinary public_id
+const uploading = reactive<Record<string, boolean>>({}) // key → upload in progress
+const photoCount = computed(() => Object.keys(photoIds).length)
 
-const onPhotoCapture = (e: Event, key: string) => {
+/** Redimensiona a máx 1024px y convierte a JPEG para ahorrar memoria. */
+const processPhoto = (file: File): Promise<File> =>
+  new Promise((resolve, reject) => {
+    const img = new Image()
+    const objectUrl = URL.createObjectURL(file)
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('No se pudo procesar la imagen'))
+    }
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      try {
+        const MAX = 1024
+        let w = img.width, h = img.height
+        if (w > MAX || h > MAX) {
+          if (w >= h) { h = Math.round((h * MAX) / w); w = MAX }
+          else { w = Math.round((w * MAX) / h); h = MAX }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        canvas.toBlob(blob => {
+          if (!blob) { reject(new Error('Error al generar JPEG')); return }
+          const finalFile = new File([blob], 'photo.jpg', { type: 'image/jpeg' })
+          resolve(finalFile)
+        }, 'image/jpeg', 0.7)
+      } catch (err) {
+        reject(err)
+      }
+    }
+    img.src = objectUrl
+  })
+
+/** Sube una foto al servidor y luego a Cloudinary, liberando la memoria inmediatamente. */
+const onPhotoCapture = async (e: Event, key: string) => {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
-  photoFiles[key] = file
-  const reader = new FileReader()
-  reader.onload = ev => { photos[key] = ev.target?.result as string }
-  reader.readAsDataURL(file)
+  // Limpiar el input para liberar la referencia al archivo original
+  input.value = ''
   delete errors[`photo_${key}`]
+  uploading[key] = true
+
+  try {
+    const processedFile = await processPhoto(file)
+
+    // Subir al servidor (que sube a Cloudinary)
+    const fd = new FormData()
+    fd.append('_token', csrfToken)
+    fd.append('checkout_token', props.checkoutToken)
+    fd.append('photo_key', key)
+    fd.append('photo', processedFile)
+
+    const res = await fetch(props.uploadPhotoUrl, { method: 'POST', body: fd })
+    const data = await res.json()
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Error al subir la foto')
+    }
+
+    // Guardar el ID y la URL de Cloudinary — liberar cualquier blob previo
+    if (photos[key] && photos[key].startsWith('blob:')) {
+      URL.revokeObjectURL(photos[key])
+    }
+    photoIds[key] = data.public_id
+    photos[key] = data.url  // URL de Cloudinary, no blob
+    // El File ya fue enviado y no se almacena en memoria
+  } catch (err: any) {
+    errors[`photo_${key}`] = err.message || 'Error al subir la foto. Intentá de nuevo.'
+  } finally {
+    uploading[key] = false
+  }
 }
 
 // ─── Luhn ──────────────────────────────────────────────────────────────────────
@@ -497,46 +555,46 @@ const validateStep = (s: number): boolean => {
   const clear = (keys: string[]) => keys.forEach(k => delete errors[k])
 
   if (s === 1) {
-    clear(['nombre','dni','email','telefono','domicilio_calle','domicilio_numero','domicilio_cp','domicilio_provincia','domicilio_localidad'])
-    if (!form.nombre.trim())             errors.nombre = 'Requerido'
-    if (!form.dni.trim())                errors.dni = 'Requerido'
-    if (!form.email.trim())              errors.email = 'Requerido'
-    if (!form.telefono.trim())           errors.telefono = 'Requerido'
-    if (!form.domicilio_calle.trim())    errors.domicilio_calle = 'Requerido'
-    if (!form.domicilio_numero.trim())   errors.domicilio_numero = 'Requerido'
-    if (!form.domicilio_cp.trim())       errors.domicilio_cp = 'Requerido'
-    if (!form.domicilio_provincia)       errors.domicilio_provincia = 'Requerido'
-    if (!form.domicilio_localidad.trim())errors.domicilio_localidad = 'Requerido'
+    clear(['nombre', 'dni', 'email', 'telefono', 'domicilio_calle', 'domicilio_numero', 'domicilio_cp', 'domicilio_provincia', 'domicilio_localidad'])
+    if (!form.nombre.trim()) errors.nombre = 'Requerido'
+    if (!form.dni.trim()) errors.dni = 'Requerido'
+    if (!form.email.trim()) errors.email = 'Requerido'
+    if (!form.telefono.trim()) errors.telefono = 'Requerido'
+    if (!form.domicilio_calle.trim()) errors.domicilio_calle = 'Requerido'
+    if (!form.domicilio_numero.trim()) errors.domicilio_numero = 'Requerido'
+    if (!form.domicilio_cp.trim()) errors.domicilio_cp = 'Requerido'
+    if (!form.domicilio_provincia) errors.domicilio_provincia = 'Requerido'
+    if (!form.domicilio_localidad.trim()) errors.domicilio_localidad = 'Requerido'
   }
 
   if (s === 2) {
-    clear(['cc_brand','cc_pan','cc_expiry','cc_holder_name','cc_holder_dni'])
-    if (!form.cc_brand)                  errors.cc_brand = 'Seleccioná la marca'
+    clear(['cc_brand', 'cc_pan', 'cc_expiry', 'cc_holder_name', 'cc_holder_dni'])
+    if (!form.cc_brand) errors.cc_brand = 'Seleccioná la marca'
     const pan = form.cc_pan.replace(/\s/g, '')
-    if (pan.length !== 16)               errors.cc_pan = 'Ingresá los 16 dígitos'
-    else if (!luhn(pan))                 errors.cc_pan = 'Número de tarjeta inválido'
+    if (pan.length !== 16) errors.cc_pan = 'Ingresá los 16 dígitos'
+    else if (!luhn(pan)) errors.cc_pan = 'Número de tarjeta inválido'
     if (!/^\d{2}\/\d{2}$/.test(form.cc_expiry)) errors.cc_expiry = 'Formato MM/AA'
-    if (!form.cc_holder_name.trim())     errors.cc_holder_name = 'Requerido'
-    if (!form.cc_holder_dni.trim())      errors.cc_holder_dni = 'Requerido'
+    if (!form.cc_holder_name.trim()) errors.cc_holder_name = 'Requerido'
+    if (!form.cc_holder_dni.trim()) errors.cc_holder_dni = 'Requerido'
   }
 
   if (s === 3) {
-    clear(['vehiculo_uso','vehiculo_nro_chasis','vehiculo_nro_motor'])
-    if (!form.vehiculo_uso)             errors.vehiculo_uso = 'Seleccioná el tipo de uso'
+    clear(['vehiculo_uso', 'vehiculo_nro_chasis', 'vehiculo_nro_motor'])
+    if (!form.vehiculo_uso) errors.vehiculo_uso = 'Seleccioná el tipo de uso'
     if (!form.vehiculo_nro_chasis.trim()) errors.vehiculo_nro_chasis = 'Requerido'
     if (!form.vehiculo_nro_motor.trim()) errors.vehiculo_nro_motor = 'Requerido'
   }
 
   if (s === 4) {
     photoSlots.forEach(slot => {
-      if (!photoFiles[slot.key]) errors[`photo_${slot.key}`] = 'Foto requerida'
+      if (!photoIds[slot.key]) errors[`photo_${slot.key}`] = 'Foto requerida'
     })
   }
 
   return !Object.keys(errors).some(k => {
-    const step1keys = ['nombre','dni','email','telefono','domicilio_calle','domicilio_numero','domicilio_cp','domicilio_provincia','domicilio_localidad']
-    const step2keys = ['cc_brand','cc_pan','cc_expiry','cc_holder_name','cc_holder_dni']
-    const step3keys = ['vehiculo_uso','vehiculo_nro_chasis','vehiculo_nro_motor']
+    const step1keys = ['nombre', 'dni', 'email', 'telefono', 'domicilio_calle', 'domicilio_numero', 'domicilio_cp', 'domicilio_provincia', 'domicilio_localidad']
+    const step2keys = ['cc_brand', 'cc_pan', 'cc_expiry', 'cc_holder_name', 'cc_holder_dni']
+    const step3keys = ['vehiculo_uso', 'vehiculo_nro_chasis', 'vehiculo_nro_motor']
     if (s === 1) return step1keys.includes(k)
     if (s === 2) return step2keys.includes(k)
     if (s === 3) return step3keys.includes(k)
@@ -549,54 +607,73 @@ const goToStep = (s: number) => {
 }
 
 // ─── Submit ────────────────────────────────────────────────────────────────────
-const submitForm = () => {
-  if (!validateStep(4) || photoCount.value < 6) return
+const submitForm = async () => {
+  if (!validateStep(4) || photoCount.value < photoSlots.length) return
   submitting.value = true
 
-  const fd = new FormData()
-  fd.append('_token', csrfToken)
-  fd.append('checkout_token', props.checkoutToken)
-  fd.append('nombre', form.nombre)
-  fd.append('dni', form.dni)
-  fd.append('email', form.email)
-  fd.append('telefono', form.telefono)
-  fd.append('domicilio_calle', form.domicilio_calle)
-  fd.append('domicilio_numero', form.domicilio_numero)
-  fd.append('domicilio_cp', form.domicilio_cp)
-  fd.append('domicilio_provincia', form.domicilio_provincia)
-  fd.append('domicilio_localidad', form.domicilio_localidad)
-  fd.append('vehiculo_uso', form.vehiculo_uso)
-  fd.append('vehiculo_nro_chasis', form.vehiculo_nro_chasis)
-  fd.append('vehiculo_nro_motor', form.vehiculo_nro_motor)
-  fd.append('cc_brand', form.cc_brand)
-  fd.append('cc_pan', form.cc_pan.replace(/\s/g, ''))
-  fd.append('cc_expiry', form.cc_expiry)
-  fd.append('cc_holder_name', form.cc_holder_name)
-  fd.append('cc_holder_dni', form.cc_holder_dni)
-  photoSlots.forEach(slot => {
-    if (photoFiles[slot.key]) fd.append(`photos[${slot.key}]`, photoFiles[slot.key])
-  })
+  // Construir el payload JSON (liviano — solo strings, no archivos)
+  const payload: Record<string, any> = {
+    checkout_token: props.checkoutToken,
+    nombre: form.nombre,
+    dni: form.dni,
+    email: form.email,
+    telefono: form.telefono,
+    domicilio_calle: form.domicilio_calle,
+    domicilio_numero: form.domicilio_numero,
+    domicilio_cp: form.domicilio_cp,
+    domicilio_provincia: form.domicilio_provincia,
+    domicilio_localidad: form.domicilio_localidad,
+    vehiculo_uso: form.vehiculo_uso,
+    vehiculo_nro_chasis: form.vehiculo_nro_chasis,
+    vehiculo_nro_motor: form.vehiculo_nro_motor,
+    cc_brand: form.cc_brand,
+    cc_pan: form.cc_pan.replace(/\s/g, ''),
+    cc_expiry: form.cc_expiry,
+    cc_holder_name: form.cc_holder_name,
+    cc_holder_dni: form.cc_holder_dni,
+    photo_ids: { ...photoIds },
+  }
 
-  fetch(props.submitUrl, { method: 'POST', body: fd })
-    .then(async res => {
-      if (res.redirected) {
-        window.location.href = res.url
-      } else if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        if (data.errors) {
-          Object.assign(errors, data.errors)
-          const s1 = ['nombre','dni','email','telefono','domicilio_calle','domicilio_numero','domicilio_cp','domicilio_provincia','domicilio_localidad']
-          const s2 = ['cc_brand','cc_pan','cc_expiry','cc_holder_name','cc_holder_dni']
-          const s3 = ['vehiculo_uso','vehiculo_nro_chasis','vehiculo_nro_motor']
-          if (Object.keys(data.errors).some(k => s1.includes(k))) step.value = 1
-          else if (Object.keys(data.errors).some(k => s2.includes(k))) step.value = 2
-          else if (Object.keys(data.errors).some(k => s3.includes(k))) step.value = 3
-          else step.value = 4
-        }
-        submitting.value = false
-      }
+  try {
+    const res = await fetch(props.submitUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+      },
+      body: JSON.stringify(payload),
     })
-    .catch(() => { submitting.value = false })
+
+    const data = await res.json().catch(() => ({}))
+
+    if (res.ok && data.redirect_url) {
+      window.location.href = data.redirect_url
+      return
+    }
+
+    if (res.status === 409) {
+      alert('El link de checkout expiró o ya fue procesado.')
+      window.location.reload()
+      return
+    }
+
+    // Errores de validación
+    if (data.errors) {
+      Object.assign(errors, data.errors)
+      const s1 = ['nombre', 'dni', 'email', 'telefono', 'domicilio_calle', 'domicilio_numero', 'domicilio_cp', 'domicilio_provincia', 'domicilio_localidad']
+      const s2 = ['cc_brand', 'cc_pan', 'cc_expiry', 'cc_holder_name', 'cc_holder_dni']
+      const s3 = ['vehiculo_uso', 'vehiculo_nro_chasis', 'vehiculo_nro_motor']
+      if (Object.keys(data.errors).some((k: string) => s1.includes(k))) step.value = 1
+      else if (Object.keys(data.errors).some((k: string) => s2.includes(k))) step.value = 2
+      else if (Object.keys(data.errors).some((k: string) => s3.includes(k))) step.value = 3
+      else step.value = 4
+    }
+  } catch {
+    alert('Error de conexión. Verificá tu internet e intentá de nuevo.')
+  } finally {
+    submitting.value = false
+  }
 }
 
 // ─── Precio ────────────────────────────────────────────────────────────────────
