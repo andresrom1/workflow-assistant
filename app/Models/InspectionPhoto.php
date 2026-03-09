@@ -19,6 +19,9 @@ class InspectionPhoto extends Model
         'status',
         'uploaded_by_ip',
         'confirmed_at',
+        'image_width',
+        'image_height',
+        'file_size',
     ];
 
     protected $casts = [

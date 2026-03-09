@@ -26,9 +26,17 @@ class DeleteOrphanPhoto implements ShouldQueue
     public function handle(): void
     {
         try {
-            app(\Cloudinary\Cloudinary::class)
-                ->uploadApi()
-                ->destroy($this->publicId);
+        // Instanciar directamente con la URL del config
+        // — más robusto en contexto de queue worker
+            $cloudinary = new \Cloudinary\Cloudinary(
+                config('cloudinary.cloud_url'));
+
+            $result = $cloudinary->uploadApi()->destroy($this->publicId);
+
+            Log::info('DeleteOrphanPhoto: asset eliminado', [
+                'public_id' => $this->publicId,
+                'result'    => $result['result'] ?? 'unknown',
+            ]);
         } catch (\Exception $e) {
             Log::error('DeleteOrphanPhoto Job failed', [
                 'public_id' => $this->publicId,

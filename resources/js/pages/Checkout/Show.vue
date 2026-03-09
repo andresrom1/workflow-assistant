@@ -281,9 +281,20 @@
                 }}</p>
               </div>
 
+              <!-- Botón eliminar (solo si hay foto subida) -->
+              <button v-if="photoIds[slot.key] && !uploading[slot.key]"
+                type="button"
+                @click="removePhoto(slot.key)"
+                class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center transition-colors active:bg-red-200">
+                <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                </svg>
+              </button>
+
               <!-- Botón cámara -->
               <label class="flex-shrink-0 cursor-pointer"
-                :class="{ 'pointer-events-none opacity-50': uploading[slot.key] }">
+                :class="{ 'pointer-events-none opacity-50': uploading[slot.key] }"
+                @click.stop>
                 <input type="file" accept="image/*" capture="environment" class="hidden"
                   @change="onPhotoCapture($event, slot.key)" :disabled="!!uploading[slot.key]" />
                 <div class="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
@@ -331,8 +342,8 @@
 
         <div class="flex justify-between pt-2">
           <button type="button" @click="step = 3" class="btn-ghost">← Atrás</button>
-          <button type="submit" :disabled="submitting || photoCount < photoSlots.length" class="btn-submit"
-            @click.prevent="submitForm">
+          <button type="button" :disabled="submitting || photoCount < photoSlots.length" class="btn-submit"
+            @click="submitForm">
             <span v-if="submitting">Enviando…</span>
             <span v-else-if="photoCount < photoSlots.length">Fotos incompletas ({{ photoCount }}/{{ photoSlots.length
             }})</span>
@@ -345,14 +356,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, defineComponent, h } from 'vue'
+import { ref, reactive, computed, defineComponent, h, onMounted, onUnmounted } from 'vue'
+// import { ref, reactive, computed, defineComponent, h } from 'vue'
 
 // ─── Componentes inline ────────────────────────────────────────────────────────
 const Field = defineComponent({
   props: { label: String, error: String },
   setup(props, { slots }) {
     return () => h('div', [
-      h('label', { class: 'block text-sm font-medium text-gray-700 mb-1' }, props.label),
+      h('span', { class: 'block text-sm font-medium text-gray-700 mb-1' }, props.label),
       slots.default?.(),
       props.error ? h('p', { class: 'mt-1 text-xs text-red-600' }, props.error) : null,
     ])
@@ -384,6 +396,7 @@ const props = defineProps<{
   checkoutToken: string
   submitUrl: string
   uploadPhotoUrl: string
+  deletePhotoUrl: string
 }>()
 
 // ─── Mobile detection ──────────────────────────────────────────────────────────
@@ -394,6 +407,36 @@ const props = defineProps<{
 const isMobile = true  // Forzar mobile durante desarrollo
 // ─── CSRF ──────────────────────────────────────────────────────────────────────
 const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? ''
+
+// ─── Prevenir que Inertia recargue el componente al volver de la cámara ────────
+// Android dispara popstate cuando vuelve de la cámara, Inertia lo intercepta
+// y destruye el estado de Vue. Capturamos el evento antes que Inertia (fase capture).
+const stopPopState = (e: PopStateEvent) => {
+  e.stopImmediatePropagation()
+}
+
+// También prevenimos visibilitychange que puede triggear una visita de Inertia
+const stopVisibilityChange = () => {
+  // No hacer nada — solo evitar que Inertia reaccione
+}
+
+onMounted(() => {
+  window.addEventListener('popstate', stopPopState, true)
+
+  // Debug — borrar después de confirmar
+  window.addEventListener('beforeunload', () => {
+    console.log('[beforeunload] RECARGA DETECTADA')
+  })
+  
+  document.addEventListener('visibilitychange', () => {
+    console.log('[visibilitychange]', document.visibilityState)
+  })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('popstate', stopPopState, true)
+  document.removeEventListener('visibilitychange', stopVisibilityChange, true)
+})
 
 // ─── Wizard ────────────────────────────────────────────────────────────────────
 const step = ref(1)
@@ -488,7 +531,9 @@ const onPhotoCapture = async (e: Event, key: string) => {
   uploading[key] = true
 
   try {
+    console.log(`[onPhotoCapture] Iniciando proceso para foto: ${key}`)
     const processedFile = await processPhoto(file)
+    console.log(`[onPhotoCapture] Foto procesada correctamente.`, processedFile)
 
     // Subir al servidor (que sube a Cloudinary)
     const fd = new FormData()
@@ -498,9 +543,17 @@ const onPhotoCapture = async (e: Event, key: string) => {
     fd.append('photo', processedFile)
 
     const res = await fetch(props.uploadPhotoUrl, { method: 'POST', body: fd })
-    const data = await res.json()
+    
+    let data;
+    try {
+      data = await res.json()
+    } catch(err) {
+      console.error("[onPhotoCapture] Error leyendo JSON de respuesta", err)
+      throw new Error('Respuesta del servidor no es JSON')
+    }
 
     if (!res.ok || !data.success) {
+      console.error("[onPhotoCapture] Error del servidor:", data)
       throw new Error(data.error || 'Error al subir la foto')
     }
 
@@ -510,11 +563,59 @@ const onPhotoCapture = async (e: Event, key: string) => {
     }
     photoIds[key] = data.public_id
     photos[key] = data.url  // URL de Cloudinary, no blob
+    console.log(`[onPhotoCapture] Éxito: ${data.public_id}`, data.url)
     // El File ya fue enviado y no se almacena en memoria
   } catch (err: any) {
+    console.error(`[onPhotoCapture] Gran error capturado para ${key}:`, err)
     errors[`photo_${key}`] = err.message || 'Error al subir la foto. Intentá de nuevo.'
   } finally {
     uploading[key] = false
+  }
+}
+
+/** 
+ * Elimina una foto mediante Optimistic UI. 
+ * Primero limpia la interfaz y luego pide la eliminación del asset en backend. 
+ */
+const removePhoto = async (key: string) => {
+  // 1. Optimistic UI: Limpiar localmente la foto instantáneamente
+  if (photos[key] && photos[key].startsWith('blob:')) {
+    URL.revokeObjectURL(photos[key])
+  }
+  delete photos[key]
+  delete photoIds[key]
+  delete errors[`photo_${key}`]
+
+  // 2. Ejecutar borrado asíncrono hacia el backend
+  try {
+    const res = await fetch(props.deletePhotoUrl, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+      },
+      body: JSON.stringify({
+        checkout_token: props.checkoutToken,
+        photo_key: key
+      })
+    })
+
+    let data = {}
+    try {
+      data = await res.json()
+    } catch {
+      // Ignorar error si la respuesta no trae body (ej 204 No Content)
+    }
+
+    if (!res.ok) {
+      throw new Error((data as any).error || 'Error de red al borrar')
+    }
+  } catch (err) {
+    // 3. Fallo en red: Como es Optimistic UI, informamos el problema pero lo hemos ocultado.  
+    // Si bien no existe local, la CleanupTempPhotos lo borrará 24h más tarde.
+    console.error(`Fallo borrado silencioso de foto ${key}`, err)
+    alert('Hubo un error de conexión al limpiar la foto, pero podés continuar completando el formulario.')
   }
 }
 
