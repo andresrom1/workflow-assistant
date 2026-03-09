@@ -63,6 +63,7 @@ class CheckoutController extends Controller
             // URLs para el frontend
             'submitUrl' => route('checkout.submit'),
             'uploadPhotoUrl' => route('checkout.upload-photo'),
+            'deletePhotoUrl' => route('checkout.delete-photo'),
         ]);
     }
 
@@ -117,6 +118,9 @@ class CheckoutController extends Controller
                     'cloudinary_url'       => $result['secure_url'],
                     'status'               => \App\Enums\InspectionPhotoStatus::Temp,
                     'uploaded_by_ip'       => $request->ip(),
+                    'image_width'          => $result['width'] ?? null,
+                    'image_height'         => $result['height'] ?? null,
+                    'file_size'            => $result['bytes'] ?? null,
                 ]
             );
 
@@ -264,5 +268,29 @@ class CheckoutController extends Controller
         return Inertia::render('Checkout/Success', [
             'email' => $session->email,
         ]);
+    }
+
+    /**
+     * Elimina explícitamente una foto tomada, borrándola de la base de datos
+     * y despachando un Job para eliminarla de Cloudinary.
+     */
+    public function deletePhoto(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $request->validate([
+            'checkout_token' => 'required|string',
+            'photo_key'      => 'required|string|max:50',
+        ]);
+
+        $quote = Quote::where('checkout_token', $request->input('checkout_token'))->firstOrFail();
+
+        $photo = \App\Models\InspectionPhoto::where('quote_id', $quote->id)
+            ->where('photo_key', $request->input('photo_key'))
+            ->where('status', \App\Enums\InspectionPhotoStatus::Temp)
+            ->firstOrFail();
+
+        \App\Jobs\DeleteOrphanPhoto::dispatch($photo->cloudinary_public_id);
+        $photo->delete();
+
+        return response()->json(['success' => true]);
     }
 }

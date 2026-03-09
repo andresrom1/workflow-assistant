@@ -25,6 +25,9 @@ Route::get('/checkout/{token}', [CheckoutController::class, 'show'])
 Route::post('/checkout/upload-photo', [CheckoutController::class, 'uploadPhoto'])
     ->name('checkout.upload-photo');
 
+Route::delete('/checkout/photo', [CheckoutController::class, 'deletePhoto'])
+    ->name('checkout.delete-photo');
+
 Route::post('/checkout/submit', [CheckoutController::class, 'submit'])
     ->name('checkout.submit');
 
