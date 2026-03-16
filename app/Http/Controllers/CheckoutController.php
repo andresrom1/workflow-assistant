@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CheckoutSession;
 use App\Models\Quote;
 // use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
+use App\Services\SettingsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
@@ -198,9 +199,8 @@ class CheckoutController extends Controller
             'photo_ids.*'         => 'required|string|max:255',
         ]);
 
-        // Validar cantidad de fotos en BD
-        // El Show.vue tiene 7 photoSlots
-        $requiredPhotoCount = 7;
+        // Validar cantidad de fotos en BD — valor configurable desde /admin/settings
+        $requiredPhotoCount = (int) app(SettingsService::class)->get('checkout.required_photos', 7);
         $tempPhotosCount = \App\Models\InspectionPhoto::where('quote_id', $quote->id)
             ->where('status', \App\Enums\InspectionPhotoStatus::Temp)
             ->count();
@@ -211,7 +211,7 @@ class CheckoutController extends Controller
         \Illuminate\Support\Facades\DB::transaction(function () use ($quote, $alternative, $validated) {
             
             // 1. Guardar CheckoutSession
-            CheckoutSession::updateOrCreate(
+            $session =CheckoutSession::updateOrCreate(
                 ['quote_id' => $quote->id],
                 [
                     'quote_alternative_id'     => $alternative->id,
@@ -248,6 +248,15 @@ class CheckoutController extends Controller
 
             // 3. Actualizar status del quote
             $quote->update(['status' => 'checkout_submitted']);
+
+            // Despachar emisión de póliza (skeleton — cuando API esté lista, solo
+            // hay que implementar PolizaEmisionService::emitir())
+            \App\Jobs\EmitirPoliza::dispatch($quote->id, $session->id);
+
+            // Notificación interna por mail
+            \Illuminate\Support\Facades\Mail::to(
+                config('mail.checkout_notifications_to', config('mail.from.address'))
+            )->queue(new \App\Mail\CheckoutCompletadoMail($quote, $session));
         });
 
         return response()->json([

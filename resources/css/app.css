@@ -6,29 +6,250 @@
 @source '../**/*.js';
 @source '../**/*.vue';
 
+/* ── Fuentes ──────────────────────────────────────────────────────────────── */
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 }
 
+/* ══════════════════════════════════════════════════════
+   LIGHT MODE  (default + [data-theme="light"])
+══════════════════════════════════════════════════════ */
+:root,
+[data-theme="light"] {
+  --bg-app:    #f0f1f8;
+  --bg-card:   #ffffff;
+  --bg-raised: #f7f8fc;
+  --text-1:    #13151c;
+  --text-2:    #454a66;
+  --text-3:    #9499b8;
+  --border:    #dfe1ed;
+  --border-sub:#eff0f7;
+
+  --accent-600: #5b5ef6;
+  --accent-500: #7375f8;
+  --accent-400: #9b9dfb;
+  --accent-200: #d6d7fd;
+  --accent-100: #eeeeff;
+  --accent-50:  #f5f5ff;
+
+  --shadow-card:  0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-focus: 0 0 0 3px rgba(91,94,246,.25);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  /* Badges de estado semántico */
+  --badge-pending-bg:   #fef3c7;  --badge-pending-txt:  #92400e;
+  --badge-ok-bg:        #dcfce7;  --badge-ok-txt:       #15803d;
+  --badge-danger-bg:    #fee2e2;  --badge-danger-txt:   #991b1b;
+  --badge-orange-bg:    #ffedd5;  --badge-orange-txt:   #9a3412;
+  --badge-violet-bg:    #f5f3ff;  --badge-violet-txt:   #6d28d9;
+  --badge-teal-bg:      #ccfbf1;  --badge-teal-txt:     #0f766e;
+  --badge-accent-bg:    #eeeeff;  --badge-accent-txt:   #5b5ef6;
+
+  --dot-pending:    #d97706;
+  --dot-ok:         #16a349;
+  --dot-danger:     #dc2626;
+  --dot-orange:     #ea580c;
+  --dot-violet:     #7c3aed;
+  --dot-teal:       #0d9488;
+  --dot-accent:     #5b5ef6;
+
+  /* Sidebar light */
+  --sb-bg:          #ffffff;
+  --sb-border:      #dfe1ed;
+  --sb-divider:     #eff0f7;
+  --sb-logo-text:   #13151c;
+  --sb-group-label: #9499b8;
+  --sb-item-text:   #454a66;
+  --sb-item-hover-bg:   #f0f1f8;
+  --sb-item-hover-text: #13151c;
+  --sb-collapse-text:   #9499b8;
+  --sb-collapse-hover:  #f0f1f8;
+}
+
+/* ══════════════════════════════════════════════════════
+   DARK MODE  ([data-theme="dark"]  +  fallback OS)
+══════════════════════════════════════════════════════ */
+[data-theme="dark"],
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-app:    #0a0b0f;
+    --bg-card:   #13151c;
+    --bg-raised: #1e2130;
+    /* text-1 reducido para evitar halación (astigmatismo) */
+    --text-1:    #c0c3d8;
+    --text-2:    #9499b8;
+    /* text-3 aclarado para cumplir WCAG AA ~4.6:1 */
+    --text-3:    #6b7194;
+    --border:    #2d3148;
+    /* border-sub elevado para que las filas de tabla sean visibles */
+    --border-sub:#2d3148;
+
+    --accent-50:  #1a1a2e;
+    --accent-100: #1e1e3f;
+    --accent-700: #4a4de8;
+    --shadow-card: 0 1px 4px rgba(0,0,0,.3);
+    /* focus ring más luminoso y opaco para dark mode */
+    --shadow-focus: 0 0 0 3px rgba(155,157,251,.45);
+
+    /* Badges de estado semántico — dark */
+    --badge-pending-bg:   #1c1009;  --badge-pending-txt:  #fbbf24;
+    --badge-ok-bg:        #052e16;  --badge-ok-txt:       #4ade80;
+    --badge-danger-bg:    #1f0a0a;  --badge-danger-txt:   #f87171;
+    --badge-orange-bg:    #1c0a00;  --badge-orange-txt:   #fb923c;
+    --badge-violet-bg:    #1e1033;  --badge-violet-txt:   #a78bfa;
+    --badge-teal-bg:      #042f2e;  --badge-teal-txt:     #5eead4;
+    --badge-accent-bg:    #1a1a2e;  --badge-accent-txt:   #9b9dfb;
+
+    --dot-pending:    #fbbf24;
+    --dot-ok:         #4ade80;
+    --dot-danger:     #f87171;
+    --dot-orange:     #fb923c;
+    --dot-violet:     #a78bfa;
+    --dot-teal:       #5eead4;
+    --dot-accent:     #9b9dfb;
+
+    /* Sidebar dark */
+    --sb-bg:          #0a0b0f;
+    --sb-border:      #1e2130;
+    --sb-divider:     #1e2130;
+    --sb-logo-text:   #eff0f7;
+    --sb-group-label: #454a66;
+    --sb-item-text:   #6b7194;
+    --sb-item-hover-bg:   #1e2130;
+    --sb-item-hover-text: #c0c3d8;
+    --sb-collapse-text:   #454a66;
+    --sb-collapse-hover:  #1e2130;
+  }
+}
+
+/* Cuando el atributo está explícito en html, override la media query */
+[data-theme="dark"] {
+  --bg-app:    #0a0b0f;
+  --bg-card:   #13151c;
+  --bg-raised: #1e2130;
+  --text-1:    #c0c3d8;
+  --text-2:    #9499b8;
+  --text-3:    #6b7194;
+  --border:    #2d3148;
+  --border-sub:#2d3148;
+
+  --accent-50:  #1a1a2e;
+  --accent-100: #1e1e3f;
+  --accent-700: #4a4de8;
+  --shadow-card: 0 1px 4px rgba(0,0,0,.3);
+  --shadow-focus: 0 0 0 3px rgba(155,157,251,.45);
+
+  /* Badges de estado semántico — dark */
+  --badge-pending-bg:   #1c1009;  --badge-pending-txt:  #fbbf24;
+  --badge-ok-bg:        #052e16;  --badge-ok-txt:       #4ade80;
+  --badge-danger-bg:    #1f0a0a;  --badge-danger-txt:   #f87171;
+  --badge-orange-bg:    #1c0a00;  --badge-orange-txt:   #fb923c;
+  --badge-violet-bg:    #1e1033;  --badge-violet-txt:   #a78bfa;
+  --badge-teal-bg:      #042f2e;  --badge-teal-txt:     #5eead4;
+  --badge-accent-bg:    #1a1a2e;  --badge-accent-txt:   #9b9dfb;
+
+  --dot-pending:    #fbbf24;
+  --dot-ok:         #4ade80;
+  --dot-danger:     #f87171;
+  --dot-orange:     #fb923c;
+  --dot-violet:     #a78bfa;
+  --dot-teal:       #5eead4;
+  --dot-accent:     #9b9dfb;
+
+  --sb-bg:          #0a0b0f;
+  --sb-border:      #1e2130;
+  --sb-divider:     #1e2130;
+  --sb-logo-text:   #eff0f7;
+  --sb-group-label: #454a66;
+  --sb-item-text:   #6b7194;
+  --sb-item-hover-bg:   #1e2130;
+  --sb-item-hover-text: #c0c3d8;
+  --sb-collapse-text:   #454a66;
+  --sb-collapse-hover:  #1e2130;
+}
+
+/* ── Body base ────────────────────────────────────────────────────────────── */
+body {
+  background: var(--bg-app);
+  color: var(--text-1);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/*
+  Dark mode: elevar peso tipográfico base a 500 (medium).
+  Los trazos más gruesos resisten el halo luminoso (halación)
+  que afecta especialmente a personas con astigmatismo.
+  Los elementos con peso explícito (font-semibold, font-bold)
+  mantienen su valor propio por la cascada de Tailwind.
+*/
+[data-theme="dark"] body {
+  font-weight: 500;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body {
+    font-weight: 500;
+  }
+}
+
+/* ── Clases utilitarias del sistema ──────────────────────────────────────── */
 @layer components {
-    .field {
-        @apply w-full px-4 py-3 rounded-xl border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors shadow-sm;
-    }
-    
-    .field-error {
-        @apply border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50;
-    }
-    
-    .btn-primary {
-        @apply px-5 py-2.5 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed;
-    }
-    
-    .btn-ghost {
-        @apply px-5 py-2.5 text-gray-600 font-medium rounded-xl hover:bg-gray-100 hover:text-gray-900 active:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed;
-    }
-    
-    .btn-submit {
-        @apply px-6 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 active:bg-green-800 transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center;
-    }
+
+  .field {
+    @apply w-full px-3 py-2 text-sm outline-none rounded-[10px] transition-all;
+    background: var(--bg-card);
+    color: var(--text-1);
+    border: 1px solid var(--border);
+  }
+  .field::placeholder { color: var(--text-3); }
+  .field:focus {
+    border-color: var(--accent-600);
+    box-shadow: var(--shadow-focus);
+  }
+  .field-error { border-color: #dc2626 !important; }
+  .field-error:focus { box-shadow: 0 0 0 3px rgba(220,38,38,.2) !important; }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 font-medium
+           rounded-[10px] transition-all cursor-pointer outline-none select-none;
+  }
+  .btn:focus-visible { box-shadow: var(--shadow-focus); }
+
+  .btn-primary {
+    @apply px-4 py-2 text-sm text-white bg-[#5b5ef6]
+           hover:bg-[#4a4de8] active:scale-[.98]
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply px-4 py-2 text-sm;
+    color: var(--text-1);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { background: var(--border-sub); }
+
+  .btn-ghost {
+    @apply px-4 py-2 text-sm;
+    color: var(--text-2);
+  }
+  .btn-ghost:hover { background: var(--border-sub); color: var(--text-1); }
+
+  .btn-submit {
+    @apply px-5 py-2.5 text-sm font-semibold text-white bg-[#16a349]
+           rounded-[10px] hover:bg-[#15803d] active:scale-[.98]
+           disabled:opacity-50 disabled:cursor-not-allowed
+           flex items-center justify-center gap-1.5;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
 }

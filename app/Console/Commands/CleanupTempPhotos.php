@@ -6,6 +6,7 @@ use App\Models\InspectionPhoto;
 use App\Enums\InspectionPhotoStatus;
 use App\Jobs\DeleteOrphanPhoto;
 use Illuminate\Console\Command;
+use App\Services\SettingsService;
 
 class CleanupTempPhotos extends Command
 {
@@ -30,8 +31,9 @@ class CleanupTempPhotos extends Command
     {
         $this->info("Buscando fotos de inspección temporales de más de 24 horas...");
 
+        $ttlHours = (int) app(SettingsService::class)->get('checkout.temp_photo_ttl_hours', 24);
         $orphans = InspectionPhoto::where('status', InspectionPhotoStatus::Temp)
-            ->where('created_at', '<', now()->subHours(24))
+            ->where('created_at', '<', now()->subHours($ttlHours))
             ->get();
 
         $count = $orphans->count();

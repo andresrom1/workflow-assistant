@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\CheckoutAuditController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\QuoteController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\SettingsController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -49,4 +50,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
     Route::post('/checkout-sessions/{checkoutSession}/clear-card-data', [CheckoutAuditController::class, 'clearCardData'])
         ->name('checkout-sessions.clear-card-data');
+
+    Route::get('/settings', [SettingsController::class, 'index'])
+        ->name('settings.index');
+    Route::post('/settings/{group}', [SettingsController::class, 'updateGroup'])
+        ->name('settings.update-group');
 });

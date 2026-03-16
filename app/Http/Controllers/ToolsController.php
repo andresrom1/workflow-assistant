@@ -30,12 +30,9 @@ class ToolsController extends Controller
         // Ver TODO el request para encontrar el thread_id
         $this->logCustomer('HTTP Tool Request recibido: identify_customer', ['body' => $request->all()]);
 
-        // Detección: El Controller pregunta "¿Quién envía esto?"
-        $providerName = $request->input('ai_provider', 'openai');
-
-        // El Factory instancia la clase correcta (AgentToolAdapter, ClaudeAdapter, etc.)
+        // Detección e Instanciación centralizada
         try {
-            $adapter = $this->factory->make($providerName);
+            $adapter = $this->getAdapter($request);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => 'Proveedor de IA no soportado'], 400);
         }
@@ -56,12 +53,9 @@ class ToolsController extends Controller
         // Ver TODO el request para encontrar el thread_id
         $this->logCustomer('HTTP Tool Request recibido: identify_vehicle', ['body' => $request->all()]);
         Log::warning(__METHOD__.__LINE__.'Identificacion de vehiculo recibido', ['request' => $request->all()]);
-        // Detección: El Controller pregunta "¿Quién envía esto?"
-        $providerName = $request->input('ai_provider', 'openai');
 
-        // El Factory instancia la clase correcta (AgentToolAdapter, ClaudeAdapter, etc.)
         try {
-            $adapter = $this->factory->make($providerName);
+            $adapter = $this->getAdapter($request);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => 'Proveedor de IA no soportado'], 400);
         }
@@ -79,12 +73,9 @@ class ToolsController extends Controller
         // Ver TODO el request para encontrar el thread_id
         $this->logCustomer('HTTP Tool Request recibido: coverage_preference', ['body' => $request->all()]);
         Log::warning(__METHOD__.__LINE__.'Identificacion de cobertura recibido', ['request' => $request->all()]);
-        // Detección: El Controller pregunta "¿Quién envía esto?"
-        $providerName = $request->input('ai_provider', 'openai');
 
-        // El Factory instancia la clase correcta (AgentToolAdapter, ClaudeAdapter, etc.)
         try {
-            $adapter = $this->factory->make($providerName);
+            $adapter = $this->getAdapter($request);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => 'Proveedor de IA no soportado'], 400);
         }
@@ -102,12 +93,9 @@ class ToolsController extends Controller
         // Ver TODO el request para encontrar el thread_id
         $this->logCustomer('HTTP Tool Request recibido: get_quotes', ['body' => $request->all()]);
         Log::warning(__METHOD__.__LINE__.'Obtener cotizaciones recibido', ['request' => $request->all()]);
-        // Detección: El Controller pregunta "¿Quién envía esto?"
-        $providerName = $request->input('ai_provider', 'openai');
 
-        // El Factory instancia la clase correcta (AgentToolAdapter, ClaudeAdapter, etc.)
         try {
-            $adapter = $this->factory->make($providerName);
+            $adapter = $this->getAdapter($request);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => 'Proveedor de IA no soportado'], 400);
         }
@@ -123,10 +111,8 @@ class ToolsController extends Controller
     public function checkout(Request $request)
     {
         $this->logCustomer('HTTP Tool Request recibido: checkout', ['body' => $request->all()]);
-        $providerName = $request->input('ai_provider', 'openai');
-
         try {
-            $adapter = $this->factory->make($providerName);
+            $adapter = $this->getAdapter($request);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => 'Proveedor de IA no soportado'], 400);
         }
@@ -136,6 +122,13 @@ class ToolsController extends Controller
         $this->logCustomer('Resultado de handleToolCall checkout', $result);
 
         return $this->jsonResponse($result);
+    }
+
+    protected function getAdapter(Request $request): \App\Contracts\AIProviderAdapterInterface
+    {
+        $providerName = $request->input('ai_provider', 'openai');
+
+        return $this->factory->make($providerName);
     }
 
     protected function extractOpenAIUserId(Request $request): ?string

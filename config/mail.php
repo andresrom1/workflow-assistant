@@ -111,6 +111,7 @@ return [
     */
 
     'from' => [
+        'checkout_notifications_to' => env('CHECKOUT_NOTIFICATIONS_TO'),
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', 'Example'),
     ],

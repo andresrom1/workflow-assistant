@@ -40,4 +40,10 @@ return [
         'timeout_minutes' => (int) env('MOBILE_APP_TIMEOUT', 30),
     ],
 
+    'poliza_api' => [
+        'base_url' => env('POLIZA_API_BASE_URL'),
+        'key'      => env('POLIZA_API_KEY'),
+        'timeout'  => env('POLIZA_API_TIMEOUT', 30),
+    ],
+
 ];

@@ -7,3 +7,5 @@ php artisan reverb:start --host=0.0.0.0 --port=8081 --debug
 php artisan queue:work
 
 php artisan db:seed --class=CheckoutTestDataSeeder // para generar checkout de prueba
+
+// # 5. Visitar /admin/settings

@@ -16,6 +16,7 @@ use App\Services\Quote\Strategies\MobileAppQuoteResolution;
 use App\Traits\ConditionalLogger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\SettingsService;
 
 class QuoteService
 {
@@ -46,12 +47,10 @@ class QuoteService
         $snapshot = $transaction['snapshot'];
 
         $this->logQuotes("[QuoteService🫰] Created pending Quote ID: {$quote->id}");
+        
         // Programar el Job de Fallback (Vigilante) desde ahora.
-        $timeout = (int) config('services.mobile_app.timeout_minutes', 30);
-        Log::info('El tipo de deto de timeout es: ', [gettype($timeout)]);
-
-        // $this->checkQuoteAcceptance::dispatch($quote, $snapshot)
-        //     ->delay(now()->addMinutes($timeout));
+        // Valor configurable desde /admin/settings
+        $timeout = (int) app(SettingsService::class)->get('pas.opportunity_timeout_minutes', 30);
 
         CheckQuoteAcceptance::dispatch($quote, $snapshot) // Se elimina del constructor. Se despacha estaticamente
             ->delay(now()->addMinutes($timeout));
