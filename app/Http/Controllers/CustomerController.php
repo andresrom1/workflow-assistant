@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use Illuminate\Http\Request;
 use App\Repositories\CustomerRepository;
+use Inertia\Inertia;
 
 class CustomerController extends Controller
 {
@@ -12,48 +13,36 @@ class CustomerController extends Controller
         protected CustomerRepository $customerRepository,
     ) {}
 
-    /**
-     * Display a listing of the resource.
-     */
-    public function index(Request $request)
+    public function index(Request $request): \Inertia\Response
     {
-        $search = $request->input('search', '');
+        $search  = $request->input('search', '');
         $perPage = $request->input('per_page', 15);
 
-        // Get customers with their related data
         $customers = $this->customerRepository->getAllWithRelations(
             ['vehicles', 'conversations'],
             $search,
             $perPage
         );
 
-        return view('customers.index', [
-            'customers' => $customers,
-            'search' => $search,
-            'perPage' => $perPage,
+        return Inertia::render('Customers/Index', [
+            // Transformamos explícitamente para que Vue reciba
+            // vehicles_count y conversations_count como integers,
+            // no como arrays de relaciones completas.
+            'customers' => $customers->through(fn ($c) => [
+                'id'                  => $c->id,
+                'name'                => $c->name,
+                'dni'                 => $c->dni,
+                'email'               => $c->email,
+                'phone'               => $c->phone,
+                'created_at'          => $c->created_at->toIso8601String(),
+                'vehicles_count'      => $c->vehicles->count(),
+                'conversations_count' => $c->conversations->count(),
+            ]),
+            'filters' => ['search' => $search, 'per_page' => $perPage],
         ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        //
-    }
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(Customer $customer)
+    public function show(Customer $customer): \Inertia\Response|\Illuminate\Http\RedirectResponse
     {
         $customer = $this->customerRepository->findWithRelations(
             id: $customer->id,
@@ -61,37 +50,40 @@ class CustomerController extends Controller
         );
 
         if (!$customer) {
-            return redirect()
-                ->route('customers.index')
-                ->with('error', 'Cliente no encontrado');
+            return redirect()->route('customers.index')->with('error', 'Cliente no encontrado');
         }
 
-        return view('customers.show', [
-            'customer' => $customer,
+        return Inertia::render('Customers/Show', [
+            'customer' => [
+                'id'            => $customer->id,
+                'name'          => $customer->name,
+                'dni'           => $customer->dni,
+                'email'         => $customer->email,
+                'phone'         => $customer->phone,
+                'created_at'    => $customer->created_at->toIso8601String(),
+                'vehicles'      => $customer->vehicles->map(fn ($v) => [
+                    'id'          => $v->id,
+                    'patente'     => $v->patente,
+                    'marca'       => $v->marca,
+                    'modelo'      => $v->modelo,
+                    'year'        => $v->year,
+                    'uso'         => $v->uso,
+                    'is_complete' => $v->is_complete,
+                ]),
+                'conversations' => $customer->conversations->map(fn ($c) => [
+                    'id'                         => $c->id,
+                    'external_conversation_id'   => $c->external_conversation_id,
+                    'last_message_at'            => $c->last_message_at,
+                    'created_at'                 => $c->created_at->toIso8601String(),
+                ]),
+            ],
         ]);
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Customer $customer)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, Customer $customer)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Customer $customer)
-    {
-        //
-    }
+    // Métodos sin implementar — se dejan vacíos
+    public function create() {}
+    public function store(Request $request) {}
+    public function edit(Customer $customer) {}
+    public function update(Request $request, Customer $customer) {}
+    public function destroy(Customer $customer) {}
 }

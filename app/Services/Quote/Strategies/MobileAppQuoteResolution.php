@@ -9,23 +9,22 @@ use App\Events\QuoteOfferedToPas;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
+use App\Services\SettingsService;
 
 class MobileAppQuoteResolution implements QuoteResolutionStrategyInterface
 {
     public function resolve(Quote $quote, RiskSnapshot $snapshot): void
     {
-
-        $endpoint = config('services.mobile_app.endpoint') ?: 'http://127.0.0.1:8000/api/webhooks/opportunity';
+        $settings    = app(SettingsService::class);
+        $endpoint    = $settings->get('mobile_app.endpoint', config('services.mobile_app.endpoint'));
+        $timeout     = (int) $settings->get('pas.opportunity_timeout_minutes', 30);
+        $httpTimeout = (int) $settings->get('pas.http_timeout_seconds', 10);
 
         if (empty($endpoint)) {
-            throw new \Exception("The Mobile App endpoint is not configured in services.php or .env");
+            throw new \Exception("El endpoint de la app móvil no está configurado.");
         }
 
         Log::info(__METHOD__ . " Ofreciendo Quote ID: {$quote->id} a PAS vía Mobile App en {$endpoint}");
-
-        // 1. Preparar Payload (Simulado)
-        $timeout = config('services.mobile_app.timeout_minutes', 30);
-        $httpTimeout = config('services.mobile_app.http_timeout', 10);
 
         $payload = [
             'quote_id' => $quote->id,
