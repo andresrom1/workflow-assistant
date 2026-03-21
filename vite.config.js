@@ -35,7 +35,7 @@ export default defineConfig({
             allowedHeaders: ['Content-Type', 'Authorization'],
         },
         hmr: {
-            host: '192.168.0.10',  // IP que ven los clientes
+            host: '192.168.0.12',  // IP que ven los clientes
             port: 5174,
             protocol: 'ws',        // WebSocket para HMR
         },
