@@ -8,4 +8,6 @@ php artisan queue:work
 
 php artisan db:seed --class=CheckoutTestDataSeeder // para generar checkout de prueba
 
+php artisan db:seed --class=OpportunityTestDataSeeder // para generar oportunity de prueba
+
 // # 5. Visitar /admin/settings
