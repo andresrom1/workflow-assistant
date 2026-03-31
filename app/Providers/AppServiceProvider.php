@@ -1,15 +1,19 @@
 <?php
+
 // app/Providers/AppServiceProvider.php
 
 namespace App\Providers;
 
-use App\Services\VehicleIdentificationService;
-use Illuminate\Support\ServiceProvider;
+use App\Adapters\AIProviders\WhatsAppAdapter;
+use App\Adapters\OpenAI\AgentToolAdapter;
+use App\AI\InsuranceOrchestrator;
+use App\Repositories\ConversationRepository;
 use App\Repositories\CustomerRepository;
 use App\Repositories\VehicleRepository;
-use App\Repositories\ConversationRepository;
 use App\Services\CustomerIdentificationService;
-use App\Adapters\OpenAI\AgentToolAdapter;
+use App\Services\VehicleIdentificationService;
+use App\Services\WhatsApp\WhatsAppOutboundService;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -33,11 +37,11 @@ class AppServiceProvider extends ServiceProvider
 
         // Registrar Adapters
         $this->app->singleton(AgentToolAdapter::class);
-        // $this->app->singleton(AgentToolAdapter::class, function ($app) {
-        //     return new AgentToolAdapter(
-        //         $app->make(CustomerIdentificationService::class),
-        //     );
-        // });
+        $this->app->singleton(WhatsAppAdapter::class);
+
+        // WhatsApp
+        $this->app->singleton(WhatsAppOutboundService::class);
+        $this->app->singleton(InsuranceOrchestrator::class);
     }
 
     public function boot(): void

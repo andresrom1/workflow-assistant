@@ -50,4 +50,43 @@ class Conversation extends Model
     {
         return $this->hasMany(CoveragePreference::class);
     }
+
+    // =========================================================================
+    // AI Orchestrator State
+    // =========================================================================
+
+    private const AI_STATE_DEFAULTS = [
+        'customer_identified' => false,
+        'vehicle_identified' => false,
+        'coverage_set' => false,
+        'quote_ready' => false,
+        'checkout_done' => false,
+    ];
+
+    /**
+     * Retorna el estado actual del orquestador de IA.
+     * Los campos no presentes se completan con los valores por defecto.
+     *
+     * @return array<string, bool>
+     */
+    public function aiState(): array
+    {
+        $meta = $this->metadata ?? [];
+
+        return array_merge(self::AI_STATE_DEFAULTS, $meta['ai_state'] ?? []);
+    }
+
+    /**
+     * Actualiza parcialmente el estado del orquestador de IA.
+     * Solo los campos incluidos en $patch son modificados.
+     *
+     * @param  array<string, bool>  $patch
+     */
+    public function updateAiState(array $patch): void
+    {
+        $meta = $this->metadata ?? [];
+        $meta['ai_state'] = array_merge($this->aiState(), $patch);
+
+        $this->update(['metadata' => $meta]);
+    }
 }
