@@ -22,7 +22,7 @@ stdout_logfile=/dev/stdout" > /etc/supervisor/conf.d/laravel-worker.conf
 # 2. Migraciones (Producción)
 # Usamos --force para evitar preguntas. 
 # IMPORTANTE: Cambiamos :fresh por migrate estándar para NO borrar datos.
-php artisan migrate:fresh --force
+php artisan migrate --force
 
 # 3. Optimización de Caché
 php artisan config:clear
