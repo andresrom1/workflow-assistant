@@ -1,6 +1,17 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(composer show:*)",
+      "Bash(composer update:*)",
+      "Bash(composer info:*)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/cloudinary-labs/cloudinary-laravel/master/composer.json\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\(''''require'''',{}\\), indent=2\\)\\)\")",
+      "Bash(cp:*)",
+      "Bash(git add:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "laravel-boost"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
