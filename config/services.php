@@ -42,8 +42,17 @@ return [
 
     'poliza_api' => [
         'base_url' => env('POLIZA_API_BASE_URL'),
-        'key'      => env('POLIZA_API_KEY'),
-        'timeout'  => env('POLIZA_API_TIMEOUT', 30),
+        'key' => env('POLIZA_API_KEY'),
+        'timeout' => env('POLIZA_API_TIMEOUT', 30),
+    ],
+
+    'whatsapp' => [
+        'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'waba_id' => env('WHATSAPP_WABA_ID'),
+        'app_secret' => env('WHATSAPP_APP_SECRET'),
+        'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
+        'api_version' => env('WHATSAPP_API_VERSION', 'v21.0'),
     ],
 
 ];
