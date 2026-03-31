@@ -1,142 +1,149 @@
 <template>
   <!-- ══════ FALLBACK: no es dispositivo móvil ══════ -->
-  <div v-if="!isMobile" class="co-center-msg">
-    <div class="co-center-icon">📱</div>
-    <h1 class="co-center-title">Abrí este link desde tu celular</h1>
-    <p class="co-center-desc">
-      Este formulario fue diseñado para completarse desde un dispositivo móvil.<br><br>
-      Por favor, copiá el link y abrilo desde tu teléfono.
-    </p>
-    <div style="margin-top:24px; display:flex; gap:12px; justify-content:center;">
-      <div class="co-badge-os"><span>🤖</span> Android</div>
-      <div class="co-badge-os"><span>🍎</span> iOS</div>
+  <div v-if="!isMobile" class="min-h-screen bg-gray-900 flex items-center justify-center p-6">
+    <div class="text-center max-w-sm">
+      <div class="text-6xl mb-6">📱</div>
+      <h1 class="text-2xl font-bold text-white mb-3">Abrí este link desde tu celular</h1>
+      <p class="text-gray-400 text-sm leading-relaxed">
+        Este formulario fue diseñado para completarse desde un dispositivo móvil
+        <strong class="text-gray-200">(Android o iOS)</strong>.<br><br>
+        Por favor, copiá el link y abrilo desde tu teléfono.
+      </p>
+      <div class="mt-8 flex justify-center gap-4">
+        <div class="flex items-center gap-2 bg-gray-800 rounded-xl px-4 py-3">
+          <span class="text-2xl">🤖</span>
+          <span class="text-sm text-gray-300 font-medium">Android</span>
+        </div>
+        <div class="flex items-center gap-2 bg-gray-800 rounded-xl px-4 py-3">
+          <span class="text-2xl">🍎</span>
+          <span class="text-sm text-gray-300 font-medium">iOS</span>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- ══════ ESTADO INVÁLIDO ══════ -->
-  <div v-else-if="quote.status !== 'checkout_pending'" class="co-center-msg">
-    <div class="co-center-icon">⚠️</div>
-    <h1 class="co-center-title">Link no disponible</h1>
-    <p class="co-center-desc">
-      Este link de checkout ya fue procesado, expiró o no es válido para cargar información.
-    </p>
+  <div v-else-if="quote.status !== 'checkout_pending'"
+    class="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+    <div class="text-center max-w-sm">
+      <div class="text-6xl mb-6">⚠️</div>
+      <h1 class="text-2xl font-bold text-gray-900 mb-3">Link no disponible</h1>
+      <p class="text-gray-500 text-sm leading-relaxed">
+        Este link de checkout ya fue procesado, ha expirado o no es válido para cargar información.
+      </p>
+    </div>
   </div>
 
   <!-- ══════ FORMULARIO PRINCIPAL (mobile only) ══════ -->
-  <div v-else class="co-app">
+  <div v-else class="min-h-screen bg-gray-50">
 
     <!-- Header sticky con cobertura -->
-    <div class="co-header">
-      <p class="co-label-sm co-label-blue">Cobertura seleccionada</p>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
-        <div style="min-width:0; padding-right:12px;">
-          <p style="font-size:14px; font-weight:700; color:var(--co-txt-1);">{{ alternative.aseguradora }} — {{ alternative.titulo }}</p>
-          <p style="font-size:12px; color:var(--co-txt-3); margin-top:2px;">
-            {{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }}
-            <span v-if="vehicle.patente">· {{ vehicle.patente }}</span>
-          </p>
+    <div class="bg-white border-b border-gray-200 px-4 py-4 sticky top-0 z-10 shadow-sm">
+      <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider">Cobertura seleccionada</p>
+      <div class="flex items-center justify-between mt-1">
+        <div>
+          <p class="font-bold text-gray-900 text-sm">{{ alternative.aseguradora }} — {{ alternative.titulo }}</p>
+          <p class="text-xs text-gray-500">{{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }} <span
+              v-if="vehicle.patente">· {{ vehicle.patente }}</span></p>
         </div>
-        <div style="text-align:right; flex-shrink:0;">
-          <span style="font-size:18px; font-weight:700; color:var(--co-txt-1);">${{ formatPrice(alternative.precio) }}</span>
-          <span style="font-size:11px; color:var(--co-txt-3); display:block;">/mes</span>
+        <div class="text-right">
+          <span class="text-lg font-bold text-gray-900">${{ formatPrice(alternative.precio) }}</span>
+          <span class="text-xs text-gray-400 block">/mes</span>
         </div>
       </div>
     </div>
 
     <!-- Indicador de pasos -->
-    <div class="co-steps">
-      <div style="display:flex; align-items:center; justify-content:space-between;">
-        <div v-for="(label, i) in stepLabels" :key="i" style="display:flex; align-items:center;">
-          <div class="co-step-item">
-            <div class="co-step-circle" :class="step > i + 1 ? 'done' : step === i + 1 ? 'active' : 'wait'">
+    <div class="bg-white border-b border-gray-100 px-4 py-3">
+      <div class="flex items-center justify-between">
+        <div v-for="(label, i) in stepLabels" :key="i" class="flex items-center">
+          <div class="flex flex-col items-center">
+            <div
+              class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200"
+              :class="stepCircleClass(i + 1)">
               <span v-if="step > i + 1">✓</span>
               <span v-else>{{ i + 1 }}</span>
             </div>
-            <span class="co-step-label" :class="step === i + 1 ? 'active' : step > i + 1 ? '' : 'wait'">{{ label }}</span>
+            <span class="text-xs mt-1 font-medium" :class="step === i + 1 ? 'text-blue-600' : 'text-gray-400'">{{ label
+            }}</span>
           </div>
-          <div v-if="i < stepLabels.length - 1" class="co-step-line" />
+          <div v-if="i < stepLabels.length - 1" class="w-6 h-px bg-gray-200 mb-4 mx-1" />
         </div>
       </div>
     </div>
 
-    <div ref="formRef" style="padding-bottom: 32px;">
+    <div ref="formRef" class="pb-8">
 
       <!-- ══════════ PASO 1: Datos personales ══════════ -->
-      <div v-show="step === 1" class="co-section">
-        <h2 class="co-section-title">Datos del tomador</h2>
+      <div v-show="step === 1" class="px-4 pt-6 space-y-4">
+        <h2 class="text-base font-bold text-gray-800">Datos del tomador</h2>
 
-        <div class="co-card">
+        <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
           <Field label="Nombre completo *" :error="errors.nombre">
-            <input v-model="form.nombre" type="text" name="nombre" placeholder="Juan Alberto Pérez"
-              class="co-input" :class="{ 'error': errors.nombre }" autocomplete="name" />
+            <input v-model="form.nombre" type="text" name="nombre" placeholder="Juan Alberto Pérez" class="field"
+              :class="{ 'field-error': errors.nombre }" autocomplete="name" />
           </Field>
-          <div style="height: 16px;"></div>
 
           <Field label="DNI *" :error="errors.dni">
-            <input v-model="form.dni" type="text" name="dni" placeholder="30000000" inputmode="numeric"
-              class="co-input" :class="{ 'error': errors.dni }" />
+            <input v-model="form.dni" type="text" name="dni" placeholder="30000000" inputmode="numeric" class="field"
+              :class="{ 'field-error': errors.dni }" />
           </Field>
-          <div style="height: 16px;"></div>
 
           <Field label="Email *" :error="errors.email">
-            <input v-model="form.email" type="email" name="email" placeholder="juan@ejemplo.com"
-              class="co-input" :class="{ 'error': errors.email }" autocomplete="email" />
+            <input v-model="form.email" type="email" name="email" placeholder="juan@ejemplo.com" class="field"
+              :class="{ 'field-error': errors.email }" autocomplete="email" />
           </Field>
-          <div style="height: 16px;"></div>
 
           <Field label="Teléfono *" :error="errors.telefono">
-            <input v-model="form.telefono" type="tel" name="telefono" placeholder="+54 9 11 1234-5678"
-              class="co-input" :class="{ 'error': errors.telefono }" autocomplete="tel" />
+            <input v-model="form.telefono" type="tel" name="telefono" placeholder="+54 9 11 1234-5678" class="field"
+              :class="{ 'field-error': errors.telefono }" autocomplete="tel" />
           </Field>
         </div>
 
-        <h2 class="co-section-title" style="margin-top:24px;">Domicilio</h2>
-        <div class="co-card">
+        <h2 class="text-base font-bold text-gray-800 pt-2">Domicilio</h2>
+        <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
           <Field label="Calle *" :error="errors.domicilio_calle">
             <input v-model="form.domicilio_calle" type="text" name="domicilio_calle" placeholder="Av. Siempreviva"
-              class="co-input" :class="{ 'error': errors.domicilio_calle }" autocomplete="street-address" />
+              class="field" :class="{ 'field-error': errors.domicilio_calle }" autocomplete="street-address" />
           </Field>
-          <div style="height: 16px;"></div>
 
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="grid grid-cols-2 gap-3 items-start">
             <Field label="Número *" :error="errors.domicilio_numero">
-              <input v-model="form.domicilio_numero" type="text" name="domicilio_numero" placeholder="742"
-                class="co-input" :class="{ 'error': errors.domicilio_numero }" inputmode="numeric" />
+              <input v-model="form.domicilio_numero" type="text" name="domicilio_numero" placeholder="742" class="field"
+                :class="{ 'field-error': errors.domicilio_numero }" inputmode="numeric" />
             </Field>
             <Field label="Código Postal *" :error="errors.domicilio_cp">
-              <input v-model="form.domicilio_cp" type="text" name="domicilio_cp" placeholder="1414"
-                class="co-input" :class="{ 'error': errors.domicilio_cp }" inputmode="numeric" autocomplete="postal-code" />
+              <input v-model="form.domicilio_cp" type="text" name="domicilio_cp" placeholder="1414" class="field"
+                :class="{ 'field-error': errors.domicilio_cp }" inputmode="numeric" autocomplete="postal-code" />
             </Field>
           </div>
-          <div style="height: 16px;"></div>
 
           <Field label="Provincia *" :error="errors.domicilio_provincia">
-            <select v-model="form.domicilio_provincia" name="domicilio_provincia"
-              class="co-input" :class="{ 'error': errors.domicilio_provincia }">
+            <select v-model="form.domicilio_provincia" name="domicilio_provincia" class="field"
+              :class="{ 'field-error': errors.domicilio_provincia }">
               <option value="" disabled>Seleccioná la provincia</option>
               <option v-for="p in provincias" :key="p" :value="p">{{ p }}</option>
             </select>
           </Field>
-          <div style="height: 16px;"></div>
 
           <Field label="Localidad *" :error="errors.domicilio_localidad">
             <input v-model="form.domicilio_localidad" type="text" name="domicilio_localidad" placeholder="Buenos Aires"
-              class="co-input" :class="{ 'error': errors.domicilio_localidad }" autocomplete="address-level2" />
+              class="field" :class="{ 'field-error': errors.domicilio_localidad }" autocomplete="address-level2" />
           </Field>
         </div>
 
-        <div style="display:flex; justify-content:flex-end; margin-top:16px;">
-          <button type="button" @click="goToStep(2)" class="co-btn co-btn-primary">Siguiente →</button>
+        <div class="flex justify-end pt-2">
+          <button type="button" @click="goToStep(2)" class="btn-primary">Siguiente →</button>
         </div>
       </div>
 
       <!-- ══════════ PASO 2: Datos de pago ══════════ -->
-      <div v-show="step === 2" class="co-section">
-        <h2 class="co-section-title">Datos de pago</h2>
+      <div v-show="step === 2" class="px-4 pt-6 space-y-4">
+        <h2 class="text-base font-bold text-gray-800">Datos de pago</h2>
 
-        <div class="co-card">
+        <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
           <Field label="Marca de tarjeta *" :error="errors.cc_brand">
-            <select v-model="form.cc_brand" name="cc_brand" class="co-input" :class="{ 'error': errors.cc_brand }">
+            <select v-model="form.cc_brand" name="cc_brand" class="field" :class="{ 'field-error': errors.cc_brand }">
               <option value="" disabled>Seleccioná la marca</option>
               <option value="visa">Visa</option>
               <option value="mastercard">Mastercard</option>
@@ -146,54 +153,52 @@
               <option value="maestro">Maestro</option>
             </select>
           </Field>
-          <div style="height: 16px;"></div>
 
           <Field label="Número de tarjeta *" :error="errors.cc_pan">
             <input v-model="form.cc_pan" type="text" name="cc_pan" placeholder="4111 1111 1111 1111" maxlength="19"
-              inputmode="numeric" @input="formatPan" @blur="validatePanLuhn" class="co-input" style="font-family: monospace;"
-              :class="{ 'error': errors.cc_pan }" autocomplete="off" />
+              inputmode="numeric" @input="formatPan" @blur="validatePanLuhn" class="field font-mono"
+              :class="{ 'field-error': errors.cc_pan }" autocomplete="off" />
           </Field>
-          <div style="height: 16px;"></div>
 
-          <div style="max-width: 150px;">
+          <div class="max-w-[150px]">
             <Field label="Vencimiento *" :error="errors.cc_expiry">
               <input v-model="form.cc_expiry" type="text" name="cc_expiry" placeholder="MM/AA" maxlength="5"
-                inputmode="numeric" @input="formatExpiry" class="co-input" style="font-family: monospace;"
-                :class="{ 'error': errors.cc_expiry }" autocomplete="off" />
+                inputmode="numeric" @input="formatExpiry" class="field font-mono"
+                :class="{ 'field-error': errors.cc_expiry }" autocomplete="off" />
             </Field>
           </div>
-          <div style="height: 16px;"></div>
 
           <Field label="Nombre del titular *" :error="errors.cc_holder_name">
             <input v-model="form.cc_holder_name" type="text" name="cc_holder_name" placeholder="Juan Alberto Pérez"
-              class="co-input" :class="{ 'error': errors.cc_holder_name }" autocomplete="off" />
+              class="field" :class="{ 'field-error': errors.cc_holder_name }" autocomplete="off" />
           </Field>
-          <div style="height: 16px;"></div>
 
           <Field label="DNI del titular *" :error="errors.cc_holder_dni">
             <input v-model="form.cc_holder_dni" type="text" name="cc_holder_dni" placeholder="30000000"
-              inputmode="numeric" class="co-input" :class="{ 'error': errors.cc_holder_dni }" autocomplete="off" />
-            <p class="co-hint-txt">Puede diferir del tomador del seguro.</p>
+              inputmode="numeric" class="field" :class="{ 'field-error': errors.cc_holder_dni }" autocomplete="off" />
+            <p class="text-xs text-gray-400 mt-1">Puede diferir del tomador del seguro.</p>
           </Field>
         </div>
 
-        <div style="display:flex; justify-content:space-between; margin-top:16px;">
-          <button type="button" @click="step = 1" class="co-btn co-btn-ghost">← Atrás</button>
-          <button type="button" @click="goToStep(3)" class="co-btn co-btn-primary">Siguiente →</button>
+        <div class="flex justify-between pt-2">
+          <button type="button" @click="step = 1" class="btn-ghost">← Atrás</button>
+          <button type="button" @click="goToStep(3)" class="btn-primary">Siguiente →</button>
         </div>
       </div>
 
       <!-- ══════════ PASO 3: Verificación del vehículo ══════════ -->
-      <div v-show="step === 3" class="co-section">
-        <h2 class="co-section-title">Verificación del vehículo</h2>
-        <p class="co-section-desc">Confirmá que los datos del vehículo sean correctos. Estos datos provienen del snapshot de cotización.</p>
+      <div v-show="step === 3" class="px-4 pt-6 space-y-4">
+        <h2 class="text-base font-bold text-gray-800">Verificación del vehículo</h2>
+        <p class="text-xs text-gray-500">Confirmá que los datos del vehículo sean correctos. Estos datos son inmutables
+          y provienen del snapshot de cotización.</p>
 
         <!-- Datos inmutables del snapshot -->
-        <div class="co-card co-card-blue">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-            <span class="co-label-sm co-label-blue">Datos del snapshot</span>
+        <div class="bg-blue-50 rounded-xl border border-blue-100 p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-blue-600 font-semibold uppercase tracking-wider">Datos del snapshot</span>
+            <span class="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-medium">Solo lectura</span>
           </div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <ReadOnlyField v-if="vehicle.patente" label="Patente" :value="vehicle.patente" />
             <ReadOnlyField label="Marca" :value="vehicle.marca" />
             <ReadOnlyField label="Modelo" :value="vehicle.modelo" />
@@ -204,112 +209,144 @@
         </div>
 
         <!-- Datos adicionales que ingresa el cliente -->
-        <h3 class="co-section-title" style="margin-top:24px; font-size:14px;">Datos adicionales</h3>
-        <div class="co-card">
+        <h3 class="text-sm font-bold text-gray-700 pt-1">Datos adicionales</h3>
+        <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
           <Field label="Uso del vehículo *" :error="errors.vehiculo_uso">
-            <div class="co-radio-wrap">
-              <label class="co-radio" :class="{ 'active': form.vehiculo_uso === 'particular' }">
-                <input type="radio" v-model="form.vehiculo_uso" value="particular" name="vehiculo_uso" style="display:none;" />
-                <span style="font-size:20px;">🚗</span> <span style="font-size:13px; font-weight:500;">Particular</span>
+            <div class="grid grid-cols-2 gap-3 mt-1">
+              <label class="flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
+                :class="form.vehiculo_uso === 'particular' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'">
+                <input type="radio" v-model="form.vehiculo_uso" value="particular" name="vehiculo_uso" class="hidden" />
+                <span class="text-xl">🚗</span>
+                <span class="text-sm font-medium">Particular</span>
               </label>
-              <label class="co-radio" :class="{ 'active': form.vehiculo_uso === 'otro' }">
-                <input type="radio" v-model="form.vehiculo_uso" value="otro" name="vehiculo_uso" style="display:none;" />
-                <span style="font-size:20px;">🚕</span> <span style="font-size:13px; font-weight:500;">Otro</span>
+              <label class="flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
+                :class="form.vehiculo_uso === 'otro' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'">
+                <input type="radio" v-model="form.vehiculo_uso" value="otro" name="vehiculo_uso" class="hidden" />
+                <span class="text-xl">🚕</span>
+                <span class="text-sm font-medium">Otro</span>
               </label>
             </div>
+            <p v-if="errors.vehiculo_uso" class="text-xs text-red-600 mt-1">{{ errors.vehiculo_uso }}</p>
           </Field>
-          <div style="height: 16px;"></div>
 
           <Field label="Nro. de chasis *" :error="errors.vehiculo_nro_chasis">
             <input v-model="form.vehiculo_nro_chasis" type="text" name="vehiculo_nro_chasis"
-              placeholder="9BWZZZ..." class="co-input" style="font-family: monospace; text-transform: uppercase;"
-              :class="{ 'error': errors.vehiculo_nro_chasis }"
+              placeholder="9BWZZZ377VT004251" class="field font-mono text-sm"
+              :class="{ 'field-error': errors.vehiculo_nro_chasis }" style="text-transform: uppercase"
               @input="form.vehiculo_nro_chasis = form.vehiculo_nro_chasis.toUpperCase()" />
           </Field>
-          <div style="height: 16px;"></div>
 
           <Field label="Nro. de motor *" :error="errors.vehiculo_nro_motor">
-            <input v-model="form.vehiculo_nro_motor" type="text" name="vehiculo_nro_motor" placeholder="AZD..."
-              class="co-input" style="font-family: monospace; text-transform: uppercase;"
-              :class="{ 'error': errors.vehiculo_nro_motor }"
+            <input v-model="form.vehiculo_nro_motor" type="text" name="vehiculo_nro_motor" placeholder="AZD5789"
+              class="field font-mono text-sm" :class="{ 'field-error': errors.vehiculo_nro_motor }"
+              style="text-transform: uppercase"
               @input="form.vehiculo_nro_motor = form.vehiculo_nro_motor.toUpperCase()" />
           </Field>
         </div>
 
-        <div style="display:flex; justify-content:space-between; margin-top:16px;">
-          <button type="button" @click="step = 2" class="co-btn co-btn-ghost">← Atrás</button>
-          <button type="button" @click="goToStep(4)" class="co-btn co-btn-primary">Siguiente →</button>
+        <div class="flex justify-between pt-2">
+          <button type="button" @click="step = 2" class="btn-ghost">← Atrás</button>
+          <button type="button" @click="goToStep(4)" class="btn-primary">Siguiente →</button>
         </div>
       </div>
 
       <!-- ══════════ PASO 4: Inspección fotográfica ══════════ -->
-      <div v-show="step === 4" class="co-section">
-        <h2 class="co-section-title">Inspección fotográfica</h2>
-        <p class="co-section-desc">
+      <div v-show="step === 4" class="px-4 pt-6 space-y-4">
+        <h2 class="text-base font-bold text-gray-800">Inspección fotográfica</h2>
+        <p class="text-xs text-gray-500 leading-relaxed">
           Sacá cada foto <strong>en este momento</strong> con la cámara de tu teléfono.
           No se permite subir imágenes desde la galería.
         </p>
 
-        <div>
+        <div class="space-y-3">
           <div v-for="(slot, i) in photoSlots" :key="slot.key"
-            class="co-photo-slot"
-            :class="photoIds[slot.key] ? 'done' : (uploading[slot.key] ? 'uploading' : (errors[`photo_${slot.key}`] ? 'error' : ''))">
-            
-            <div class="co-photo-thumb">
-              <img v-if="photos[slot.key]" :src="photos[slot.key]" style="width:100%; height:100%; object-fit:cover;" :alt="slot.label" />
-              <div v-else-if="uploading[slot.key]" class="co-spin"></div>
-              <span v-else>{{ slot.icon }}</span>
+            class="bg-white rounded-xl border overflow-hidden transition-colors"
+            :class="photoIds[slot.key] ? 'border-green-400' : (uploading[slot.key] ? 'border-blue-400' : (errors[`photo_${slot.key}`] ? 'border-red-400' : 'border-gray-200'))">
+            <div class="flex items-center gap-3 p-3">
+              <!-- Preview / ícono -->
+              <div
+                class="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                <img v-if="photos[slot.key]" :src="photos[slot.key]" class="w-full h-full object-cover"
+                  :alt="slot.label" />
+                <div v-else-if="uploading[slot.key]"
+                  class="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                <span v-else class="text-2xl">{{ slot.icon }}</span>
+              </div>
+
+              <div class="flex-1 min-w-0">
+                <p class="font-medium text-sm text-gray-800">{{ slot.label }}</p>
+                <p v-if="uploading[slot.key]" class="text-xs text-blue-600 mt-0.5">Subiendo foto…</p>
+                <p v-else class="text-xs text-gray-500 mt-0.5">{{ slot.hint }}</p>
+                <p v-if="errors[`photo_${slot.key}`]" class="text-xs text-red-600 mt-0.5">{{ errors[`photo_${slot.key}`]
+                }}</p>
+              </div>
+
+              <!-- Botón eliminar (solo si hay foto subida) -->
+              <button v-if="photoIds[slot.key] && !uploading[slot.key]"
+                type="button"
+                @click="removePhoto(slot.key)"
+                class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center transition-colors active:bg-red-200">
+                <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                </svg>
+              </button>
+
+              <!-- Botón cámara -->
+              <label class="flex-shrink-0 cursor-pointer"
+                :class="{ 'pointer-events-none opacity-50': uploading[slot.key] }"
+                @click.stop>
+                <input type="file" accept="image/*" capture="environment" class="hidden"
+                  @change="onPhotoCapture($event, slot.key)" :disabled="!!uploading[slot.key]" />
+                <div class="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+                  :class="photoIds[slot.key] ? 'bg-green-500' : (uploading[slot.key] ? 'bg-gray-400' : 'bg-blue-600')">
+                  <span v-if="photoIds[slot.key]" class="text-white text-sm">✓</span>
+                  <svg v-else class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+              </label>
             </div>
-
-            <div class="co-photo-info">
-              <p class="co-photo-title">{{ slot.label }}</p>
-              <p v-if="uploading[slot.key]" class="co-photo-desc" style="color:var(--co-blue);">Subiendo foto…</p>
-              <p v-else class="co-photo-desc">{{ slot.hint }}</p>
-              <p v-if="errors[`photo_${slot.key}`]" class="co-error-txt">{{ errors[`photo_${slot.key}`] }}</p>
-            </div>
-
-            <button v-if="photoIds[slot.key] && !uploading[slot.key]" type="button" @click="removePhoto(slot.key)" class="co-photo-btn del">
-              <svg style="width:16px; height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-            </button>
-
-            <label class="co-photo-btn cam" :class="photoIds[slot.key] ? 'co-photo-badge' : ''" v-else style="cursor:pointer;" :style="uploading[slot.key] ? 'opacity:0.5; pointer-events:none; background:var(--co-border); color:var(--co-txt-3);' : ''" @click.stop>
-              <input type="file" accept="image/*" capture="environment" style="display:none;" @change="onPhotoCapture($event, slot.key)" :disabled="!!uploading[slot.key]" />
-              <span v-if="photoIds[slot.key]" style="color:var(--co-bg);">✓</span>
-              <svg v-else style="width:20px; height:20px; color:var(--co-accent-txt);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-            </label>
           </div>
         </div>
 
         <!-- Progreso de fotos -->
-        <div class="co-progress">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:13px; font-weight:600; color:var(--co-txt-1);">Progreso</span>
-            <span style="font-size:13px; font-weight:700;" :style="photoCount === photoSlots.length ? 'color:var(--co-success);' : 'color:var(--co-txt-3);'">
-              {{ photoCount }}/{{ photoSlots.length }}
-            </span>
+        <div class="bg-white rounded-xl border border-gray-200 p-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium text-gray-700">Progreso</span>
+            <span class="text-sm font-bold"
+              :class="photoCount === photoSlots.length ? 'text-green-600' : 'text-gray-500'">{{ photoCount }}/{{
+                photoSlots.length }}</span>
           </div>
-          <div class="co-progress-bars">
-            <div v-for="(slot, i) in photoSlots" :key="slot.key" class="co-progress-bar" :class="{ 'done': photoIds[slot.key] }"></div>
+          <div class="flex gap-1">
+            <div v-for="(slot, i) in photoSlots" :key="slot.key" class="h-1.5 flex-1 rounded-full transition-colors"
+              :class="photoIds[slot.key] ? 'bg-green-500' : 'bg-gray-200'" />
           </div>
         </div>
 
         <!-- Resumen antes del envío -->
-        <div class="co-summary">
-          <p style="font-weight:700; margin-bottom:12px;">Resumen final</p>
-          <div style="color:var(--co-txt-2);">
-            <p><span>Tomador:</span> {{ form.nombre || '—' }}</p>
-            <p><span>Vehículo:</span> {{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }}</p>
-            <p><span>Cobertura:</span> {{ alternative.aseguradora }} — {{ alternative.titulo }}</p>
-            <p><span>Prima:</span> ${{ formatPrice(alternative.precio) }}/mes</p>
-            <p><span>Fotos:</span> {{ photoCount }}/{{ photoSlots.length }}</p>
+        <div class="bg-gray-50 rounded-xl border border-gray-200 p-4 text-sm">
+          <p class="font-semibold text-gray-700 mb-2">Resumen final</p>
+          <div class="space-y-1 text-gray-600">
+            <p><span class="text-gray-400">Tomador:</span> {{ form.nombre || '—' }}</p>
+            <p><span class="text-gray-400">Vehículo:</span> {{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }}
+            </p>
+            <p><span class="text-gray-400">Cobertura:</span> {{ alternative.aseguradora }} — {{ alternative.titulo }}
+            </p>
+            <p><span class="text-gray-400">Prima:</span> ${{ formatPrice(alternative.precio) }}/mes</p>
+            <p><span class="text-gray-400">Fotos:</span> {{ photoCount }}/{{ photoSlots.length }}</p>
           </div>
         </div>
 
-        <div style="display:flex; justify-content:space-between; margin-top:16px;">
-          <button type="button" @click="step = 3" class="co-btn co-btn-ghost">← Atrás</button>
-          <button type="button" :disabled="submitting || photoCount < photoSlots.length" class="co-btn co-btn-primary" @click="submitForm">
+        <div class="flex justify-between pt-2">
+          <button type="button" @click="step = 3" class="btn-ghost">← Atrás</button>
+          <button type="button" :disabled="submitting || photoCount < photoSlots.length" class="btn-submit"
+            @click="submitForm">
             <span v-if="submitting">Enviando…</span>
-            <span v-else-if="photoCount < photoSlots.length">Fotos incompletas ({{ photoCount }}/{{ photoSlots.length }})</span>
+            <span v-else-if="photoCount < photoSlots.length">Fotos incompletas ({{ photoCount }}/{{ photoSlots.length
+            }})</span>
             <span v-else>Confirmar y enviar ✓</span>
           </button>
         </div>
@@ -379,8 +416,8 @@ const stopPopState = (e: PopStateEvent) => {
 }
 
 // También prevenimos visibilitychange que puede triggear una visita de Inertia
-const stopVisibilityChange = () => {
-  // No hacer nada — solo evitar que Inertia reaccione
+const stopVisibilityChange = (e: Event) => {
+  e.stopImmediatePropagation()
 }
 
 onMounted(() => {
@@ -454,10 +491,20 @@ const processPhoto = (file: File): Promise<File> =>
   new Promise((resolve, reject) => {
     const img = new Image()
     const objectUrl = URL.createObjectURL(file)
+    
+    // Función auxiliar para limpiar memoria
+    const destroyImage = () => {
+      img.onload = null
+      img.onerror = null
+      img.src = ''
+    }
+
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl)
+      destroyImage()
       reject(new Error('No se pudo procesar la imagen'))
     }
+    
     img.onload = () => {
       URL.revokeObjectURL(objectUrl)
       try {
@@ -470,13 +517,23 @@ const processPhoto = (file: File): Promise<File> =>
         const canvas = document.createElement('canvas')
         canvas.width = w
         canvas.height = h
-        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        const ctx = canvas.getContext('2d')
+        ctx?.drawImage(img, 0, 0, w, h)
+        
+        // Destruir imagen original para liberar RAM lo antes posible (fundamental en iOS/Android)
+        destroyImage()
+
         canvas.toBlob(blob => {
+          // Liberar canvas de la memoria
+          canvas.width = 0
+          canvas.height = 0
+          
           if (!blob) { reject(new Error('Error al generar JPEG')); return }
           const finalFile = new File([blob], 'photo.jpg', { type: 'image/jpeg' })
           resolve(finalFile)
         }, 'image/jpeg', 0.7)
       } catch (err) {
+        destroyImage()
         reject(err)
       }
     }
@@ -746,148 +803,5 @@ const formatPrice = (n: number) =>
 </script>
 
 <style scoped>
-:root, .co-app {
-  --co-bg:        #f5f4f2;
-  --co-surface:   #ffffff;
-  --co-border:    #e4e2de;
-  --co-border-hover: #d1cfc9;
-  --co-txt-1:     #1a1917;
-  --co-txt-2:     #5c5a56;
-  --co-txt-3:     #9c9991;
-  --co-accent:    #2c2f33;
-  --co-accent-txt:#ffffff;
-  --co-accent-hover:#40444a;
-  --co-danger:    #e25c5c;
-  --co-danger-bg: #fce8e8;
-  --co-success:   #3c9f60;
-  --co-success-bg:#e6f6ec;
-  --co-blue:      #4078c0;
-  --co-blue-bg:   #e8f0f8;
-  --co-input-bg:  #ffffff;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root, .co-app {
-    --co-bg:        #141312;
-    --co-surface:   #1e1d1b;
-    --co-border:    #2e2d2a;
-    --co-border-hover: #4a4843;
-    --co-txt-1:     #f2f0eb; /* Ajustado ligeramente más claro sin volar */
-    --co-txt-2:     #a09e99;
-    --co-txt-3:     #7a7772;
-    --co-accent:    #e8e6e1;
-    --co-accent-txt:#141312;
-    --co-accent-hover:#ffffff;
-    --co-danger:    #ea7979;
-    --co-danger-bg: #2d1818;
-    --co-success:   #5ecea0;
-    --co-success-bg:#122a1d;
-    --co-blue:      #7baaf7; /* Azul más vivo */
-    --co-blue-bg:   #233045; /* Fondo con mucho más contraste sobre #141312 */
-    --co-input-bg:  #141312;
-  }
-}
-
-.co-app {
-  min-height: 100dvh;
-  background: var(--co-bg);
-  color: var(--co-txt-1);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  padding-bottom: 32px;
-}
-.co-center-msg {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  min-height: 100dvh; padding: 24px; text-align: center;
-}
-.co-center-icon { font-size: 48px; margin-bottom: 20px; }
-.co-center-title { font-size: 20px; font-weight: 700; margin-bottom: 12px; color: var(--co-txt-1); }
-.co-center-desc { font-size: 14px; line-height: 1.6; color: var(--co-txt-2); }
-.co-badge-os { display: flex; align-items: center; gap: 8px; background: var(--co-surface); border: 1px solid var(--co-border); border-radius: 12px; padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--co-txt-1); }
-
-.co-header {
-  background: var(--co-surface); border-bottom: 1px solid var(--co-border);
-  padding: 16px; position: sticky; top: 0; z-index: 10;
-}
-.co-header p { margin: 0; }
-.co-label-sm { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--co-txt-3); }
-.co-label-blue { color: var(--co-blue); }
-
-.co-steps { background: var(--co-surface); border-bottom: 1px solid var(--co-border); padding: 12px 16px; }
-.co-step-item { display: flex; flex-direction: column; align-items: center; }
-.co-step-circle {
-  width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700; transition: all 0.2s;
-}
-.co-step-circle.active { background: var(--co-accent); color: var(--co-accent-txt); }
-.co-step-circle.done { background: var(--co-success); color: #fff; }
-.co-step-circle.wait { background: var(--co-bg); color: var(--co-txt-3); border: 1px solid var(--co-border); }
-.co-step-label { font-size: 11px; font-weight: 500; margin-top: 6px; }
-.co-step-label.active { color: var(--co-txt-1); font-weight: 600; }
-.co-step-label.wait { color: var(--co-txt-3); }
-.co-step-line { width: 20px; height: 1px; background: var(--co-border); margin: 0 4px 16px; }
-
-.co-section { padding: 24px 16px 0; }
-.co-section-title { font-size: 16px; font-weight: 700; color: var(--co-txt-1); margin: 0 0 12px; }
-.co-section-desc { font-size: 12px; line-height: 1.5; color: var(--co-txt-2); margin: 0 0 16px; }
-
-.co-card { background: var(--co-surface); border: 1px solid var(--co-border); border-radius: 16px; padding: 16px; }
-.co-card-blue { background: var(--co-blue-bg); border: 1px solid var(--co-blue); border-radius: 16px; padding: 16px; }
-
-.co-field-wrap { margin-bottom: 16px; }
-.co-field-wrap:last-child { margin-bottom: 0; }
-.co-field-label { display: block; font-size: 13px; font-weight: 600; color: var(--co-txt-1); margin-bottom: 6px; }
-.co-input {
-  width: 100%; background: var(--co-input-bg); border: 1px solid var(--co-border); border-radius: 12px;
-  padding: 12px; font-size: 14px; color: var(--co-txt-1); transition: border-color 0.2s;
-}
-.co-input::placeholder { color: var(--co-txt-3); }
-.co-input:focus { outline: none; border-color: var(--co-accent); }
-.co-input.error { border-color: var(--co-danger); }
-.co-error-txt { font-size: 11px; color: var(--co-danger); margin: 6px 0 0; }
-.co-hint-txt { font-size: 11px; color: var(--co-txt-3); margin: 6px 0 0; }
-
-.co-btn {
-  display: inline-flex; align-items: center; justify-content: center; border-radius: 12px;
-  font-size: 14px; font-weight: 600; transition: all 0.2s; border: none; cursor: pointer;
-}
-.co-btn-primary { background: var(--co-accent); color: var(--co-accent-txt); padding: 12px 20px; }
-.co-btn-primary:active { background: var(--co-accent-hover); }
-.co-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-.co-btn-ghost { background: transparent; color: var(--co-txt-2); padding: 12px 16px; }
-.co-btn-ghost:active { color: var(--co-txt-1); background: var(--co-bg); }
-
-.co-radio-wrap { display: flex; gap: 12px; margin-top: 6px; }
-.co-radio {
-  flex: 1; display: flex; align-items: center; gap: 8px; border: 1px solid var(--co-border);
-  border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s; background: var(--co-surface);
-}
-.co-radio.active { border-color: var(--co-accent); background: var(--co-bg); }
-
-.co-photo-slot { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--co-border); border-radius: 12px; margin-bottom: 12px; background: var(--co-surface); }
-.co-photo-slot.done { border-color: var(--co-success); }
-.co-photo-slot.uploading { border-color: var(--co-blue); }
-.co-photo-slot.error { border-color: var(--co-danger); }
-.co-photo-thumb { width: 56px; height: 56px; border-radius: 8px; background: var(--co-bg); display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 24px; flex-shrink: 0; }
-.co-photo-info { flex: 1; min-width: 0; }
-.co-photo-title { font-size: 13px; font-weight: 600; color: var(--co-txt-1); margin: 0; }
-.co-photo-desc { font-size: 11px; color: var(--co-txt-3); margin: 4px 0 0; }
-.co-photo-btn { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; flex-shrink: 0; transition: all 0.2s; }
-.co-photo-btn.cam { background: var(--co-accent); color: var(--co-accent-txt); }
-.co-photo-btn.cam:active { background: var(--co-accent-hover); }
-.co-photo-btn.del { background: var(--co-danger-bg); color: var(--co-danger); }
-.co-photo-badge { background: var(--co-success); color: #fff; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
-
-.co-progress { background: var(--co-surface); border: 1px solid var(--co-border); border-radius: 16px; padding: 12px; margin-bottom: 16px; }
-.co-progress-bars { display: flex; gap: 4px; margin-top: 8px; }
-.co-progress-bar { height: 6px; flex: 1; border-radius: 3px; background: var(--co-bg); transition: background-color 0.3s; }
-.co-progress-bar.done { background: var(--co-success); }
-
-.co-summary { background: var(--co-bg); border: 1px solid var(--co-border); border-radius: 16px; padding: 16px; font-size: 13px; margin-bottom: 16px; }
-.co-summary p { margin: 0 0 6px; color: var(--co-txt-1); }
-.co-summary span { color: var(--co-txt-3); display: inline-block; width: 70px; }
-
-/* Spinners */
-.co-spin { width: 20px; height: 20px; border: 2px solid var(--co-blue); border-top-color: transparent; border-radius: 50%; animation: co-spin .8s linear infinite; }
-@keyframes co-spin { to { transform: rotate(360deg); } }
+/* Usamos clases inline de Tailwind CDN/utility directamente — no @apply */
 </style>
