@@ -1,10 +1,12 @@
 <?php
 
 use App\Http\Controllers\Admin\CheckoutAuditController;
+use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\QuoteController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Admin\SettingsController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -14,8 +16,10 @@ Route::get('/privacy', function () {
     return view('privacy');
 })->name('privacy');
 
-Route::get('/customers', [App\Http\Controllers\CustomerController::class, 'index'])->name('customers.index');
-Route::get('/customers/{customer}', [App\Http\Controllers\CustomerController::class, 'show'])->name('customers.show');
+Route::get('/chat', [ChatController::class, 'index'])->name('chat.index');
+
+Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
+Route::get('/customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
 
 // Rutas de Cotizaciones (NUEVO)
 Route::resource('quotes', QuoteController::class)->only(['index', 'show']);
@@ -41,7 +45,7 @@ Route::get('/checkout/{quote}/success', [CheckoutController::class, 'success'])
     ->name('checkout.success');
 
 // ─── Admin: Auditoría de checkout (requiere autenticación) ───────────────────
-//Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
+// Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/checkout-sessions', [CheckoutAuditController::class, 'index'])
         ->name('checkout-sessions.index');

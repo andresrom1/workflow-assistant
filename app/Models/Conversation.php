@@ -51,6 +51,11 @@ class Conversation extends Model
         return $this->hasMany(CoveragePreference::class);
     }
 
+    public function messages(): HasMany
+    {
+        return $this->hasMany(Message::class);
+    }
+
     // =========================================================================
     // AI Orchestrator State
     // =========================================================================

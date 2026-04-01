@@ -3,6 +3,7 @@
 namespace App\Services\WhatsApp;
 
 use App\Exceptions\WhatsAppSpamLimitException;
+use App\Models\Message;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -27,9 +28,9 @@ class WhatsAppOutboundService
      * @param  string  $to  Número en formato E.164 SIN el "+" (ej: "5491112345678")
      * @param  string  $phoneNumberId  ID del número emisor (no el E.164)
      */
-    public function sendMessage(string $to, string $text, string $phoneNumberId): array
+    public function sendMessage(string $to, string $text, string $phoneNumberId, ?int $conversationId = null): array
     {
-        return $this->post($phoneNumberId, [
+        $response = $this->post($phoneNumberId, [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
             'to' => $to,
@@ -39,6 +40,18 @@ class WhatsAppOutboundService
                 'body' => $text,
             ],
         ]);
+
+        if ($conversationId && ! empty($response['messages'])) {
+            Message::create([
+                'conversation_id' => $conversationId,
+                'direction' => 'outbound',
+                'content' => $text,
+                'external_message_id' => data_get($response, 'messages.0.id'),
+                'sender_phone' => $phoneNumberId,
+            ]);
+        }
+
+        return $response;
     }
 
     private function post(string $phoneNumberId, array $payload): array

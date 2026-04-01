@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\AI\InsuranceOrchestrator;
+use App\Models\Message;
 use App\Repositories\ConversationRepository;
 use App\Services\WhatsApp\WhatsAppOutboundService;
 use Illuminate\Bus\Queueable;
@@ -53,11 +54,21 @@ class ProcessWhatsAppMessage implements ShouldQueue
         // 3. Obtener o crear la conversación (el estado del flujo vive en metadata.ai_state).
         $conversation = $conversationRepo->findOrCreateByExternalId($this->waId, 'whatsapp');
 
+        // 3b. Persistir mensaje entrante.
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'inbound',
+            'content' => $this->messageBody,
+            'external_message_id' => $this->messageId,
+            'sender_name' => $this->contactName,
+            'sender_phone' => $this->waId,
+        ]);
+
         // 4. El orquestador elige el sub-agente correcto y devuelve la respuesta del LLM.
         $reply = $orchestrator->handle($this->messageBody, $conversation);
 
         // 5. Enviar respuesta al usuario por WhatsApp.
-        $waService->sendMessage($this->waId, $reply, $this->phoneNumberId);
+        $waService->sendMessage($this->waId, $reply, $this->phoneNumberId, $conversation->id);
 
         // 6. Marcar el mensaje como procesado para evitar duplicados.
         Cache::put($cacheKey, true, now()->addDay());

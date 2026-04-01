@@ -7,6 +7,7 @@ use App\Jobs\ProcessWhatsAppMessage;
 use App\Jobs\UpdateMessageStatus;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Log;
 
 class WhatsAppWebhookController extends Controller
 {
@@ -47,6 +48,11 @@ class WhatsAppWebhookController extends Controller
         $receivedSignature = $request->header('X-Hub-Signature-256', '');
 
         if (! hash_equals($expectedSignature, $receivedSignature)) {
+            Log::warning('WhatsApp webhook: HMAC signature validation failed', [
+                'received_signature' => $receivedSignature,
+                'ip' => $request->ip(),
+            ]);
+
             return response('Unauthorized', 401);
         }
 
