@@ -4,20 +4,26 @@ set -e
 # 1. Configuración Dinámica de Supervisor
 # Creamos un archivo de configuración extra para que Supervisor gestione Reverb y el Worker.
 # Esto garantiza que si se caen, se reinicien automáticamente.
+mkdir -p /var/log/supervisor
+
 echo "[program:reverb]
 command=php artisan reverb:start
 autostart=true
 autorestart=true
-stderr_logfile=/dev/stderr
-stdout_logfile=/dev/stdout
+stderr_logfile=/var/log/supervisor/reverb-err.log
+stdout_logfile=/var/log/supervisor/reverb-out.log
+stdout_logfile_maxbytes=1MB
+stderr_logfile_maxbytes=1MB
 
 [program:worker]
 command=php artisan queue:work --sleep=3 --tries=3 --max-time=3600
 autostart=true
 autorestart=true
 stopwaitsecs=3600
-stderr_logfile=/dev/stderr
-stdout_logfile=/dev/stdout" > /etc/supervisor/conf.d/laravel-worker.conf
+stderr_logfile=/var/log/supervisor/worker-err.log
+stdout_logfile=/var/log/supervisor/worker-out.log
+stdout_logfile_maxbytes=1MB
+stderr_logfile_maxbytes=1MB" > /etc/supervisor/conf.d/laravel-worker.conf
 
 # 2. Migraciones (Producción)
 # Usamos --force para evitar preguntas. 
