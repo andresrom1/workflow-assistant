@@ -44,6 +44,18 @@ return [
             'after_commit' => false,
         ],
 
+        // Conexión dedicada para jobs de AI con timeout extendido.
+        // retry_after debe superar el --timeout del worker (180s) para evitar
+        // que el queue driver considere el job abandonado mientras el LLM responde.
+        'database_ai' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'whatsapp-ai',
+            'retry_after' => 200,
+            'after_commit' => false,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),

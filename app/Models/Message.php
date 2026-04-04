@@ -14,6 +14,7 @@ class Message extends Model
         'external_message_id',
         'sender_name',
         'sender_phone',
+        'processed_at',
     ];
 
     public function conversation(): BelongsTo
