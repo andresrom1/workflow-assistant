@@ -16,12 +16,32 @@ stdout_logfile_maxbytes=1MB
 stderr_logfile_maxbytes=1MB
 
 [program:worker]
-command=php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+command=php artisan queue:work --queue=default --sleep=3 --tries=3 --timeout=60 --max-time=3600
 autostart=true
 autorestart=true
 stopwaitsecs=3600
 stderr_logfile=/var/log/supervisor/worker-err.log
 stdout_logfile=/var/log/supervisor/worker-out.log
+stdout_logfile_maxbytes=1MB
+stderr_logfile_maxbytes=1MB
+
+[program:worker-whatsapp-ai]
+command=php artisan queue:work --queue=whatsapp-ai --sleep=3 --tries=3 --timeout=180 --max-time=3600
+autostart=true
+autorestart=true
+stopwaitsecs=3600
+stderr_logfile=/var/log/supervisor/worker-whatsapp-ai-err.log
+stdout_logfile=/var/log/supervisor/worker-whatsapp-ai-out.log
+stdout_logfile_maxbytes=1MB
+stderr_logfile_maxbytes=1MB
+
+[program:worker-whatsapp-outbound]
+command=php artisan queue:work --queue=whatsapp-outbound --sleep=3 --tries=5 --timeout=30 --max-time=3600
+autostart=true
+autorestart=true
+stopwaitsecs=3600
+stderr_logfile=/var/log/supervisor/worker-whatsapp-outbound-err.log
+stdout_logfile=/var/log/supervisor/worker-whatsapp-outbound-out.log
 stdout_logfile_maxbytes=1MB
 stderr_logfile_maxbytes=1MB" > /etc/supervisor/conf.d/laravel-worker.conf
 

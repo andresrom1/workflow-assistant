@@ -2,10 +2,8 @@
 
 namespace App\Jobs;
 
-use App\AI\InsuranceOrchestrator;
 use App\Models\Message;
 use App\Repositories\ConversationRepository;
-use App\Services\WhatsApp\WhatsAppOutboundService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -29,13 +27,12 @@ class ProcessWhatsAppMessage implements ShouldQueue
         private readonly string $phoneNumberId,
         private readonly string $contactName,
         private readonly string $messageType = 'text',
+        private readonly ?string $extUserId = null,
+        private readonly ?string $extUsername = null,
     ) {}
 
-    public function handle(
-        InsuranceOrchestrator $orchestrator,
-        WhatsAppOutboundService $waService,
-        ConversationRepository $conversationRepo,
-    ): void {
+    public function handle(ConversationRepository $conversationRepo): void
+    {
         // 1. Idempotencia — evita procesar el mismo mensaje dos veces si Meta reenvía el webhook.
         $cacheKey = 'processed_wamid_'.$this->messageId;
         if (Cache::has($cacheKey)) {
@@ -51,29 +48,55 @@ class ProcessWhatsAppMessage implements ShouldQueue
             return;
         }
 
-        // 3. Obtener o crear la conversación (el estado del flujo vive en metadata.ai_state).
-        $conversation = $conversationRepo->findOrCreateByExternalId($this->waId, 'whatsapp');
+        // 3. Obtener o crear la conversación — algoritmo dual-key:
+        //    Primero por ext_user_id (BSUID, estable aunque el usuario cambie de número),
+        //    luego fallback al wa_id (teléfono).
+        $conversation = $this->extUserId
+            ? $conversationRepo->findByExtUserId($this->extUserId)
+            : null;
 
-        // 3b. Persistir mensaje entrante.
-        Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'inbound',
-            'content' => $this->messageBody,
-            'external_message_id' => $this->messageId,
-            'sender_name' => $this->contactName,
-            'sender_phone' => $this->waId,
-        ]);
+        if ($conversation) {
+            // Si el usuario migró de número, actualizar el teléfono de la conversación.
+            if ($conversation->external_conversation_id !== $this->waId) {
+                $conversation->update(['external_conversation_id' => $this->waId]);
+            }
+        } else {
+            $conversation = $conversationRepo->findOrCreateByExternalId($this->waId, 'whatsapp');
+        }
 
-        // 4. El orquestador elige el sub-agente correcto y devuelve la respuesta del LLM.
-        $reply = $orchestrator->handle($this->messageBody, $conversation);
+        // Guardar ext_user_id y ext_username si aún no están (sin sobreescribir valores existentes).
+        $conversation->updateExternalIdentifiers($this->extUserId, $this->extUsername);
 
-        // 5. Enviar respuesta al usuario por WhatsApp.
-        $waService->sendMessage($this->waId, $reply, $this->phoneNumberId, $conversation->id);
+        // 3b. Persistir el nombre del contacto en el Customer recurrente (customer_id ya vinculado).
+        if ($this->contactName && $conversation->customer_id) {
+            $conversation->load('customer');
+            if ($conversation->customer && ! $conversation->customer->name) {
+                $conversation->customer->update(['name' => $this->contactName]);
+            }
+        }
 
-        // 6. Marcar el mensaje como procesado para evitar duplicados.
+        // 3c. Persistir mensaje entrante (firstOrCreate evita duplicados por retry de Meta).
+        //     processed_at queda null — el inbox processor lo marcará al procesarlo.
+        Message::firstOrCreate(
+            ['external_message_id' => $this->messageId],
+            [
+                'conversation_id' => $conversation->id,
+                'direction' => 'inbound',
+                'content' => $this->messageBody,
+                'sender_name' => $this->contactName,
+                'sender_phone' => $this->waId,
+            ]
+        );
+
+        // 4. Marcar wamid como ingestado para evitar doble ingesta si Meta reenvía.
         Cache::put($cacheKey, true, now()->addDay());
 
-        Log::info('WhatsApp: mensaje procesado', [
+        // 5. Despachar el inbox processor con delay de 2s (ventana de debounce).
+        ProcessConversationInbox::dispatch($conversation->id, $this->waId, $this->phoneNumberId)
+            ->onQueue('whatsapp-ai')
+            ->delay(now()->addSeconds(2));
+
+        Log::info('WhatsApp: mensaje ingestado', [
             'wamid' => $this->messageId,
             'conversation_id' => $conversation->id,
         ]);
@@ -81,7 +104,7 @@ class ProcessWhatsAppMessage implements ShouldQueue
 
     public function failed(\Throwable $exception): void
     {
-        Log::error('WhatsApp: Job falló definitivamente', [
+        Log::error('WhatsApp: ingesta falló definitivamente', [
             'wamid' => $this->messageId,
             'waId' => $this->waId,
             'error' => $exception->getMessage(),
