@@ -20,7 +20,8 @@ class Conversation extends Model
         'status',
         'metadata',
         'ended_at',
-        'external_user_id',
+        'ext_user_id',
+        'ext_username',
     ];
 
     protected $casts = [
@@ -93,5 +94,26 @@ class Conversation extends Model
         $meta['ai_state'] = array_merge($this->aiState(), $patch);
 
         $this->update(['metadata' => $meta]);
+    }
+
+    /**
+     * Guarda el identificador externo de usuario (ej: BSUID) y el username externo.
+     * Solo actualiza un campo si aún está vacío — no sobreescribe un BSUID ya guardado.
+     */
+    public function updateExternalIdentifiers(?string $extUserId, ?string $extUsername): void
+    {
+        $updates = [];
+
+        if ($extUserId && ! $this->ext_user_id) {
+            $updates['ext_user_id'] = $extUserId;
+        }
+
+        if ($extUsername && ! $this->ext_username) {
+            $updates['ext_username'] = $extUsername;
+        }
+
+        if (! empty($updates)) {
+            $this->update($updates);
+        }
     }
 }

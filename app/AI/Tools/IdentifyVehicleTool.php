@@ -4,13 +4,16 @@ namespace App\AI\Tools;
 
 use App\Adapters\AIProviders\WhatsAppAdapter;
 use App\Models\Conversation;
-use Illuminate\JsonSchema\JsonSchema;
+use App\Traits\ConditionalLogger;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
 class IdentifyVehicleTool implements Tool
 {
+    use ConditionalLogger;
+
     public function __construct(
         private readonly WhatsAppAdapter $adapter,
         private readonly Conversation $conversation,
@@ -29,24 +32,33 @@ class IdentifyVehicleTool implements Tool
     {
         return [
             'patente' => $schema->string()
-                ->description('Patente del vehículo (formato ABC123 o AB123CD).'),
+                ->description('Patente del vehículo (formato ABC123 o AB123CD).')
+                ->required(),
             'marca' => $schema->string()
-                ->description('Marca del vehículo (ej: Toyota, Ford, Chevrolet).'),
+                ->description('Marca del vehículo (ej: Toyota, Ford, Chevrolet).')
+                ->required(),
             'modelo' => $schema->string()
-                ->description('Modelo del vehículo (ej: Corolla, Focus, Onix).'),
+                ->description('Modelo del vehículo (ej: Corolla, Focus, Onix).')
+                ->required(),
             'version' => $schema->string()
-                ->description('Versión o trim del vehículo (ej: XEI, SE, LTZ).'),
+                ->description('Versión o trim del vehículo (ej: XEI, SE, LTZ).')
+                ->required(),
             'year' => $schema->integer()
-                ->description('Año de fabricación del vehículo (ej: 2019).'),
+                ->description('Año de fabricación del vehículo (ej: 2019).')
+                ->required(),
             'combustible' => $schema->string()->enum(['nafta', 'diesel', 'gnc', 'electrico', 'hibrido'])
-                ->description('Tipo de combustible del vehículo.'),
+                ->description('Tipo de combustible del vehículo.')
+                ->required(),
             'codigo_postal' => $schema->string()
-                ->description('Código postal donde se guarda habitualmente el vehículo.'),
+                ->description('Código postal donde se guarda habitualmente el vehículo.')
+                ->required(),
         ];
     }
 
     public function handle(Request $request): string
     {
+        $this->logToolCall($request->all());
+
         // El sessionUuid se genera aquí porque en el flujo WhatsApp no existe
         // un identificador de sesión del front-end como en el flujo web/OpenAI.
         $result = $this->adapter->identifyVehicle(

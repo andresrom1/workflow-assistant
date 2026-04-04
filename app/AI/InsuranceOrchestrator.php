@@ -34,6 +34,10 @@ class InsuranceOrchestrator
      */
     public function handle(string $message, Conversation $conversation): string
     {
+        // Identificar al cliente automáticamente usando el teléfono del canal (si está disponible).
+        // Esto evita pedirle al usuario su número cuando ya lo tenemos del webhook.
+        $this->tryAutoIdentifyByPhone($conversation);
+
         $state = $conversation->aiState();
 
         // Todos los agentes comparten el mismo hilo de conversación, identificado
@@ -45,7 +49,46 @@ class InsuranceOrchestrator
         /** @var AgentResponse $response */
         $response = $agent->continueLastConversation($waUser)->prompt($message);
 
-        return $response->text();
+        return $response->text;
+    }
+
+    /**
+     * Identifica al cliente automáticamente usando el identificador de conversación
+     * (número de teléfono) si aún no fue identificado y el identificador es numérico.
+     *
+     * Si el external_conversation_id es un BSUID alfanumérico (usuario con username
+     * sin número de teléfono visible), se omite y el CustomerIdentifierAgent
+     * solicitará los datos al usuario.
+     *
+     * Cadena de delegación:
+     * → WhatsAppAdapter::identifyCustomer()        (normaliza/valida el payload)
+     * → CustomerIdentificationService::findOrCreate() (lógica de negocio)
+     * → CustomerRepository                          (acceso a datos)
+     */
+    private function tryAutoIdentifyByPhone(Conversation $conversation): void
+    {
+        if ($conversation->aiState()['customer_identified']) {
+            return;
+        }
+
+        $waId = $conversation->external_conversation_id;
+
+        // Solo proceder si el identificador es un número de teléfono (no un BSUID alfanumérico).
+        if (! preg_match('/^\d{7,15}$/', $waId)) {
+            return;
+        }
+
+        $result = $this->adapter->identifyCustomer([
+            'identifier_type' => 'phone',
+            'identifier_value' => $waId,
+            'external_conversation_id' => $conversation->external_conversation_id,
+            'channel' => 'whatsapp',
+        ], $conversation);
+
+        if ($result['success']) {
+            $conversation->updateAiState(['customer_identified' => true]);
+            $conversation->refresh();
+        }
     }
 
     /**

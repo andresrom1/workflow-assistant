@@ -16,7 +16,6 @@ use App\Services\Quote\Strategies\MobileAppQuoteResolution;
 use App\Traits\ConditionalLogger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Services\SettingsService;
 
 class QuoteService
 {
@@ -47,7 +46,7 @@ class QuoteService
         $snapshot = $transaction['snapshot'];
 
         $this->logQuotes("[QuoteService🫰] Created pending Quote ID: {$quote->id}");
-        
+
         // Programar el Job de Fallback (Vigilante) desde ahora.
         // Valor configurable desde /admin/settings
         $timeout = (int) app(SettingsService::class)->get('pas.opportunity_timeout_minutes', 30);
@@ -84,6 +83,21 @@ class QuoteService
                 'strategy' => $strategy->getName(),
                 'error' => $e->getMessage(),
             ]);
+
+            // Si la estrategia mobile falla, reintentar con la API como fallback.
+            if ($strategy->getName() !== 'api') {
+                Log::info("[QuoteService] Reintentando Quote #{$quote->id} con estrategia: api");
+
+                try {
+                    $this->apiStrategy->resolve($quote, $snapshot);
+
+                    return true;
+                } catch (\Throwable $fallbackError) {
+                    Log::error("[QuoteService] Fallback API también falló para Quote #{$quote->id}", [
+                        'error' => $fallbackError->getMessage(),
+                    ]);
+                }
+            }
 
             return false;
         }

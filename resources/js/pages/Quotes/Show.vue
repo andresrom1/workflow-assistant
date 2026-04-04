@@ -62,7 +62,27 @@
           </div>
           <div>
             <p class="text-[11px] uppercase tracking-wide mb-2" style="color: var(--text-3);">Cliente</p>
-            <p class="text-sm font-mono" style="color: var(--text-1);">DNI {{ quote.dni ?? '—' }}</p>
+            <p class="text-sm font-semibold" style="color: var(--text-1);">{{ quote.customer_name ?? 'Sin Nombre' }}</p>
+            <dl class="space-y-1 mt-1.5">
+              <div v-if="quote.customer_phone" class="flex gap-2 text-xs">
+                <dt style="color: var(--text-3);">Tel</dt>
+                <dd>
+                  <a :href="`https://wa.me/${quote.customer_phone.replace(/\D/g, '')}`"
+                    target="_blank" rel="noopener"
+                    class="font-mono hover:underline" style="color: var(--text-1);">
+                    {{ quote.customer_phone }}
+                  </a>
+                </dd>
+              </div>
+              <div v-if="quote.customer_email" class="flex gap-2 text-xs">
+                <dt style="color: var(--text-3);">Email</dt>
+                <dd class="font-mono" style="color: var(--text-1);">{{ quote.customer_email }}</dd>
+              </div>
+              <div v-if="quote.customer_dni" class="flex gap-2 text-xs">
+                <dt style="color: var(--text-3);">DNI</dt>
+                <dd class="font-mono" style="color: var(--text-1);">{{ quote.customer_dni }}</dd>
+              </div>
+            </dl>
             <div v-if="quote.coverage_preference" class="mt-2.5 p-2.5 rounded-[10px]"
               style="background: var(--accent-50); border: 1px solid var(--accent-200);">
               <p class="text-[9px] font-semibold uppercase tracking-wider" style="color: var(--accent-600);">Preferencia</p>
@@ -149,7 +169,10 @@ defineProps<{
     marca: string; modelo: string; version: string
     year: number; codigo_postal: string; combustible: string | null
     uso: string | null; edad_conductor: string | null
-    dni: string | null; coverage_preference: string | null
+    dni: string | null
+    customer_name: string | null; customer_phone: string | null
+    customer_email: string | null; customer_dni: string | null
+    coverage_preference: string | null
     alternatives: Array<{
       id: number; aseguradora: string; titulo: string; descripcion: string
       normalized_grade: string; precio: number; features_tags: string[] | null

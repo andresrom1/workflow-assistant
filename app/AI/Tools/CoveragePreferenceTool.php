@@ -4,12 +4,15 @@ namespace App\AI\Tools;
 
 use App\Adapters\AIProviders\WhatsAppAdapter;
 use App\Models\Conversation;
-use Illuminate\JsonSchema\JsonSchema;
+use App\Traits\ConditionalLogger;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
 class CoveragePreferenceTool implements Tool
 {
+    use ConditionalLogger;
+
     public function __construct(
         private readonly WhatsAppAdapter $adapter,
         private readonly Conversation $conversation,
@@ -28,14 +31,18 @@ class CoveragePreferenceTool implements Tool
     {
         return [
             'patente' => $schema->string()
-                ->description('Patente del vehículo para el que se registra la preferencia.'),
+                ->description('Patente del vehículo para el que se registra la preferencia.')
+                ->required(),
             'preference' => $schema->string()
-                ->description('Tipo de cobertura elegida por el cliente (ej: terceros, terceros_completo, todo_riesgo).'),
+                ->description('Tipo de cobertura elegida por el cliente (ej: terceros, terceros_completo, todo_riesgo).')
+                ->required(),
         ];
     }
 
     public function handle(Request $request): string
     {
+        $this->logToolCall($request->all());
+
         $result = $this->adapter->coveragePreference(
             $request->all(),
             $this->conversation

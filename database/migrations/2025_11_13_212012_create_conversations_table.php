@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('conversations', function (Blueprint $table) {
             $table->id();
             $table->string('external_conversation_id')->unique(); // ID externo (thread_id) agnostico
-            $table->string('external_user_id')->nullable(); // ID del dueno del hilo agnostico
+            $table->string('ext_user_id')->nullable(); // ID del dueno del hilo agnostico
             $table->foreignId('customer_id')->nullable()->constrained()->onDelete('cascade');
             $table->string('channel')->default('web');
             $table->enum('status', ['anonymous', 'identified', 'active', 'completed', 'abandoned'])->default('anonymous');
@@ -23,7 +23,7 @@ return new class extends Migration
             $table->timestamp('last_message_at')->useCurrent();
             $table->timestamp('ended_at')->nullable();
             $table->softDeletes(); // ← Soft deletes
-            
+
             $table->index('external_conversation_id');
             $table->index('customer_id');
             $table->index('status');

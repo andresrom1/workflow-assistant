@@ -18,6 +18,7 @@ use App\Traits\ConditionalLogger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class AgentToolAdapter implements AIProviderAdapterInterface
@@ -89,7 +90,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             'identifier_type' => 'required|string|in:email,phone,wbid',
             'identifier_value' => 'required|string',
             'external_conversation_id' => 'required|string',
-            'external_user_id' => 'nullable|string',
+            'ext_user_id' => 'nullable|string',
         ]);
 
         $customer = $this->customerService->findOrCreate(
@@ -311,7 +312,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             );
         }
 
-        $token = \Illuminate\Support\Str::random(10);
+        $token = Str::random(10);
 
         $quote->update([
             'status' => 'checkout_pending',
@@ -361,7 +362,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         return [
             ...$payload,
             'external_conversation_id' => $payload['thread_id'],
-            'external_user_id' => $payload['openai_user_id'],
+            'ext_user_id' => $payload['openai_user_id'],
             'channel' => $payload['channel'] ?? 'web',
             'preference' => $payload['coverage_code'] ?? null,
             'quoteId' => $payload['quotation_number'] ?? $payload['quote_id'] ?? null,

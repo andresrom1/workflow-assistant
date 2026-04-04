@@ -81,8 +81,14 @@
                   <p class="text-[11px] font-mono mt-0.5" style="color: var(--text-3);">{{ q.year }} · CP {{ q.codigo_postal }}</p>
                 </td>
                 <td class="px-5 py-3">
-                  <p class="text-sm" style="color: var(--text-1);">{{ q.customer_name ?? 'Anónimo' }}</p>
-                  <p class="text-[11px] font-mono mt-0.5" style="color: var(--text-3);">{{ q.dni ?? '—' }}</p>
+                  <p class="text-sm" style="color: var(--text-1);">{{ q.customer_name ?? 'Sin Nombre' }}</p>
+                  <a v-if="q.customer_phone"
+                    :href="`https://wa.me/${q.customer_phone.replace(/\D/g, '')}`"
+                    target="_blank" rel="noopener"
+                    class="text-[11px] font-mono mt-0.5 block hover:underline"
+                    style="color: var(--text-3);"
+                    @click.stop>{{ q.customer_identifier }}</a>
+                  <p v-else class="text-[11px] font-mono mt-0.5" style="color: var(--text-3);">{{ q.customer_identifier ?? '—' }}</p>
                 </td>
                 <td class="px-5 py-3 text-center">
                   <span class="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full text-[11px] font-bold font-mono tabular-nums"
@@ -115,7 +121,7 @@
                   </span>
                 </div>
                 <p class="text-sm font-medium" style="color: var(--text-1);">{{ q.marca }} {{ q.modelo }} {{ q.year }}</p>
-                <p class="text-xs mt-0.5" style="color: var(--text-3);">{{ q.customer_name ?? 'Anónimo' }} · {{ q.alternatives_count }} alternativas</p>
+                <p class="text-xs mt-0.5" style="color: var(--text-3);">{{ q.customer_name ?? 'Sin Nombre' }} · {{ q.alternatives_count }} alternativas</p>
               </div>
               <ChevronRight />
             </div>
@@ -141,7 +147,7 @@ const props = defineProps<{
     data: Array<{
       id: number; status: string; created_at: string
       marca: string; modelo: string; year: number; codigo_postal: string
-      customer_name: string | null; dni: string | null; alternatives_count: number
+      customer_name: string | null; customer_phone: string | null; customer_identifier: string | null; dni: string | null; alternatives_count: number
     }>
     total: number; from: number; to: number; last_page: number
     links: Array<{ label: string; url: string | null; active: boolean }>

@@ -11,7 +11,18 @@
       "Bash(winget list:*)",
       "Bash(where gh:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(cmd.exe /c \"where gh\")",
+      "Bash(cmd.exe /c \"where gh 2>&1\")",
+      "Bash(powershell.exe -Command \"Get-Command gh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
+      "Bash(powershell.exe -Command \"Get-ChildItem ''C:\\\\Users\\\\Andrés\\\\AppData\\\\Local\\\\GitHubDesktop'' -ErrorAction SilentlyContinue | head -5; ls ''C:\\\\Users\\\\Andrés\\\\AppData\\\\Local\\\\Programs'' | grep -i github 2>/dev/null\")",
+      "Bash(git credential:*)",
+      "Bash(php artisan:*)",
+      "Bash(grep -n \"use Illuminate.*JsonSchema\" app/AI/Tools/*.php)",
+      "Bash(php -r \":*)",
+      "Bash(find vendor:*)",
+      "Bash(find . -name *migration* -type f)",
+      "Bash(find ./database/migrations -name *.php)"
     ]
   },
   "enableAllProjectMcpServers": true,
