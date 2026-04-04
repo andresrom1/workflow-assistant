@@ -4,12 +4,15 @@ namespace App\AI\Tools;
 
 use App\Adapters\AIProviders\WhatsAppAdapter;
 use App\Models\Conversation;
-use Illuminate\JsonSchema\JsonSchema;
+use App\Traits\ConditionalLogger;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
 class CheckoutTool implements Tool
 {
+    use ConditionalLogger;
+
     public function __construct(
         private readonly WhatsAppAdapter $adapter,
         private readonly Conversation $conversation,
@@ -28,14 +31,18 @@ class CheckoutTool implements Tool
     {
         return [
             'quoteId' => $schema->integer()
-                ->description('ID de la cotización seleccionada.'),
+                ->description('ID de la cotización seleccionada.')
+                ->required(),
             'quote_alternative_id' => $schema->integer()
-                ->description('ID de la alternativa de cobertura elegida por el cliente.'),
+                ->description('ID de la alternativa de cobertura elegida por el cliente.')
+                ->required(),
         ];
     }
 
     public function handle(Request $request): string
     {
+        $this->logToolCall($request->all());
+
         $result = $this->adapter->checkout(
             $request->all(),
             $this->conversation

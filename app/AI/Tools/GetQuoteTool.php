@@ -4,12 +4,15 @@ namespace App\AI\Tools;
 
 use App\Adapters\AIProviders\WhatsAppAdapter;
 use App\Models\Conversation;
-use Illuminate\JsonSchema\JsonSchema;
+use App\Traits\ConditionalLogger;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
 class GetQuoteTool implements Tool
 {
+    use ConditionalLogger;
+
     public function __construct(
         private readonly WhatsAppAdapter $adapter,
         private readonly Conversation $conversation,
@@ -28,12 +31,15 @@ class GetQuoteTool implements Tool
     {
         return [
             'quoteId' => $schema->integer()
-                ->description('ID de la cotización a consultar (provisto por identify_vehicle).'),
+                ->description('ID de la cotización a consultar (provisto por identify_vehicle).')
+                ->required(),
         ];
     }
 
     public function handle(Request $request): string
     {
+        $this->logToolCall($request->all());
+
         $result = $this->adapter->getQuote($request->all());
 
         if ($result['success']) {

@@ -15,11 +15,11 @@ class ConversationFactory extends Factory
         return [
             // Si no se pasa cliente, crea uno
             'customer_id' => Customer::factory(),
-            
+
             // Simula IDs de OpenAI
-            'external_conversation_id' => 'thread_' . $this->faker->uuid(),
-            'external_user_id' => 'user_' . $this->faker->regexify('[a-zA-Z0-9]{10}'),
-            
+            'external_conversation_id' => 'thread_'.$this->faker->uuid(),
+            'ext_user_id' => 'user_'.$this->faker->regexify('[a-zA-Z0-9]{10}'),
+
             'status' => 'active',
             'metadata' => ['provider' => 'openai'],
             'created_at' => now(),

@@ -88,7 +88,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             'identifier_type' => 'required|string|in:email,phone,wbid',
             'identifier_value' => 'required|string',
             'external_conversation_id' => 'required|string',
-            'external_user_id' => 'nullable|string',
+            'ext_user_id' => 'nullable|string',
         ]);
 
         $customer = $this->customerService->findOrCreate(
@@ -337,7 +337,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         return [
             ...$payload,
             'external_conversation_id' => $payload['wa_id'] ?? $payload['external_conversation_id'] ?? null,
-            'external_user_id' => $payload['wa_id'] ?? null,
+            'ext_user_id' => $payload['wa_id'] ?? null,
             'channel' => 'whatsapp',
             'preference' => $payload['coverage_code'] ?? $payload['preference'] ?? null,
             'quoteId' => $payload['quote_id'] ?? $payload['quoteId'] ?? null,

@@ -4,12 +4,15 @@ namespace App\AI\Tools;
 
 use App\Adapters\AIProviders\WhatsAppAdapter;
 use App\Models\Conversation;
-use Illuminate\JsonSchema\JsonSchema;
+use App\Traits\ConditionalLogger;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
 class IdentifyCustomerTool implements Tool
 {
+    use ConditionalLogger;
+
     public function __construct(
         private readonly WhatsAppAdapter $adapter,
         private readonly Conversation $conversation,
@@ -28,18 +31,22 @@ class IdentifyCustomerTool implements Tool
     {
         return [
             'identifier_type' => $schema->string()->enum(['email', 'phone', 'wbid'])
-                ->description('Tipo de identificador provisto por el usuario: email, phone (teléfono) o wbid (DNI/CUIT).'),
+                ->description('Tipo de identificador provisto por el usuario: email, phone (teléfono) o wbid (DNI/CUIT).')
+                ->required(),
             'identifier_value' => $schema->string()
-                ->description('El valor del identificador (ej: usuario@ejemplo.com, 1150001234, 20304050607).'),
+                ->description('El valor del identificador (ej: usuario@ejemplo.com, 1150001234, 20304050607).')
+                ->required(),
         ];
     }
 
     public function handle(Request $request): string
     {
+        $this->logToolCall($request->all());
+
         $result = $this->adapter->identifyCustomer(
             array_merge($request->all(), [
                 'external_conversation_id' => $this->conversation->external_conversation_id,
-                'external_user_id' => $this->conversation->external_conversation_id,
+                'ext_user_id' => $this->conversation->external_conversation_id,
                 'channel' => 'whatsapp',
             ]),
             $this->conversation

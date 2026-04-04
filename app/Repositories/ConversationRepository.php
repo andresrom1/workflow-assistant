@@ -2,9 +2,10 @@
 
 namespace App\Repositories;
 
-use Illuminate\Support\Facades\Log;
 use App\Models\Conversation;
+use App\Models\CoveragePreference;
 use App\Traits\ConditionalLogger;
+use Illuminate\Support\Facades\Log;
 
 class ConversationRepository
 {
@@ -16,11 +17,20 @@ class ConversationRepository
     }
 
     /**
+     * Busca una conversación por su identificador externo de usuario (ej: BSUID de WhatsApp).
+     * Agnóstico al canal — aplica a cualquier identificador estable de usuario.
+     */
+    public function findByExtUserId(string $extUserId): ?Conversation
+    {
+        return Conversation::where('ext_user_id', $extUserId)->first();
+    }
+
+    /**
      * Summary of findOrCreateByExternalConversationId
-     * @param string $externalId El ID externo de la conversación (OpenAi: thread_id)
-     * @param string $channel El channel del cual proviene ['web', 'whatsapp', 'telegram', etc...]
-     * @param array|null $metadata 
-     * @return Conversation
+     *
+     * @param  string  $externalId  El ID externo de la conversación (OpenAi: thread_id)
+     * @param  string  $channel  El channel del cual proviene ['web', 'whatsapp', 'telegram', etc...]
+     * @param  array|null  $metadata
      */
     public function findOrCreateByExternalId(string $externalId, $channel, $metadata = null): Conversation
     {
@@ -45,9 +55,6 @@ class ConversationRepository
 
     /**
      * Summary of linkCustomer
-     * @param int $conversationId
-     * @param int $customerId
-     * @return void
      */
     public function linkCustomer(int $conversationId, int $customerId): void
     {
@@ -66,7 +73,7 @@ class ConversationRepository
             Log::warning('Thread ID conflict', [
                 'external_conversation_id' => $threadId,
                 'old_customer' => $existing->customer_id,
-                'new_customer' => $customerId
+                'new_customer' => $customerId,
             ]);
             // Decide: ¿crear nueva conversación o actualizar?
         }
@@ -83,13 +90,14 @@ class ConversationRepository
     public function attachVehicle(Conversation $conversation, int $vehicleId, bool $isPrimary = false): void
     {
         $conversation->vehicles()->syncWithoutDetaching([
-            $vehicleId => ['is_primary' => $isPrimary]
+            $vehicleId => ['is_primary' => $isPrimary],
         ]);
     }
 
     public function findActiveByOpenAIUserId(string $threadId): ?Conversation
     {
-        Log::info(__METHOD__ . __LINE__ . ' Buscando conversación activa', ['external_conversation_id' => $threadId]);
+        Log::info(__METHOD__.__LINE__.' Buscando conversación activa', ['external_conversation_id' => $threadId]);
+
         return Conversation::where('external_conversation_id', $threadId)
             ->where('status', 'active')
             ->latest('last_activity')
@@ -102,14 +110,14 @@ class ConversationRepository
 
     public function updateActivity(string $openaiUserId): void
     {
-        Conversation::where('external_user_id', $openaiUserId)
+        Conversation::where('ext_user_id', $openaiUserId)
             ->where('status', 'active')
             ->update(['last_message_at' => now()]);
     }
 
     public function saveCoveragePreference(int $conversationId, int $vehicleId, string $preference): void
     {
-        \App\Models\CoveragePreference::updateOrCreate(
+        CoveragePreference::updateOrCreate(
             [
                 'conversation_id' => $conversationId,
                 'vehicle_id' => $vehicleId,

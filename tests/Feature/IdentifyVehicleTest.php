@@ -2,19 +2,20 @@
 
 namespace Tests\Feature;
 
-use App\Models\Customer;
 use App\Models\Conversation;
+use App\Models\Customer;
 use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Log;
-use Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
+use Tests\TestCase;
 
 class IdentifyVehicleTest extends TestCase
 {
     use RefreshDatabase;
 
     private string $threadId = 'thread_abc123xyz';
+
     private string $openaiUserId = '01e40f5f-b311-4365-8587-c14f1543aa51';
 
     protected function setUp(): void
@@ -22,7 +23,7 @@ class IdentifyVehicleTest extends TestCase
         parent::setUp();
 
         // config(['logging.default' => 'stack']);
-        
+
         // // Setup: Create active conversation with customer
         // $customer = Customer::create([
         //     'dni' => '12345678',
@@ -48,17 +49,17 @@ class IdentifyVehicleTest extends TestCase
 
         $customer = Customer::factory()->create([
             'email' => 'juan@test.com',
-            'name' => 'Juan Perez'
+            'name' => 'Juan Perez',
         ]);
         Log::info('[TEST] Created customer', ['customer_id' => $customer->id]);
 
         // La conversación DEBE tener customer_id para que vehicle funcione
         $conversation = Conversation::create([
             'external_conversation_id' => $threadId,
-            'external_user_id' => $userId,
-            'customer_id' => $customer->id, 
+            'ext_user_id' => $userId,
+            'customer_id' => $customer->id,
             'status' => 'identified',
-            'last_message_at' => now()
+            'last_message_at' => now(),
         ]);
 
         // Payload estricto según schema de OpenAI
@@ -67,7 +68,7 @@ class IdentifyVehicleTest extends TestCase
             'thread_id' => $threadId,
             'openai_user_id' => $userId,
             'ai_provider' => 'openai',
-            
+
             // Datos del Tool identify_vehicle
             'patente' => 'AD 123 CC', // Espaciada para probar normalización
             'marca' => 'Toyota',
@@ -75,7 +76,7 @@ class IdentifyVehicleTest extends TestCase
             'version' => 'XEI CVT',
             'year' => 2022, // Mapeo a 'year'
             'combustible' => 'Nafta', // Case insensitive test
-            'codigo_postal' => '5000'
+            'codigo_postal' => '5000',
         ];
 
         // 2. Act
@@ -86,7 +87,7 @@ class IdentifyVehicleTest extends TestCase
             ->assertJson([
                 'success' => true,
                 // Verificamos parte del string de salida blindada
-                'tool_output' => 'Vehículo registrado correctamente.'
+                'tool_output' => 'Vehículo registrado correctamente.',
             ]);
 
         // 4. Assert Database (Normalización y Relaciones)
@@ -98,7 +99,7 @@ class IdentifyVehicleTest extends TestCase
             'version' => 'XEI CVT',
             'year' => 2022,
             'combustible' => 'nafta', // Debe estar en minúsculas (enum)
-            'codigo_postal' => '5000'
+            'codigo_postal' => '5000',
         ]);
     }
 
@@ -108,10 +109,10 @@ class IdentifyVehicleTest extends TestCase
         // Escenario: El auto existe pero con datos viejos o dueño anterior
         $threadId = 'cthr_test_vehicle_02';
         $userId = 'user_test_02';
-        
+
         // Cliente NUEVO (Juan)
         $newCustomer = Customer::factory()->create(['email' => 'juan@test.com']);
-        
+
         // Vehículo existente (pertenece a otro o datos viejos)
         $existingVehicle = Vehicle::create([
             'customer_id' => Customer::factory()->create()->id, // Dueño anterior
@@ -121,12 +122,12 @@ class IdentifyVehicleTest extends TestCase
             'version' => 'S',
             'year' => 2015,
             'combustible' => 'nafta',
-            'codigo_postal' => '1000'
+            'codigo_postal' => '1000',
         ]);
 
         Conversation::create([
             'external_conversation_id' => $threadId,
-            'external_user_id' => $userId,
+            'ext_user_id' => $userId,
             'customer_id' => $newCustomer->id, // Juan está chateando
         ]);
 
@@ -140,7 +141,7 @@ class IdentifyVehicleTest extends TestCase
             'version' => 'Titanium', // Dato enriquecido
             'year' => 2015,
             'combustible' => 'GNC', // Cambio técnico (agregó equipo)
-            'codigo_postal' => '2000' // Mudanza
+            'codigo_postal' => '2000', // Mudanza
         ];
 
         $this->postJson('/api/tools/identify-vehicle', $payload)->assertStatus(200);
@@ -151,7 +152,7 @@ class IdentifyVehicleTest extends TestCase
             'customer_id' => $newCustomer->id, // ¡Dueño cambiado!
             'version' => 'Titanium', // Actualizado
             // 'combustible' => 'gnc', // Si decidiste permitir update de combustible en tu política
-            'codigo_postal' => '2000' // Actualizado
+            'codigo_postal' => '2000', // Actualizado
         ]);
     }
 
@@ -164,7 +165,7 @@ class IdentifyVehicleTest extends TestCase
 
         Conversation::create([
             'external_conversation_id' => $threadId,
-            'external_user_id' => $userId,
+            'ext_user_id' => $userId,
             'customer_id' => null, // <--- ANÓNIMO
         ]);
 
@@ -178,7 +179,7 @@ class IdentifyVehicleTest extends TestCase
             'version' => 'Way',
             'year' => 2010,
             'combustible' => 'Nafta',
-            'codigo_postal' => '1000'
+            'codigo_postal' => '1000',
         ];
 
         $response = $this->postJson('/api/tools/identify-vehicle', $payload);
@@ -187,9 +188,9 @@ class IdentifyVehicleTest extends TestCase
         $response->assertStatus(200) // HTTP OK porque es un error lógico para la IA
             ->assertJson([
                 'success' => false,
-                'error_code' => 'missing_customer'
+                'error_code' => 'missing_customer',
             ]);
-            
+
         $this->assertDatabaseMissing('vehicles', ['patente' => 'ZZ999ZZ']);
     }
 
@@ -218,7 +219,7 @@ class IdentifyVehicleTest extends TestCase
 
         $this->assertDatabaseCount('conversations', 1);
         // Assert: Response is successful
-        
+
         // $response->assertStatus(200)
         //     ->assertJson([
         //         'success' => true,
@@ -286,7 +287,7 @@ class IdentifyVehicleTest extends TestCase
 
         // Assert: Response is successful
         $response->assertStatus(200);
-        
+
         // Assert: Only one vehicle with that plate exists (no duplicate created)
         $this->assertEquals(1, Vehicle::where('patente', 'XYZ789')->count());
     }

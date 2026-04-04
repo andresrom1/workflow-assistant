@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\AI;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\HandleUserIdUpdate;
 use App\Jobs\ProcessWhatsAppMessage;
 use App\Jobs\UpdateMessageStatus;
 use Illuminate\Http\Request;
@@ -66,6 +67,8 @@ class WhatsAppWebhookController extends Controller
             $waId = data_get($contact, 'wa_id');
             $messageId = data_get($message, 'id');
             $phoneNumberId = data_get($metadata, 'phone_number_id');
+            $extUserId = data_get($contact, 'user_id');
+            $extUsername = data_get($contact, 'profile.username');
 
             // Ignorar mensajes del mismo número emisor (evitar bucles).
             if ($waId && $messageId && $waId !== $phoneNumberId) {
@@ -76,6 +79,8 @@ class WhatsAppWebhookController extends Controller
                     $phoneNumberId,
                     data_get($contact, 'profile.name', 'Usuario'),
                     data_get($message, 'type', 'text'),
+                    $extUserId,
+                    $extUsername,
                 );
             }
         }
@@ -85,7 +90,12 @@ class WhatsAppWebhookController extends Controller
             UpdateMessageStatus::dispatch($entry['statuses'][0]);
         }
 
-        // 4. Responder 200 OK inmediatamente.
+        // 4. Actualización de BSUID cuando el usuario migra de número de teléfono.
+        if (! empty($entry['user_id_updates'])) {
+            HandleUserIdUpdate::dispatch($entry['user_id_updates'][0]);
+        }
+
+        // 5. Responder 200 OK inmediatamente.
         return response('', 200);
     }
 }
