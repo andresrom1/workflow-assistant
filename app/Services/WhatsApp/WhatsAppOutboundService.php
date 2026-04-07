@@ -28,7 +28,7 @@ class WhatsAppOutboundService
      * @param  string  $to  Número en formato E.164 SIN el "+" (ej: "5491112345678")
      * @param  string  $phoneNumberId  ID del número emisor (no el E.164)
      */
-    public function sendMessage(string $to, string $text, string $phoneNumberId, ?int $conversationId = null): array
+    public function sendMessage(string $to, string $text, string $phoneNumberId, ?int $conversationId = null, ?string $agentName = null): array
     {
         $response = $this->post($phoneNumberId, [
             'messaging_product' => 'whatsapp',
@@ -45,6 +45,7 @@ class WhatsAppOutboundService
             Message::create([
                 'conversation_id' => $conversationId,
                 'direction' => 'outbound',
+                'agent_name' => $agentName,
                 'content' => $text,
                 'external_message_id' => data_get($response, 'messages.0.id'),
                 'sender_phone' => $phoneNumberId,

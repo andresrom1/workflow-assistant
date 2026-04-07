@@ -2,14 +2,23 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\InspectionPhotoStatus;
+use App\Jobs\DeleteOrphanPhoto;
+use App\Jobs\EmitirPoliza;
+use App\Mail\CheckoutCompletadoMail;
 use App\Models\CheckoutSession;
+use App\Models\InspectionPhoto;
 use App\Models\Quote;
-// use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use App\Services\SettingsService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use Inertia\Response;
 
 class CheckoutController extends Controller
 {
@@ -17,7 +26,7 @@ class CheckoutController extends Controller
      * Muestra el formulario de checkout.
      * El token opaco identifica unívocamente el par (quote + alternative).
      */
-    public function show(Request $request, string $token): \Inertia\Response
+    public function show(Request $request, string $token): Response
     {
         $quote = Quote::where('checkout_token', $token)->firstOrFail();
 
@@ -72,12 +81,12 @@ class CheckoutController extends Controller
      * Sube una foto individual a Cloudinary (upload incremental).
      * Se llama desde el frontend cada vez que el usuario captura una foto.
      */
-    public function uploadPhoto(Request $request): \Illuminate\Http\JsonResponse
+    public function uploadPhoto(Request $request): JsonResponse
     {
         $request->validate([
             'checkout_token' => 'required|string',
-            'photo_key'      => 'required|string|max:50',
-            'photo'          => 'required|file|mimes:jpeg,jpg,png|max:10240',
+            'photo_key' => 'required|string|max:50',
+            'photo' => 'required|file|mimes:jpeg,jpg,png|max:10240',
         ]);
 
         $quote = Quote::where('checkout_token', $request->input('checkout_token'))->firstOrFail();
@@ -93,59 +102,56 @@ class CheckoutController extends Controller
             $photoKey = $request->input('photo_key');
 
             // 1. Guardar referencia de la foto existente (si hay)
-            $existing = \App\Models\InspectionPhoto::where('quote_id', $quote->id)
+            $existing = InspectionPhoto::where('quote_id', $quote->id)
                 ->where('photo_key', $photoKey)
                 ->first();
 
-            // 2. Subir nueva foto al destination final
-            $cloudinary = app(\Cloudinary\Cloudinary::class);
-
-            $result = $cloudinary->uploadApi()->upload($photo->getRealPath(), [
-                'folder'        => "checkout/{$quote->id}/photos",
-                'public_id'     => "photo_{$photoKey}",
-                'resource_type' => 'image',
-                'overwrite'     => true,
-                'format'        => 'jpg',
-            ]);
+            // 2. Subir nueva foto a R2
+            $storagePath = "checkout/{$quote->id}/photos/photo_{$photoKey}.jpg";
+            Storage::disk('r2')->putFileAs(
+                "checkout/{$quote->id}/photos",
+                $photo,
+                "photo_{$photoKey}.jpg",
+                'public'
+            );
+            $storageUrl = Storage::disk('r2')->url($storagePath);
 
             // 3. UpdateOrCreate en base de datos (Status Temp)
-            \App\Models\InspectionPhoto::updateOrCreate(
+            InspectionPhoto::updateOrCreate(
                 [
-                    'quote_id'  => $quote->id,
+                    'quote_id' => $quote->id,
                     'photo_key' => $photoKey,
                 ],
                 [
-                    'cloudinary_public_id' => $result['public_id'],
-                    'cloudinary_url'       => $result['secure_url'],
-                    'status'               => \App\Enums\InspectionPhotoStatus::Temp,
-                    'uploaded_by_ip'       => $request->ip(),
-                    'image_width'          => $result['width'] ?? null,
-                    'image_height'         => $result['height'] ?? null,
-                    'file_size'            => $result['bytes'] ?? null,
+                    'storage_path' => $storagePath,
+                    'storage_url' => $storageUrl,
+                    'status' => InspectionPhotoStatus::Temp,
+                    'uploaded_by_ip' => $request->ip(),
+                    'file_size' => $photo->getSize(),
                 ]
             );
 
             // 4. Despachar Job para eliminar el asset viejo (Asincrónico)
-            if ($existing && $existing->cloudinary_public_id !== $result['public_id']) {
-                \App\Jobs\DeleteOrphanPhoto::dispatch($existing->cloudinary_public_id);
+            if ($existing && $existing->storage_path !== $storagePath) {
+                DeleteOrphanPhoto::dispatch($existing->storage_path);
             }
 
             return response()->json([
-                'success'   => true,
-                'public_id' => $result['public_id'],
-                'url'       => $result['secure_url'],
+                'success' => true,
+                'public_id' => $storagePath,
+                'url' => $storageUrl,
             ]);
 
         } catch (\Exception $e) {
-            Log::error('CheckoutController: Error subiendo foto a Cloudinary', [
+            Log::error('CheckoutController: Error subiendo foto a R2', [
                 'quote_id' => $quote->id ?? null,
-                'key'      => $request->input('photo_key'),
-                'error'    => $e->getMessage(),
+                'key' => $request->input('photo_key'),
+                'error' => $e->getMessage(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'error'   => 'Error al subir la foto. Intentá de nuevo.',
+                'error' => 'Error al subir la foto. Intentá de nuevo.',
             ], 500);
         }
     }
@@ -154,7 +160,7 @@ class CheckoutController extends Controller
      * Procesa el envío del formulario de checkout.
      * Recibe los datos del formulario + photo_ids (public_ids de Cloudinary ya subidos).
      */
-    public function submit(Request $request): \Illuminate\Http\JsonResponse
+    public function submit(Request $request): JsonResponse
     {
         $token = $request->input('checkout_token');
 
@@ -174,75 +180,75 @@ class CheckoutController extends Controller
 
         $validated = $request->validate([
             // Datos personales
-            'nombre'              => 'required|string|max:255',
-            'dni'                 => 'required|string|max:20',
-            'email'               => 'required|email|max:255',
-            'telefono'            => 'required|string|max:50',
+            'nombre' => 'required|string|max:255',
+            'dni' => 'required|string|max:20',
+            'email' => 'required|email|max:255',
+            'telefono' => 'required|string|max:50',
             // Domicilio (5 campos)
-            'domicilio_calle'     => 'required|string|max:255',
-            'domicilio_numero'    => 'required|string|max:20',
-            'domicilio_cp'        => 'required|string|max:10',
+            'domicilio_calle' => 'required|string|max:255',
+            'domicilio_numero' => 'required|string|max:20',
+            'domicilio_cp' => 'required|string|max:10',
             'domicilio_provincia' => 'required|string|max:100',
             'domicilio_localidad' => 'required|string|max:100',
             // Vehículo (confirmación)
-            'vehiculo_uso'        => 'required|string|in:particular,otro',
+            'vehiculo_uso' => 'required|string|in:particular,otro',
             'vehiculo_nro_chasis' => 'required|string|max:50',
-            'vehiculo_nro_motor'  => 'required|string|max:50',
+            'vehiculo_nro_motor' => 'required|string|max:50',
             // Tarjeta de crédito
-            'cc_brand'            => 'required|string|in:visa,mastercard,amex,naranja,cabal,maestro',
-            'cc_pan'              => ['required', 'string', 'regex:/^\d{16}$/'],
-            'cc_expiry'           => ['required', 'string', 'regex:/^\d{2}\/\d{2}$/'],
-            'cc_holder_name'      => 'required|string|max:255',
-            'cc_holder_dni'       => 'required|string|max:20',
-            // Fotos — ids de cloudinary para fallback, pero ahora validamos vs BD
-            'photo_ids'           => 'required|array',
-            'photo_ids.*'         => 'required|string|max:255',
+            'cc_brand' => 'required|string|in:visa,mastercard,amex,naranja,cabal,maestro',
+            'cc_pan' => ['required', 'string', 'regex:/^\d{16}$/'],
+            'cc_expiry' => ['required', 'string', 'regex:/^\d{2}\/\d{2}$/'],
+            'cc_holder_name' => 'required|string|max:255',
+            'cc_holder_dni' => 'required|string|max:20',
+            // Fotos — storage_paths de R2, validamos cantidad vs BD
+            'photo_ids' => 'required|array',
+            'photo_ids.*' => 'required|string|max:255',
         ]);
 
         // Validar cantidad de fotos en BD — valor configurable desde /admin/settings
         $requiredPhotoCount = (int) app(SettingsService::class)->get('checkout.required_photos', 7);
-        $tempPhotosCount = \App\Models\InspectionPhoto::where('quote_id', $quote->id)
-            ->where('status', \App\Enums\InspectionPhotoStatus::Temp)
+        $tempPhotosCount = InspectionPhoto::where('quote_id', $quote->id)
+            ->where('status', InspectionPhotoStatus::Temp)
             ->count();
 
         abort_if($tempPhotosCount < $requiredPhotoCount, 422, 'Faltan fotos de inspección o no fueron procesadas correctamente.');
 
         // Ejecutar las mutaciones de BD en una transacción atómica
-        \Illuminate\Support\Facades\DB::transaction(function () use ($quote, $alternative, $validated) {
-            
+        DB::transaction(function () use ($quote, $alternative, $validated) {
+
             // 1. Guardar CheckoutSession
-            $session =CheckoutSession::updateOrCreate(
+            $session = CheckoutSession::updateOrCreate(
                 ['quote_id' => $quote->id],
                 [
-                    'quote_alternative_id'     => $alternative->id,
-                    'status'                   => 'submitted',
-                    'nombre'                   => $validated['nombre'],
-                    'dni'                      => $validated['dni'],
-                    'email'                    => $validated['email'],
-                    'telefono'                 => $validated['telefono'],
-                    'domicilio_calle'          => $validated['domicilio_calle'],
-                    'domicilio_numero'         => $validated['domicilio_numero'],
-                    'domicilio_cp'             => $validated['domicilio_cp'],
-                    'domicilio_provincia'      => $validated['domicilio_provincia'],
-                    'domicilio_localidad'      => $validated['domicilio_localidad'],
-                    'vehiculo_uso'             => $validated['vehiculo_uso'],
-                    'vehiculo_nro_chasis'      => $validated['vehiculo_nro_chasis'],
-                    'vehiculo_nro_motor'       => $validated['vehiculo_nro_motor'],
-                    'cc_brand'                 => $validated['cc_brand'],
-                    'cc_pan_encrypted'         => Crypt::encryptString($validated['cc_pan']),
-                    'cc_expiry_encrypted'      => Crypt::encryptString($validated['cc_expiry']),
+                    'quote_alternative_id' => $alternative->id,
+                    'status' => 'submitted',
+                    'nombre' => $validated['nombre'],
+                    'dni' => $validated['dni'],
+                    'email' => $validated['email'],
+                    'telefono' => $validated['telefono'],
+                    'domicilio_calle' => $validated['domicilio_calle'],
+                    'domicilio_numero' => $validated['domicilio_numero'],
+                    'domicilio_cp' => $validated['domicilio_cp'],
+                    'domicilio_provincia' => $validated['domicilio_provincia'],
+                    'domicilio_localidad' => $validated['domicilio_localidad'],
+                    'vehiculo_uso' => $validated['vehiculo_uso'],
+                    'vehiculo_nro_chasis' => $validated['vehiculo_nro_chasis'],
+                    'vehiculo_nro_motor' => $validated['vehiculo_nro_motor'],
+                    'cc_brand' => $validated['cc_brand'],
+                    'cc_pan_encrypted' => Crypt::encryptString($validated['cc_pan']),
+                    'cc_expiry_encrypted' => Crypt::encryptString($validated['cc_expiry']),
                     'cc_holder_name_encrypted' => Crypt::encryptString($validated['cc_holder_name']),
-                    'cc_holder_dni_encrypted'  => Crypt::encryptString($validated['cc_holder_dni']),
-                    'photo_paths'              => $validated['photo_ids'],
-                    'submitted_at'             => now(),
+                    'cc_holder_dni_encrypted' => Crypt::encryptString($validated['cc_holder_dni']),
+                    'photo_paths' => collect($validated['photo_ids'])->map(fn ($path) => Storage::disk('r2')->url($path))->toArray(),
+                    'submitted_at' => now(),
                 ]
             );
 
             // 2. Transicionar fotos de temp a confirmed
-            \App\Models\InspectionPhoto::where('quote_id', $quote->id)
-                ->where('status', \App\Enums\InspectionPhotoStatus::Temp)
+            InspectionPhoto::where('quote_id', $quote->id)
+                ->where('status', InspectionPhotoStatus::Temp)
                 ->update([
-                    'status'       => \App\Enums\InspectionPhotoStatus::Confirmed,
+                    'status' => InspectionPhotoStatus::Confirmed,
                     'confirmed_at' => now(),
                 ]);
 
@@ -251,16 +257,16 @@ class CheckoutController extends Controller
 
             // Despachar emisión de póliza (skeleton — cuando API esté lista, solo
             // hay que implementar PolizaEmisionService::emitir())
-            \App\Jobs\EmitirPoliza::dispatch($quote->id, $session->id);
+            EmitirPoliza::dispatch($quote->id, $session->id);
 
             // Notificación interna por mail
-            \Illuminate\Support\Facades\Mail::to(
+            Mail::to(
                 config('mail.checkout_notifications_to', config('mail.from.address'))
-            )->queue(new \App\Mail\CheckoutCompletadoMail($quote, $session));
+            )->queue(new CheckoutCompletadoMail($quote, $session));
         });
 
         return response()->json([
-            'success'      => true,
+            'success' => true,
             'redirect_url' => route('checkout.success', ['quote' => $quote->id]),
         ]);
     }
@@ -268,7 +274,7 @@ class CheckoutController extends Controller
     /**
      * Pantalla de confirmación post-checkout.
      */
-    public function success(Quote $quote): \Inertia\Response
+    public function success(Quote $quote): Response
     {
         $session = $quote->checkoutSession;
 
@@ -283,21 +289,21 @@ class CheckoutController extends Controller
      * Elimina explícitamente una foto tomada, borrándola de la base de datos
      * y despachando un Job para eliminarla de Cloudinary.
      */
-    public function deletePhoto(Request $request): \Illuminate\Http\JsonResponse
+    public function deletePhoto(Request $request): JsonResponse
     {
         $request->validate([
             'checkout_token' => 'required|string',
-            'photo_key'      => 'required|string|max:50',
+            'photo_key' => 'required|string|max:50',
         ]);
 
         $quote = Quote::where('checkout_token', $request->input('checkout_token'))->firstOrFail();
 
-        $photo = \App\Models\InspectionPhoto::where('quote_id', $quote->id)
+        $photo = InspectionPhoto::where('quote_id', $quote->id)
             ->where('photo_key', $request->input('photo_key'))
-            ->where('status', \App\Enums\InspectionPhotoStatus::Temp)
+            ->where('status', InspectionPhotoStatus::Temp)
             ->firstOrFail();
 
-        \App\Jobs\DeleteOrphanPhoto::dispatch($photo->cloudinary_public_id);
+        DeleteOrphanPhoto::dispatch($photo->storage_path);
         $photo->delete();
 
         return response()->json(['success' => true]);

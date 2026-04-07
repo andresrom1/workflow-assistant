@@ -1,7 +1,6 @@
 ---
   name: nav-bar
-  description: >-
-  Maintain the navigation bar for the admin panel. Activates when adding new links to the nav bar, restyling the nav bar, or when the user mentions navigation, nav bar, links, menu, sidebar, or layout changes related to navigation.
+  description: Maintain the navigation bar for the admin panel. Activates when adding new links to the nav bar, restyling the nav bar, or when the user mentions navigation, nav bar, links, menu, sidebar, or layout changes related to navigation.
 ---
 
 ## Nav Bar

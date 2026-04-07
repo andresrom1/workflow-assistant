@@ -54,6 +54,8 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    'checkout_url' => env('CHECKOUT_URL', null),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
@@ -128,19 +130,18 @@ return [
     | LOGGIN
     |--------------------------------------------------------------------------
     |
-    | Maneja granularmente el logeos 
+    | Maneja granularmente el logeos
     |
-    */ 
+    */
     'log' => [
         'customer' => env('LOG_CUSTOMER', false),
-        'vehicle'  => env('LOG_VEHICLE', false),
+        'vehicle' => env('LOG_VEHICLE', false),
         'conversation' => env('LOG_CONVERSATION', false),
         'quotes' => env('LOG_QUOTES', false),
         // 'customer' => env(true),
         // 'vehicle'  => env(true),
         // 'conversation' => env(true),
         // 'quotes' => env(true),
-        ]
-  
+    ],
 
 ];

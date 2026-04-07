@@ -8,6 +8,7 @@ use App\AI\Agents\CoveragePreferenceAgent;
 use App\AI\Agents\CustomerIdentifierAgent;
 use App\AI\Agents\QuoteAgent;
 use App\AI\Agents\VehicleIdentifierAgent;
+use App\AI\Tools\CheckCoverageRuleTool;
 use App\AI\Tools\CheckoutTool;
 use App\AI\Tools\CoveragePreferenceTool;
 use App\AI\Tools\GetQuoteTool;
@@ -32,7 +33,10 @@ class InsuranceOrchestrator
      * El estado se actualiza dentro de cada Tool al ejecutarse exitosamente,
      * por lo que en el próximo mensaje el orquestador derivará al siguiente agente.
      */
-    public function handle(string $message, Conversation $conversation): string
+    /**
+     * @return array{text: string, agent: string}
+     */
+    public function handle(string $message, Conversation $conversation): array
     {
         // Identificar al cliente automáticamente usando el teléfono del canal (si está disponible).
         // Esto evita pedirle al usuario su número cuando ya lo tenemos del webhook.
@@ -49,7 +53,10 @@ class InsuranceOrchestrator
         /** @var AgentResponse $response */
         $response = $agent->continueLastConversation($waUser)->prompt($message);
 
-        return $response->text;
+        return [
+            'text' => $response->text,
+            'agent' => class_basename($agent),
+        ];
     }
 
     /**
@@ -99,21 +106,28 @@ class InsuranceOrchestrator
      */
     private function resolveAgent(array $state, Conversation $conversation): Agent&Conversational
     {
+        $coverageTool = new CheckCoverageRuleTool;
+
         return match (true) {
             ! $state['customer_identified'] => new CustomerIdentifierAgent(
-                new IdentifyCustomerTool($this->adapter, $conversation)
+                new IdentifyCustomerTool($this->adapter, $conversation),
+                $coverageTool,
             ),
             ! $state['vehicle_identified'] => new VehicleIdentifierAgent(
-                new IdentifyVehicleTool($this->adapter, $conversation)
+                new IdentifyVehicleTool($this->adapter, $conversation),
+                $coverageTool,
             ),
             ! $state['coverage_set'] => new CoveragePreferenceAgent(
-                new CoveragePreferenceTool($this->adapter, $conversation)
+                new CoveragePreferenceTool($this->adapter, $conversation),
+                $coverageTool,
             ),
             ! $state['quote_ready'] => new QuoteAgent(
-                new GetQuoteTool($this->adapter, $conversation)
+                new GetQuoteTool($this->adapter, $conversation),
+                $coverageTool,
             ),
             default => new CheckoutAgent(
-                new CheckoutTool($this->adapter, $conversation)
+                new CheckoutTool($this->adapter, $conversation),
+                $coverageTool,
             ),
         };
     }

@@ -92,16 +92,92 @@ class MyTool implements Tool
 - `app/Adapters/AIProviders/` — new adapters (WhatsAppAdapter, etc.)
 - `app/Adapters/n8n-whatsapp/` — deprecated, do not use
 
-### WhatsApp webhook flow
-1. `POST /api/webhooks/whatsapp` → `WhatsAppWebhookController::handleIncoming()`
-2. Validates HMAC with `hash_equals()` (timing-safe)
-3. Dispatches `ProcessWhatsAppMessage` Job (returns 200 OK immediately)
-4. Job → `InsuranceOrchestrator::handle()` → sub-agent → Tool → `WhatsAppAdapter` method
-5. `WhatsAppOutboundService::sendMessage()` sends the reply
+### WhatsApp webhook flow — pipeline de 3 etapas
+
+```
+Webhook → ProcessWhatsAppMessage (default)
+               ↓ persiste mensaje con processed_at=null
+               ↓ dispatch con delay 2s
+          ProcessConversationInbox (whatsapp-ai)
+               ↓ agrupa todos los mensajes pendientes
+               ↓ concatena con \n → una sola llamada al AI
+               ↓ marca processed_at ANTES de llamar al AI
+          InsuranceOrchestrator::handle($combinedBody)
+               ↓
+          SendWhatsAppMessage (whatsapp-outbound)
+               ↓
+          WhatsAppOutboundService::sendMessage()
+```
+
+**Por qué 3 etapas:**
+- **Ingesta** (`ProcessWhatsAppMessage`): rápida, sin AI, solo persiste y despacha
+- **Inbox** (`ProcessConversationInbox`): agrupa mensajes rápidos del usuario en una sola llamada al AI → una sola respuesta coherente. Usa `WithoutOverlapping("inbox:{$conversationId}")` para serialización por conversación.
+- **Outbound** (`SendWhatsAppMessage`): retry independiente del AI. Si Meta API falla, no se re-procesa el LLM.
+
+**Regla crítica:** `processed_at` se setea ANTES de llamar al AI. Si el job falla y reintenta, encuentra el inbox vacío y sale limpiamente — evita doble llamada al LLM con los mismos mensajes.
+
+**Debounce:** El inbox processor se despacha con `->delay(now()->addSeconds(2))`. Si llegan 3 mensajes en 1 segundo, los 3 jobs de ingesta terminan antes de que el primer inbox processor corra, y este los agrupa todos.
 
 ### Idempotencia
 Use the `wamid` (WhatsApp message ID) as cache key: `processed_wamid_{wamid}`.
 TTL: 24 hours. Meta may resend the same webhook if the 200 response is delayed.
+
+### Arquitectura por capas: Adapter → Service → Repo
+
+```
+AI Agent Tool
+     ↓
+WhatsAppAdapter          ← conoce WhatsApp, normaliza payloads, maneja errores del canal
+     ↓
+CustomerIdentificationService / VehicleIdentificationService / QuoteService ...
+     ↓                   ← lógica de negocio pura, agnóstica del canal
+CustomerRepository / VehicleRepository / QuoteRepository ...
+                         ← acceso a datos, agnóstico del canal
+```
+
+**Regla:** Los Services y Repositories no saben que están siendo llamados desde WhatsApp. Reciben y retornan modelos de dominio (`Customer`, `Vehicle`, `Quote`). El Adapter es el único que conoce el canal.
+
+**Por qué importa:** permite reutilizar la misma lógica de negocio desde distintos canales (WhatsApp, REST API, web UI) sin duplicar código. Al agregar un nuevo canal, solo se escribe un nuevo Adapter.
+
+**Ubicaciones:**
+- `app/Adapters/AIProviders/WhatsAppAdapter.php` — traduce tool calls del AI a llamadas de servicio
+- `app/Services/` — lógica de negocio (agnóstica)
+- `app/Repositories/` — acceso a datos (agnóstico)
+
+## Checkout — Fotos de inspección en mobile (arquitectura de memoria)
+
+El formulario de checkout captura 7 fotos desde la cámara del celular. Los navegadores móviles (iOS Safari, Android Chrome) tienen un límite estricto de RAM (~100-200MB). Si se excede, el OS mata el tab y el formulario se resetea perdiendo todo el estado.
+
+### Reglas OBLIGATORIAS — NO modificar sin entender el impacto
+
+1. **Canvas manual con destrucción agresiva** (`processPhoto` en `Checkout/Show.vue`):
+   - `img.src = ''` + `img.onload = null` + `img.onerror = null` después de dibujar al canvas
+   - `URL.revokeObjectURL()` inmediatamente en `onload` / `onerror`
+   - `canvas.width = 0; canvas.height = 0` después de generar el blob
+   - **NO reemplazar con librerías** como `browser-image-compression` — no ofrecen control granular de destrucción de bitmap y crashean en la 3ra-4ta foto en mobile
+
+2. **Micro-thumbnails para preview** (64x64px data URL):
+   - El `<img>` de preview en cada card usa un data URL de 64px generado desde el canvas (antes de destruirlo)
+   - **NUNCA usar la URL completa de R2/cloud** como `src` del preview — cada imagen de 1024px decodifica a ~4MB de bitmap en el DOM; con 3+ fotos = OOM crash
+   - 7 thumbnails × 16KB bitmap = 112KB total vs 7 × 4MB = 28MB con URLs completas
+
+3. **Processing lock** (`processingLock`):
+   - Serializa las capturas para que nunca haya dos bitmaps de cámara decodificándose simultáneamente
+   - Se setea en `true` al inicio de `onPhotoCapture` y en `false` en el `finally`
+
+4. **Prevención de reseteo por Inertia** (`stopPopState` + `stopVisibilityChange`):
+   - Android dispara `popstate` al volver de la cámara; Inertia lo intercepta y destruye el estado de Vue
+   - Ambos handlers deben registrarse con `true` (fase capture) en `onMounted` y removerse en `onUnmounted`
+   - **El handler de `visibilitychange` debe ser la función nombrada, NO una arrow anónima** — si se registra una anónima, `removeEventListener` no la encuentra y el evento llega a Inertia
+
+### Storage: Cloudflare R2
+
+- Disk `r2` en `config/filesystems.php` (driver S3, endpoint R2, `use_path_style_endpoint: true`)
+- Fotos se suben incrementalmente durante el checkout, no al final
+- `InspectionPhoto` model: `storage_path` (path en R2) + `storage_url` (URL pública)
+- `CheckoutSession.photo_paths`: almacena URLs públicas de R2 (resueltas en `submit()`)
+- `DeleteOrphanPhoto` job: `Storage::disk('r2')->delete($path)` con 3 reintentos
+- `CleanupTempPhotos` command: borra fotos temp > 24h
 
 ## Verification Scripts
 

@@ -24,12 +24,13 @@ class SendWhatsAppMessage implements ShouldQueue
         private readonly string $text,
         private readonly string $phoneNumberId,
         private readonly ?int $conversationId = null,
+        private readonly ?string $agentName = null,
     ) {}
 
     public function handle(WhatsAppOutboundService $waService): void
     {
         try {
-            $waService->sendMessage($this->waId, $this->text, $this->phoneNumberId, $this->conversationId);
+            $waService->sendMessage($this->waId, $this->text, $this->phoneNumberId, $this->conversationId, $this->agentName);
         } catch (WhatsAppSpamLimitException $e) {
             $this->fail($e);
         }

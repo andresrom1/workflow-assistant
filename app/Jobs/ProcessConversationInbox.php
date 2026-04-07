@@ -66,7 +66,7 @@ class ProcessConversationInbox implements ShouldQueue
 
         $reply = $orchestrator->handle($combinedBody, $conversation);
 
-        SendWhatsAppMessage::dispatch($this->waId, $reply, $this->phoneNumberId, $this->conversationId)
+        SendWhatsAppMessage::dispatch($this->waId, $reply['text'], $this->phoneNumberId, $this->conversationId, $reply['agent'])
             ->onQueue('whatsapp-outbound');
 
         $contactName = $messages->first()?->sender_name;

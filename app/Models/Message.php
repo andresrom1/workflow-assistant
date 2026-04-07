@@ -10,6 +10,7 @@ class Message extends Model
     protected $fillable = [
         'conversation_id',
         'direction',
+        'agent_name',
         'content',
         'external_message_id',
         'sender_name',
