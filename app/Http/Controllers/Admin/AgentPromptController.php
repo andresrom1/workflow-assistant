@@ -33,7 +33,7 @@ class AgentPromptController extends Controller
 
     public function index(): Response
     {
-        $agents = collect(self::AGENT_LABELS)->map(function (string $label, string $key) {
+        $agents = collect(self::AGENT_LABELS)->map(function (string $label, string $key): array {
             $active = AgentPrompt::activeFor($key);
 
             return [
@@ -41,8 +41,8 @@ class AgentPromptController extends Controller
                 'label' => $label,
                 'version' => $active?->version,
                 'updated_at' => $active?->updated_at?->toIso8601String(),
-                'preview' => $active ? $this->extractPreview($active->content) : null,
-                'has_prompt' => $active !== null,
+                'preview' => $active instanceof AgentPrompt ? $this->extractPreview($active->content) : null,
+                'has_prompt' => $active instanceof AgentPrompt,
             ];
         })->values();
 
@@ -58,7 +58,7 @@ class AgentPromptController extends Controller
         $versions = AgentPrompt::forAgent($agentKey)
             ->orderByDesc('version')
             ->get()
-            ->map(fn (AgentPrompt $p) => [
+            ->map(fn (AgentPrompt $p): array => [
                 'id' => $p->id,
                 'version' => $p->version,
                 'is_active' => $p->is_active,
@@ -126,8 +126,8 @@ class AgentPromptController extends Controller
     private function extractPreview(string $content): string
     {
         $lines = array_filter(
-            array_map('trim', explode("\n", $content)),
-            fn (string $line) => $line !== '' && ! str_starts_with($line, '#')
+            array_map(trim(...), explode("\n", $content)),
+            fn (string $line): bool => $line !== '' && ! str_starts_with($line, '#')
         );
 
         $preview = implode(' ', array_slice(array_values($lines), 0, 2));

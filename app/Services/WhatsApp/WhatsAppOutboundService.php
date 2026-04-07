@@ -9,9 +9,9 @@ use Illuminate\Support\Facades\Log;
 
 class WhatsAppOutboundService
 {
-    private string $baseUrl;
+    private readonly string $baseUrl;
 
-    private string $accessToken;
+    private readonly string $accessToken;
 
     public function __construct()
     {

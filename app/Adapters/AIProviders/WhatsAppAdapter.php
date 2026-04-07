@@ -190,7 +190,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         $quoteId = null;
 
         try {
-            DB::transaction(function () use ($conversation, $vehicle, $data, &$quoteId) {
+            DB::transaction(function () use ($conversation, $vehicle, $data, &$quoteId): void {
                 $this->coverageService->saveCoveragePreference(
                     $conversation->id,
                     $vehicle->id,
@@ -250,7 +250,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             );
         }
 
-        $alternatives = $quote->alternatives->map(fn (QuoteAlternative $alt) => [
+        $alternatives = $quote->alternatives->map(fn (QuoteAlternative $alt): array => [
             'quote_id' => $quote->id,
             'quote_alternative_id' => $alt->id,
             'aseguradora' => $alt->aseguradora,
@@ -314,7 +314,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             'checkout_alternative_id' => $alternative->id,
         ]);
 
-        $checkoutUrl = rtrim(config('app.checkout_url', config('app.url')), '/')
+        $checkoutUrl = rtrim((string) config('app.checkout_url', config('app.url')), '/')
             .'/checkout/'.$token;
 
         return $this->formatSuccess(

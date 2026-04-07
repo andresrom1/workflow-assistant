@@ -9,11 +9,13 @@ use Illuminate\Support\Facades\DB;
 class SettingsService
 {
     const CACHE_KEY = 'system_settings_map';
+
     const CACHE_TTL = 3600; // 1 hora — file cache
 
     public function get(string $key, mixed $default = null): mixed
     {
         $map = $this->loadAll();
+
         return $map[$key] ?? $default;
     }
 
@@ -23,7 +25,7 @@ class SettingsService
      */
     public function saveGroup(string $group, array $data): void
     {
-        DB::transaction(function () use ($group, $data) {
+        DB::transaction(function () use ($group, $data): void {
             foreach ($data as $key => $value) {
                 SystemSetting::where('key', $key)
                     ->where('group', $group)
@@ -51,10 +53,8 @@ class SettingsService
      */
     private function loadAll(): array
     {
-        return Cache::remember(self::CACHE_KEY, self::CACHE_TTL, function () {
-            return SystemSetting::all()
-                ->mapWithKeys(fn ($s) => [$s->key => $s->getCastValue()])
-                ->toArray();
-        });
+        return Cache::remember(self::CACHE_KEY, self::CACHE_TTL, fn () => SystemSetting::all()
+            ->mapWithKeys(fn ($s): array => [$s->key => $s->getCastValue()])
+            ->toArray());
     }
 }

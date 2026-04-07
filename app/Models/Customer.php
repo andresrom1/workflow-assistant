@@ -24,7 +24,7 @@ class Customer extends Model
     protected $casts = [
         'metadata' => 'array',
         'is_anonymous' => 'boolean',
-        'completed_at' => 'datetime'
+        'completed_at' => 'datetime',
     ];
 
     public function vehicles(): HasMany
@@ -60,30 +60,27 @@ class Customer extends Model
     */
     public function hasContactInfo(): bool
     {
-        return !is_null($this->email) 
-            || !is_null($this->phone);
+        return ! is_null($this->email)
+            || ! is_null($this->phone);
     }
 
     /**
      * Determine if customer has legal identification.
-     * @return bool
      */
     public function hasLegalIdentification(): bool
     {
-        return !is_null($this->dni);
+        return ! is_null($this->dni);
     }
 
     /**
-    * Determine if customer can proceed to full policy flow.
-    * TODO: Implement full validation logic
-    * - hasLegalIdentification()
-    * - hasContactInfo()
-    * - profile_complete
-    * - has vehicle inspection
-    * - has payment method
-    * @return bool
-    */
-
+     * Determine if customer can proceed to full policy flow.
+     * TODO: Implement full validation logic
+     * - hasLegalIdentification()
+     * - hasContactInfo()
+     * - profile_complete
+     * - has vehicle inspection
+     * - has payment method
+     */
     public function canEmitPolicy(): bool
     {
         return true;

@@ -13,19 +13,6 @@ class UpdateMessageStatus implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    /**
-     * Jerarquía de estados: un estado con valor mayor nunca puede ser sobreescrito
-     * por uno de valor menor (Shadow Delivery — fenómeno multi-dispositivo de WhatsApp).
-     *
-     * @var array<string, int>
-     */
-    private const STATUS_HIERARCHY = [
-        'failed' => 1,
-        'sent' => 2,
-        'delivered' => 3,
-        'read' => 4,
-    ];
-
     public function __construct(private readonly array $statusData) {}
 
     public function handle(): void

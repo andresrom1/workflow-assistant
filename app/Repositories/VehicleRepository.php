@@ -1,4 +1,5 @@
 <?php
+
 // app/Repositories/VehicleRepository.php
 
 namespace App\Repositories;
@@ -9,17 +10,16 @@ use Log;
 
 class VehicleRepository
 {
-    
     public function create(array $data): Vehicle
     {
         return Vehicle::create($data);
     }
-    
+
     public function update(Vehicle $vehicle, array $data): bool
     {
         return $vehicle->update($data);
     }
-    
+
     public function findById(int $id): ?Vehicle
     {
         return Vehicle::find($id);
@@ -27,20 +27,22 @@ class VehicleRepository
 
     public function findByPatente(string $patente): ?Vehicle
     {
-        Log::info(__METHOD__ . __LINE__ . ' Buscando cliente', ['patente' => $patente]);
+        Log::info(__METHOD__.__LINE__.' Buscando cliente', ['patente' => $patente]);
+
         return Vehicle::where('patente', strtoupper($patente))->first();
     }
+
     /**
      * Busca un vehículo por sus especificaciones o lo crea si no existe.
-     * @param array $specs Las especificaciones del vehiculo
-     * @param Customer $customer
+     *
+     * @param  array  $specs  Las especificaciones del vehiculo
      */
     public function findOrCreate(array $specs, Customer $customer): Vehicle
     {
         return Vehicle::firstOrCreate(
             [
                 'patente' => $specs['patente'],
-                
+
             ],
             [
                 'marca' => $specs['marca'],
@@ -71,11 +73,11 @@ class VehicleRepository
             ->with($relations)
             ->orderBy('created_at', 'desc');
 
-        if (!empty($search)) {
-            $query->where(function ($q) use ($search) {
+        if ($search !== '' && $search !== '0') {
+            $query->where(function ($q) use ($search): void {
                 $q->where('patente', 'like', "%{$search}%")
-                  ->orWhere('marca', 'like', "%{$search}%")
-                  ->orWhere('mdelo', 'like', "%{$search}%");
+                    ->orWhere('marca', 'like', "%{$search}%")
+                    ->orWhere('mdelo', 'like', "%{$search}%");
             });
         }
 

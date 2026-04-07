@@ -6,12 +6,10 @@ namespace App\Services;
 
 use App\Models\Conversation;
 use App\Models\Customer;
-use App\Models\Vehicle;
 use App\Repositories\ConversationRepository;
 use App\Repositories\CustomerRepository;
 use App\Repositories\VehicleRepository;
 use App\Traits\ConditionalLogger;
-use Illuminate\Support\Facades\Log;
 
 class CustomerIdentificationService
 {
@@ -41,7 +39,7 @@ class CustomerIdentificationService
         // PASO 1: Buscar customer existente
         $customer = $this->findCustomer($type, $value);
 
-        if ($customer) {
+        if ($customer instanceof Customer) {
             $this->logCustomer('Cliente encontrado', ['id' => $customer->id]);
 
             return $customer;
@@ -95,66 +93,6 @@ class CustomerIdentificationService
         // $this->conversationRepo->updateActivity($external_conversation_id);
 
         // return $prepCustomer;
-    }
-
-    /**
-     * Buscar customer anónimo por thread_id
-     *
-     * @param  string  $threadId  El trhead ID
-     */
-    private function findAnonymousCustomerByThread(string $threadId): ?Customer
-    {
-        $conversation = $this->conversationRepo->findByThreadId($threadId);
-
-        if ($conversation && $conversation->customer && $conversation->customer->is_anonymous) {
-            return $conversation->customer;
-        }
-
-        return null;
-    }
-
-    /**
-     * Completar customer anónimo con nuevo identificador
-     *
-     * @param  Customer  $customer  El customer anónimo
-     * @param  string  $type  El tipo de identificador
-     * @param  string  $value  El valor del identificador
-     * @param  string  $threadId  El thread ID
-     */
-    private function completeAnonymousCustomer(
-        Customer $customer,
-        string $type,
-        string $value,
-        string $threadId): array
-    {
-        Log::info('Completando customer anónimo', [
-            'customer_id' => $customer->id,
-            'type' => $type,
-        ]);
-
-        // Actualizar customer con el identificador
-        $customer = $this->customerRepo->completeAnonymous($customer, $type, $value);
-
-        // Obtener datos actualizados
-        $conversations = $this->customerRepo->getConversations($customer);
-        $vehicles = $this->customerRepo->getVehicles($customer);
-
-        return [
-            'success' => true,
-            'customer_id' => $customer->id,
-            'name' => $customer->name,
-            'email' => $customer->email,
-            'phone' => $customer->phone,
-            'dni' => $customer->dni,
-            'is_new' => false,
-            'was_anonymous' => true,
-            'is_anonymous' => false,
-            'previous_conversations' => $conversations,
-            'vehicles' => $vehicles,
-            'message' => $customer->name
-                ? "Perfecto {$customer->name}, ya te he identificado completamente."
-                : 'Perfecto, ya te he identificado completamente.',
-        ];
     }
 
     /**
@@ -227,42 +165,10 @@ class CustomerIdentificationService
         }
     }
 
-    private function handleOrphanVehicle(?Vehicle $vehicle): ?Customer
-    {
-        Log::info(__METHOD__.__LINE__.'Vehículo sin cliente', ['vehicle_id' => $vehicle?->id ?? null, 'customer_id' => $vehicle?->customer_id ?? null]);
-        if (! $vehicle) {
-            return null;
-        }
-
-        if (! $vehicle->customer_id) {
-            Log::warning('Vehículo sin cliente', ['vehicle_id' => $vehicle->id]);
-            // Opción: asociar a un cliente "anónimo" o lanzar excepción
-        }
-
-        return $vehicle->customer;
-    }
-
-    private function validatePatente(string $value): bool
-    {
-        // 'patente' => preg_match('/^[A-Z]{2,3}\d{3}[A-Z]{0,2}$/i', $value),
-        $patterns = [
-            '/^[A-Z]{3}\d{3}$/i',        // ABC123 (viejo)
-            '/^[A-Z]{2}\d{3}[A-Z]{2}$/i', // AB123CD (Mercosur)
-        ];
-
-        foreach ($patterns as $pattern) {
-            if (preg_match($pattern, $value)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private function validatePhone(string $phone): bool
     {
         $cleaned = preg_replace('/[^\d+]/', '', $phone);
 
-        return preg_match('/^(\+?549?)?\d{10,13}$/', $cleaned) === 1;
+        return preg_match('/^(\+?549?)?\d{10,13}$/', (string) $cleaned) === 1;
     }
 }

@@ -92,7 +92,7 @@ class CheckoutController extends Controller
         $quote = Quote::where('checkout_token', $request->input('checkout_token'))->firstOrFail();
 
         abort_unless(
-            in_array($quote->status, ['checkout_pending']),
+            $quote->status == 'checkout_pending',
             409,
             'Esta cotización ya fue enviada o no está disponible.'
         );
@@ -169,7 +169,7 @@ class CheckoutController extends Controller
         $quote = Quote::where('checkout_token', $token)->firstOrFail();
 
         abort_unless(
-            in_array($quote->status, ['checkout_pending']),
+            $quote->status == 'checkout_pending',
             409,
             'Esta cotización ya fue enviada o no está disponible.'
         );
@@ -214,7 +214,7 @@ class CheckoutController extends Controller
         abort_if($tempPhotosCount < $requiredPhotoCount, 422, 'Faltan fotos de inspección o no fueron procesadas correctamente.');
 
         // Ejecutar las mutaciones de BD en una transacción atómica
-        DB::transaction(function () use ($quote, $alternative, $validated) {
+        DB::transaction(function () use ($quote, $alternative, $validated): void {
 
             // 1. Guardar CheckoutSession
             $session = CheckoutSession::updateOrCreate(
