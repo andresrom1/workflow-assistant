@@ -26,7 +26,7 @@ class SendWhatsAppMessageTest extends TestCase
         $waService = $this->mock(WhatsAppOutboundService::class);
         $waService->shouldReceive('sendMessage')
             ->once()
-            ->with($this->waId, 'Hola, te ayudo con tu cotización', $this->phoneNumberId, $conversation->id)
+            ->with($this->waId, 'Hola, te ayudo con tu cotización', $this->phoneNumberId, $conversation->id, null)
             ->andReturn(['messages' => [['id' => 'wamid.out001']]]);
 
         SendWhatsAppMessage::dispatchSync($this->waId, 'Hola, te ayudo con tu cotización', $this->phoneNumberId, $conversation->id);
@@ -38,7 +38,7 @@ class SendWhatsAppMessageTest extends TestCase
         $waService = $this->mock(WhatsAppOutboundService::class);
         $waService->shouldReceive('sendMessage')
             ->once()
-            ->with($this->waId, 'Mensaje de prueba', $this->phoneNumberId, null)
+            ->with($this->waId, 'Mensaje de prueba', $this->phoneNumberId, null, null)
             ->andReturn([]);
 
         SendWhatsAppMessage::dispatchSync($this->waId, 'Mensaje de prueba', $this->phoneNumberId);

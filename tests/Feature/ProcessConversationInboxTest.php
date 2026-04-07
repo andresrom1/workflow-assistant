@@ -29,7 +29,7 @@ class ProcessConversationInboxTest extends TestCase
         $orchestrator->shouldReceive('handle')
             ->once()
             ->with('Hola quiero asegurar un auto', \Mockery::type(Conversation::class))
-            ->andReturn('Perfecto, ¿qué vehículo querés asegurar?');
+            ->andReturn(['text' => 'Perfecto, ¿qué vehículo querés asegurar?', 'agent' => 'CustomerIdentifierAgent']);
 
         $conversation = Conversation::factory()->create([
             'external_conversation_id' => $this->waId,
@@ -62,7 +62,7 @@ class ProcessConversationInboxTest extends TestCase
         $orchestrator->shouldReceive('handle')
             ->once()
             ->with("Hola quiero asegurar un auto\nEs un Renault Sandero", \Mockery::type(Conversation::class))
-            ->andReturn('Anotado el Renault Sandero. ¿Qué cobertura preferís?');
+            ->andReturn(['text' => 'Anotado el Renault Sandero. ¿Qué cobertura preferís?', 'agent' => 'VehicleIdentifierAgent']);
 
         $conversation = Conversation::factory()->create([
             'external_conversation_id' => $this->waId,
@@ -121,7 +121,7 @@ class ProcessConversationInboxTest extends TestCase
             ->andReturnUsing(function () use ($message, &$processedAtDuringAiCall) {
                 $processedAtDuringAiCall = $message->fresh()->processed_at;
 
-                return 'Respuesta';
+                return ['text' => 'Respuesta', 'agent' => 'CustomerIdentifierAgent'];
             });
 
         ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
