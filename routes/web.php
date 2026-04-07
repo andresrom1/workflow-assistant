@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Admin\AgentPromptController;
 use App\Http\Controllers\Admin\CheckoutAuditController;
+use App\Http\Controllers\Admin\ConversationController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CheckoutController;
@@ -63,4 +65,20 @@ Route::prefix('admin')->name('admin.')->group(function () {
         ->name('settings.index');
     Route::post('/settings/{group}', [SettingsController::class, 'updateGroup'])
         ->name('settings.update-group');
+
+    // Conversaciones (dev tool — reset de estado)
+    Route::get('/conversations', [ConversationController::class, 'index'])
+        ->name('conversations.index');
+    Route::post('/conversations/{conversation}/reset', [ConversationController::class, 'reset'])
+        ->name('conversations.reset');
+
+    // Gestión de prompts de agentes IA
+    Route::get('/agent-prompts', [AgentPromptController::class, 'index'])
+        ->name('agent-prompts.index');
+    Route::get('/agent-prompts/{agentKey}', [AgentPromptController::class, 'show'])
+        ->name('agent-prompts.show');
+    Route::post('/agent-prompts/{agentKey}', [AgentPromptController::class, 'store'])
+        ->name('agent-prompts.store');
+    Route::post('/agent-prompts/{agentPrompt}/activate', [AgentPromptController::class, 'activate'])
+        ->name('agent-prompts.activate');
 });

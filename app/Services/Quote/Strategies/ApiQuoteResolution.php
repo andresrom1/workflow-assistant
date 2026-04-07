@@ -2,12 +2,13 @@
 
 namespace App\Services\Quote\Strategies;
 
+use App\Events\QuoteProcessed;
+use App\Jobs\NotifyClientQuoteReady;
 use App\Models\Quote;
 use App\Models\RiskSnapshot;
+use App\Repositories\QuoteRepository;
 use App\Services\Quote\QuoteResolutionStrategyInterface;
 use App\Services\QuotingEngine;
-use App\Repositories\QuoteRepository;
-use App\Events\QuoteProcessed;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -16,13 +17,12 @@ class ApiQuoteResolution implements QuoteResolutionStrategyInterface
     public function __construct(
         private readonly QuotingEngine $engine,
         private readonly QuoteRepository $quoteRepo
-    ) {
-    }
+    ) {}
 
     public function resolve(Quote $quote, RiskSnapshot $snapshot): void
     {
         try {
-            Log::info(__METHOD__ . " Resolviendo Quote ID: {$quote->id} vía API");
+            Log::info(__METHOD__." Resolviendo Quote ID: {$quote->id} vía API");
 
             // 1. Marcar el método de resolución
             $quote->update(['resolution_method' => 'api']);
@@ -33,13 +33,21 @@ class ApiQuoteResolution implements QuoteResolutionStrategyInterface
             // 3. Guardar resultados
             $this->quoteRepo->saveResults($quote, $result);
 
-            // 4. Notificar
-            QuoteProcessed::dispatch($quote);
+            // 4. Notificar según el canal de origen
+            $quote->loadMissing('conversation');
+
+            if ($quote->conversation?->channel === 'whatsapp') {
+                NotifyClientQuoteReady::dispatch($quote->conversation->id, $quote->id)
+                    ->onConnection('database_ai')
+                    ->onQueue('whatsapp-ai');
+            } else {
+                QuoteProcessed::dispatch($quote);
+            }
 
         } catch (Throwable $e) {
-            Log::error("[ApiQuoteResolution] Fallo: " . $e->getMessage(), [
+            Log::error('[ApiQuoteResolution] Fallo: '.$e->getMessage(), [
                 'quote_id' => $quote->id,
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             $this->quoteRepo->markAsFailed($quote, $e->getMessage());

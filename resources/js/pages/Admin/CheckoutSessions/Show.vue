@@ -150,7 +150,7 @@
           <div v-for="(path, key) in session.photo_paths" :key="key"
             class="rounded-[10px] aspect-square overflow-hidden relative"
             style="background: var(--border-sub);">
-            <img :src="cloudinaryThumb(path)" :alt="photoLabel(key as string)"
+            <img :src="path" :alt="photoLabel(key as string)"
               class="w-full h-full object-cover" />
             <span class="absolute bottom-0 left-0 right-0 text-white text-[10px] text-center py-1.5 font-medium"
               style="background: rgba(0,0,0,.5);">
@@ -260,10 +260,6 @@ const formatPrice = (n: number) =>
 const confirmAndSubmit = (e: Event, msg: string) => {
   if (confirm(msg)) (e.target as HTMLFormElement).submit()
 }
-
-const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
-const cloudinaryThumb = (id: string) =>
-  `https://res.cloudinary.com/${cloudName}/image/upload/w_300,h_300,c_fill/${id}`
 
 const photoLabel = (key: string) => ({
   tarjeta_verde: 'Tarjeta Verde', frente: 'Frente', atras: 'Atrás',

@@ -357,7 +357,6 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, defineComponent, h, onMounted, onUnmounted } from 'vue'
-// import { ref, reactive, computed, defineComponent, h } from 'vue'
 
 // ─── Componentes inline ────────────────────────────────────────────────────────
 const Field = defineComponent({
@@ -422,15 +421,7 @@ const stopVisibilityChange = (e: Event) => {
 
 onMounted(() => {
   window.addEventListener('popstate', stopPopState, true)
-
-  // Debug — borrar después de confirmar
-  window.addEventListener('beforeunload', () => {
-    console.log('[beforeunload] RECARGA DETECTADA')
-  })
-  
-  document.addEventListener('visibilitychange', () => {
-    console.log('[visibilitychange]', document.visibilityState)
-  })
+  document.addEventListener('visibilitychange', stopVisibilityChange, true)
 })
 
 onUnmounted(() => {
@@ -481,18 +472,21 @@ const photoSlots = [
   { key: 'parabrisas', label: 'Parabrisas desde el interior', icon: '🪟', hint: 'Sentado adentro, mirando adelante' },
 ]
 
-const photos = reactive<Record<string, string>>({})     // key → preview URL (Cloudinary URL)
-const photoIds = reactive<Record<string, string>>({})   // key → Cloudinary public_id
+const photos = reactive<Record<string, string>>({})     // key → preview URL (R2 URL)
+const photoIds = reactive<Record<string, string>>({})   // key → R2 storage_path
 const uploading = reactive<Record<string, boolean>>({}) // key → upload in progress
 const photoCount = computed(() => Object.keys(photoIds).length)
 
-/** Redimensiona a máx 1024px y convierte a JPEG para ahorrar memoria. */
-const processPhoto = (file: File): Promise<File> =>
+/**
+ * Redimensiona a máx 1024px, convierte a JPEG, y genera un micro-thumbnail de 64px
+ * para preview en el DOM (evita que el browser decodifique la imagen completa como bitmap).
+ * Liberación agresiva de memoria en cada paso — crítico para no crashear en mobile.
+ */
+const processPhoto = (file: File): Promise<{ file: File; thumb: string }> =>
   new Promise((resolve, reject) => {
     const img = new Image()
     const objectUrl = URL.createObjectURL(file)
-    
-    // Función auxiliar para limpiar memoria
+
     const destroyImage = () => {
       img.onload = null
       img.onerror = null
@@ -504,7 +498,7 @@ const processPhoto = (file: File): Promise<File> =>
       destroyImage()
       reject(new Error('No se pudo procesar la imagen'))
     }
-    
+
     img.onload = () => {
       URL.revokeObjectURL(objectUrl)
       try {
@@ -519,18 +513,32 @@ const processPhoto = (file: File): Promise<File> =>
         canvas.height = h
         const ctx = canvas.getContext('2d')
         ctx?.drawImage(img, 0, 0, w, h)
-        
-        // Destruir imagen original para liberar RAM lo antes posible (fundamental en iOS/Android)
+
+        // Destruir imagen original para liberar RAM lo antes posible
         destroyImage()
+
+        // Generar micro-thumbnail 64px desde el canvas (antes de destruirlo)
+        // El preview en el DOM usa esto en vez de la URL completa → 16KB bitmap vs 4MB
+        const THUMB = 64
+        const thumbCanvas = document.createElement('canvas')
+        thumbCanvas.width = THUMB
+        thumbCanvas.height = THUMB
+        const tCtx = thumbCanvas.getContext('2d')
+        const min = Math.min(w, h)
+        const sx = (w - min) / 2
+        const sy = (h - min) / 2
+        tCtx?.drawImage(canvas, sx, sy, min, min, 0, 0, THUMB, THUMB)
+        const thumb = thumbCanvas.toDataURL('image/jpeg', 0.4)
+        thumbCanvas.width = 0
+        thumbCanvas.height = 0
 
         canvas.toBlob(blob => {
           // Liberar canvas de la memoria
           canvas.width = 0
           canvas.height = 0
-          
+
           if (!blob) { reject(new Error('Error al generar JPEG')); return }
-          const finalFile = new File([blob], 'photo.jpg', { type: 'image/jpeg' })
-          resolve(finalFile)
+          resolve({ file: new File([blob], 'photo.jpg', { type: 'image/jpeg' }), thumb })
         }, 'image/jpeg', 0.7)
       } catch (err) {
         destroyImage()
@@ -540,22 +548,26 @@ const processPhoto = (file: File): Promise<File> =>
     img.src = objectUrl
   })
 
-/** Sube una foto al servidor y luego a Cloudinary, liberando la memoria inmediatamente. */
+/** Lock para serializar compresiones — evita dos bitmaps simultáneos en memoria. */
+let processingLock = false
+
+/** Sube una foto al servidor (que la persiste en R2), liberando la memoria inmediatamente. */
 const onPhotoCapture = async (e: Event, key: string) => {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file) return
+  if (!file || processingLock) return
   // Limpiar el input para liberar la referencia al archivo original
   input.value = ''
   delete errors[`photo_${key}`]
+  processingLock = true
   uploading[key] = true
 
   try {
     console.log(`[onPhotoCapture] Iniciando proceso para foto: ${key}`)
-    const processedFile = await processPhoto(file)
-    console.log(`[onPhotoCapture] Foto procesada correctamente.`, processedFile)
+    const { file: processedFile, thumb } = await processPhoto(file)
+    console.log(`[onPhotoCapture] Foto procesada correctamente.`)
 
-    // Subir al servidor (que sube a Cloudinary)
+    // Subir al servidor (que persiste en R2)
     const fd = new FormData()
     fd.append('_token', csrfToken)
     fd.append('checkout_token', props.checkoutToken)
@@ -577,12 +589,9 @@ const onPhotoCapture = async (e: Event, key: string) => {
       throw new Error(data.error || 'Error al subir la foto')
     }
 
-    // Guardar el ID y la URL de Cloudinary — liberar cualquier blob previo
-    if (photos[key] && photos[key].startsWith('blob:')) {
-      URL.revokeObjectURL(photos[key])
-    }
+    // Guardar storage_path y thumbnail para preview (no la URL completa de R2)
     photoIds[key] = data.public_id
-    photos[key] = data.url  // URL de Cloudinary, no blob
+    photos[key] = thumb  // micro-thumbnail 64px data URL (~3KB) — no la imagen completa
     console.log(`[onPhotoCapture] Éxito: ${data.public_id}`, data.url)
     // El File ya fue enviado y no se almacena en memoria
   } catch (err: any) {
@@ -590,6 +599,7 @@ const onPhotoCapture = async (e: Event, key: string) => {
     errors[`photo_${key}`] = err.message || 'Error al subir la foto. Intentá de nuevo.'
   } finally {
     uploading[key] = false
+    processingLock = false
   }
 }
 

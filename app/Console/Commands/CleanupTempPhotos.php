@@ -2,11 +2,11 @@
 
 namespace App\Console\Commands;
 
-use App\Models\InspectionPhoto;
 use App\Enums\InspectionPhotoStatus;
 use App\Jobs\DeleteOrphanPhoto;
-use Illuminate\Console\Command;
+use App\Models\InspectionPhoto;
 use App\Services\SettingsService;
+use Illuminate\Console\Command;
 
 class CleanupTempPhotos extends Command
 {
@@ -29,7 +29,7 @@ class CleanupTempPhotos extends Command
      */
     public function handle()
     {
-        $this->info("Buscando fotos de inspección temporales de más de 24 horas...");
+        $this->info('Buscando fotos de inspección temporales de más de 24 horas...');
 
         $ttlHours = (int) app(SettingsService::class)->get('checkout.temp_photo_ttl_hours', 24);
         $orphans = InspectionPhoto::where('status', InspectionPhotoStatus::Temp)
@@ -39,14 +39,15 @@ class CleanupTempPhotos extends Command
         $count = $orphans->count();
 
         if ($count === 0) {
-            $this->info("No se encontraron fotos huérfanas.");
+            $this->info('No se encontraron fotos huérfanas.');
+
             return;
         }
 
         $this->warn("Se encontraron {$count} fotos huérfanas. Despachando Jobs e invalidando registros...");
 
         foreach ($orphans as $photo) {
-            DeleteOrphanPhoto::dispatch($photo->cloudinary_public_id);
+            DeleteOrphanPhoto::dispatch($photo->storage_path);
             $photo->delete();
         }
 

@@ -22,7 +22,12 @@
       "Bash(php -r \":*)",
       "Bash(find vendor:*)",
       "Bash(find . -name *migration* -type f)",
-      "Bash(find ./database/migrations -name *.php)"
+      "Bash(find ./database/migrations -name *.php)",
+      "Bash(npm install:*)",
+      "Bash(grep -n \"AgentPrompt::activeFor\\\\|activeFor\" app/AI/Agents/*.php)",
+      "Bash(grep -n \"agentKey\\\\s*=\" app/AI/Agents/*.php)",
+      "Bash(composer require:*)",
+      "Bash(npm remove:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

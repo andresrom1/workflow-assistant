@@ -166,6 +166,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
      */
     public function coveragePreference(array $data, Conversation $conversation): array
     {
+        $data = $this->normalizePayload($data);
         $data = $this->validatePayload($data, [
             'patente' => 'required|string',
             'preference' => 'required|string',
@@ -313,7 +314,8 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             'checkout_alternative_id' => $alternative->id,
         ]);
 
-        $checkoutUrl = route('checkout.show', ['token' => $token]);
+        $checkoutUrl = rtrim(config('app.checkout_url', config('app.url')), '/')
+            .'/checkout/'.$token;
 
         return $this->formatSuccess(
             "Tu link de checkout está listo. Completá tus datos aquí: {$checkoutUrl}",

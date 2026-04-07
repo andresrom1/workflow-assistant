@@ -28,6 +28,7 @@ class Conversation extends Model
         'metadata' => 'array',
         'started_at' => 'datetime',
         'ended_at' => 'datetime',
+        'last_message_at' => 'datetime',
     ];
 
     public function customer(): BelongsTo

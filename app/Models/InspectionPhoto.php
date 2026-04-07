@@ -14,8 +14,8 @@ class InspectionPhoto extends Model
     protected $fillable = [
         'quote_id',
         'photo_key',
-        'cloudinary_public_id',
-        'cloudinary_url',
+        'storage_path',
+        'storage_url',
         'status',
         'uploaded_by_ip',
         'confirmed_at',

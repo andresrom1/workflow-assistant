@@ -17,10 +17,9 @@
         "vite": "^7.0.7"
     },
     "dependencies": {
-        "@cloudinary/url-gen": "^1.22.0",
-        "@cloudinary/vue": "^1.13.4",
         "@inertiajs/vue3": "^2.3.15",
         "@vitejs/plugin-vue": "^6.0.4",
+        "marked": "^17.0.5",
         "vue": "^3.5.28"
     }
 }

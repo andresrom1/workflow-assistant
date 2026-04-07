@@ -20,8 +20,9 @@ class CoveragePreferenceTool implements Tool
 
     public function description(): string
     {
-        return 'Registra la preferencia de cobertura del cliente para su vehículo y dispara la cotización. '
-            .'Usar cuando el usuario haya elegido el tipo de cobertura que desea.';
+        return 'Registra la cobertura elegida (A=Responsabilidad Civil, B=Robo/Incendio Total, '
+            .'C=Terceros Completos, D=Todo Riesgo) para el vehículo del cliente. '
+            .'Usar cuando el usuario haya decidido qué nivel de protección desea.';
     }
 
     /**
@@ -30,11 +31,15 @@ class CoveragePreferenceTool implements Tool
     public function schema(JsonSchema $schema): array
     {
         return [
+            'coverage_code' => $schema->string()
+                ->enum(['A', 'B', 'C', 'D'])
+                ->description('Código de cobertura elegida: A=Responsabilidad Civil, B=Robo/Incendio Total, C=Terceros Completos, D=Todo Riesgo.')
+                ->required(),
             'patente' => $schema->string()
                 ->description('Patente del vehículo para el que se registra la preferencia.')
                 ->required(),
-            'preference' => $schema->string()
-                ->description('Tipo de cobertura elegida por el cliente (ej: terceros, terceros_completo, todo_riesgo).')
+            'reasoning' => $schema->string()
+                ->description("Razón de la elección. Ej: 'Cliente eligió C porque no quiere pagar franquicia'.")
                 ->required(),
         ];
     }

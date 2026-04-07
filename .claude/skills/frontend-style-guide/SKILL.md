@@ -1,7 +1,6 @@
 ---
   name: frontend-style-guide
-  description: >-
-  Maintain the frontend style guide for the admin panel. Activates when adding new styles, restyling components, or when the user mentions design, styles, CSS, or layout changes related to the frontend.
+  description: Maintain the frontend style guide for the admin panel. Activates when adding new styles, restyling components, or when the user mentions design, styles, CSS, or layout changes related to the frontend.
 ---
 
 # Guía de Estilo Frontend v2.2
@@ -32,7 +31,7 @@
 
 ## 1. Filosofía de diseño
 
-PAS Mobile es un backoffice de uso intensivo. Los usuarios son productores de seguros que pasan horas en esta interfaz. El diseño responde a esas necesidades:
+workflow-assistant es un backoffice de uso intensivo. Los usuarios son productores de seguros que pasan horas en esta interfaz. El diseño responde a esas necesidades:
 
 **Claridad sobre decoración.** Cada pixel tiene una función. No hay fondos degradados, ilustraciones de relleno ni animaciones ornamentales.
 
