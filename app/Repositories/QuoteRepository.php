@@ -38,7 +38,7 @@ class QuoteRepository
      */
     public function saveResults(Quote $quote, array $engineResult): void
     {
-        DB::transaction(function () use ($quote, $engineResult) {
+        DB::transaction(function () use ($quote, $engineResult): void {
 
             // 1. Limpieza preventiva (idempotencia para reintentos del job)
             $quote->alternatives()->delete();

@@ -24,7 +24,7 @@ class QuoteController extends Controller
             ->paginate(15);
 
         return Inertia::render('Quotes/Index', [
-            'quotes' => $quotes->through(fn ($q) => [
+            'quotes' => $quotes->through(fn ($q): array => [
                 'id' => $q->id,
                 'status' => $q->status,
                 'created_at' => $q->created_at->toIso8601String(),
@@ -76,7 +76,7 @@ class QuoteController extends Controller
                 'customer_email' => $quote->conversation?->customer?->email,
                 'customer_dni' => $quote->conversation?->customer?->dni,
                 'coverage_preference' => $coveragePreference?->preference,
-                'alternatives' => $quote->alternatives->map(fn ($a) => [
+                'alternatives' => $quote->alternatives->map(fn ($a): array => [
                     'id' => $a->id,
                     'aseguradora' => $a->aseguradora,
                     'titulo' => $a->titulo,

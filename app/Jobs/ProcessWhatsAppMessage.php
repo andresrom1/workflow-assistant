@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\Conversation;
 use App\Models\Message;
 use App\Repositories\ConversationRepository;
 use Illuminate\Bus\Queueable;
@@ -42,7 +43,7 @@ class ProcessWhatsAppMessage implements ShouldQueue
         }
 
         // 2. Solo procesamos mensajes de texto por ahora.
-        if ($this->messageType !== 'text' || empty($this->messageBody)) {
+        if ($this->messageType !== 'text' || ($this->messageBody === '' || $this->messageBody === '0')) {
             Cache::put($cacheKey, true, now()->addDay());
 
             return;
@@ -55,7 +56,7 @@ class ProcessWhatsAppMessage implements ShouldQueue
             ? $conversationRepo->findByExtUserId($this->extUserId)
             : null;
 
-        if ($conversation) {
+        if ($conversation instanceof Conversation) {
             // Si el usuario migró de número, actualizar el teléfono de la conversación.
             if ($conversation->external_conversation_id !== $this->waId) {
                 $conversation->update(['external_conversation_id' => $this->waId]);

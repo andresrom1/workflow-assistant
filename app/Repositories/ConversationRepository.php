@@ -39,7 +39,7 @@ class ConversationRepository
             ['external_conversation_id' => $externalId]
         );
 
-        $conversation = Conversation::where('external_conversation_id', $externalId)->firstOrCreate(
+        return Conversation::where('external_conversation_id', $externalId)->firstOrCreate(
             ['external_conversation_id' => $externalId],
             [
                 'external_conversation_id' => $externalId,
@@ -49,8 +49,6 @@ class ConversationRepository
                 'last_message_at' => now(),
             ]
         );
-
-        return $conversation;
     }
 
     /**

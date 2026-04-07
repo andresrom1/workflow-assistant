@@ -26,3 +26,6 @@ Thumbs.db
 toClaude.ia
 database/database.sqlite
 
+
+/.phpstan-tmp
+/.rector-cache

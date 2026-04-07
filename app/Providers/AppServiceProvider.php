@@ -25,13 +25,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ConversationRepository::class);
 
         // Registrar Services
-        $this->app->singleton(CustomerIdentificationService::class, function ($app) {
-            return new CustomerIdentificationService(
-                $app->make(CustomerRepository::class),
-                $app->make(VehicleRepository::class),
-                $app->make(ConversationRepository::class),
-            );
-        });
+        $this->app->singleton(CustomerIdentificationService::class, fn ($app) => new CustomerIdentificationService(
+            $app->make(CustomerRepository::class),
+            $app->make(VehicleRepository::class),
+            $app->make(ConversationRepository::class),
+        ));
         $this->app->singleton(CustomerIdentificationService::class);
         $this->app->singleton(VehicleIdentificationService::class);
 

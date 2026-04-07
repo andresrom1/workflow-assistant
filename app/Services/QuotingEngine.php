@@ -9,20 +9,21 @@ use Illuminate\Support\Facades\Log;
 class QuotingEngine
 {
     use ConditionalLogger;
+
     /**
      * El Cerebro: Recibe un riesgo y devuelve opciones.
      * NO escribe en base de datos. Solo calcula/obtiene.
-     * @param RiskSnapshot $snapshot
+     *
      * @return array Estructura normalizada lista para que el Job la persista.
      */
     public function generateAlternatives(RiskSnapshot $snapshot): array
     {
-        Log::info(__METHOD__.__line__." Generating alternatives for RiskSnapshot ID: {$snapshot->id}");
+        Log::info(__METHOD__.__LINE__." Generating alternatives for RiskSnapshot ID: {$snapshot->id}");
         // 1. Orquestación de fuentes (APIs, Tablas internas, Mocks)
         // En el futuro: $results = $this->apiClient->fetch($snapshot);
-        
+
         // --- SIMULACIÓN DE LATENCIA ---
-        $this->logQuote('Simulando latencia' );
+        $this->logQuote('Simulando latencia');
         sleep(30);
 
         // POR AHORA: Usamos el generador mock interno
@@ -42,7 +43,7 @@ class QuotingEngine
             ['name' => 'Triunfo Seguros', 'factor' => 1.00],
             ['name' => 'Sancor Seguros',  'factor' => 1.35],
             ['name' => 'Rivadavia',       'factor' => 1.15],
-            ['name' => 'Mercantil Andina','factor' => 1.10],
+            ['name' => 'Mercantil Andina', 'factor' => 1.10],
             ['name' => 'Zurich',          'factor' => 1.60],
         ];
 
@@ -65,34 +66,35 @@ class QuotingEngine
         // Algoritmo de Generación
         foreach ($companies as $company) {
             foreach ($plans as $plan) {
-                
+
                 // Fórmula de Precio: (Base * Factor Cía * Factor Año Auto) + Ruido Random
-                $yearFactor = ($snapshot->year > 2020) ? 1.2 : 1.0; 
-                $price = ($plan['base'] * $company['factor'] * $yearFactor) + rand(100, 999);
+                $yearFactor = ($snapshot->year > 2020) ? 1.2 : 1.0;
+                $price = ($plan['base'] * $company['factor'] * $yearFactor) + random_int(100, 999);
 
                 $alternatives[] = [
-                    'external_code'     => uniqid('sku_'),
+                    'external_code' => uniqid('sku_'),
                     'external_quote_id' => uniqid('qid_'),
-                    'aseguradora'       => $company['name'],
-                    'descripcion'       => "{$plan['code']} - " . implode(', ', array_slice($plan['feats'], 0, 2)),
-                    'titulo'            => $plan['code'],
-                    'normalized_grade'  => $plan['grade'],
-                    'precio'            => round($price, 2),
-                    'moneda'            => 'ARS',
-                    'marketing_title'   => "{$company['name']} - {$plan['code']}",
-                    'sum_insured_text'  => '$ 15.000.000',
-                    'features_tags'     => $plan['feats'],
-                    'full_details'      => $this->enrichDetails($plan['feats']),
+                    'aseguradora' => $company['name'],
+                    'descripcion' => "{$plan['code']} - ".implode(', ', array_slice($plan['feats'], 0, 2)),
+                    'titulo' => $plan['code'],
+                    'normalized_grade' => $plan['grade'],
+                    'precio' => round($price, 2),
+                    'moneda' => 'ARS',
+                    'marketing_title' => "{$company['name']} - {$plan['code']}",
+                    'sum_insured_text' => '$ 15.000.000',
+                    'features_tags' => $plan['feats'],
+                    'full_details' => $this->enrichDetails($plan['feats']),
                 ];
             }
         }
-        
-        Log::info("Alternatives", ['alternatives' => $alternatives]);
+
+        Log::info('Alternatives', ['alternatives' => $alternatives]);
+
         return [
             'task_id' => $taskId,
-            'status'  => 'SUCCESS',
-            'raw'     => ['source' => 'QuotingEngine Mock', 'snapshot_id' => $snapshot->id], 
-            'parsed_alternatives' => $alternatives
+            'status' => 'SUCCESS',
+            'raw' => ['source' => 'QuotingEngine Mock', 'snapshot_id' => $snapshot->id],
+            'parsed_alternatives' => $alternatives,
         ];
     }
 
@@ -100,13 +102,14 @@ class QuotingEngine
     {
         $details = [];
         foreach ($features as $f) {
-            $details[$f] = match(true) {
-                str_contains($f, 'Granizo') => "Cubierto hasta suma asegurada.",
-                str_contains($f, 'Ruedas') => "Reposición a nuevo, 1 evento anual.",
-                str_contains($f, 'Franquicia') => "A cargo del asegurado en siniestros culpables.",
-                default => "Incluido en póliza."
+            $details[$f] = match (true) {
+                str_contains((string) $f, 'Granizo') => 'Cubierto hasta suma asegurada.',
+                str_contains((string) $f, 'Ruedas') => 'Reposición a nuevo, 1 evento anual.',
+                str_contains((string) $f, 'Franquicia') => 'A cargo del asegurado en siniestros culpables.',
+                default => 'Incluido en póliza.'
             };
         }
+
         return $details;
     }
 }

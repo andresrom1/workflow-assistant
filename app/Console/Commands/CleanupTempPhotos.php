@@ -27,7 +27,7 @@ class CleanupTempPhotos extends Command
     /**
      * Execute the console command.
      */
-    public function handle()
+    public function handle(): void
     {
         $this->info('Buscando fotos de inspección temporales de más de 24 horas...');
 

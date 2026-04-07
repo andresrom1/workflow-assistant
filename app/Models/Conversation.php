@@ -113,7 +113,7 @@ class Conversation extends Model
             $updates['ext_username'] = $extUsername;
         }
 
-        if (! empty($updates)) {
+        if ($updates !== []) {
             $this->update($updates);
         }
     }
