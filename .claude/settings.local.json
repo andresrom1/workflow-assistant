@@ -27,7 +27,11 @@
       "Bash(grep -n \"AgentPrompt::activeFor\\\\|activeFor\" app/AI/Agents/*.php)",
       "Bash(grep -n \"agentKey\\\\s*=\" app/AI/Agents/*.php)",
       "Bash(composer require:*)",
-      "Bash(npm remove:*)"
+      "Bash(npm remove:*)",
+      "Bash(git checkout:*)",
+      "Bash(git reset:*)",
+      "Bash(git stash:*)",
+      "Bash(git branch:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
