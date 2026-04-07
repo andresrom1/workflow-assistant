@@ -193,7 +193,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         $quoteId = null;
 
         try {
-            DB::transaction(function () use ($conversation, $vehicle, $data, &$quoteId) {
+            DB::transaction(function () use ($conversation, $vehicle, $data, &$quoteId): void {
                 $this->coverageService->saveCoveragePreference(
                     $conversation->id,
                     $vehicle->id,
@@ -254,7 +254,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
             );
         }
 
-        $alternatives = $quote->alternatives->map(fn (QuoteAlternative $alt) => [
+        $alternatives = $quote->alternatives->map(fn (QuoteAlternative $alt): array => [
             'quote_id' => $quote->id,
             'quote_alternative_id' => $alt->id,
             'aseguradora' => $alt->aseguradora,

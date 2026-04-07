@@ -2,16 +2,14 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Log;
 use App\Traits\ConditionalLogger;
 
 class PlateNormalizerService
 {
     use ConditionalLogger;
 
-    public function normalize($plate)
+    public function normalize($plate): string
     {
-        $normalizedPlate = strtoupper(str_replace([' ', '-', '.', '(', ')', '_'], '', $plate));
-        return $normalizedPlate;
+        return strtoupper(str_replace([' ', '-', '.', '(', ')', '_'], '', $plate));
     }
 }

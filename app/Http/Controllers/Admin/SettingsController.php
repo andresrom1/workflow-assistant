@@ -5,41 +5,41 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\SystemSetting;
 use App\Services\SettingsService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Inertia\Response;
 
 class SettingsController extends Controller
 {
     public function __construct(private readonly SettingsService $settings) {}
 
-    public function index(): \Inertia\Response
+    public function index(): Response
     {
         $raw = SystemSetting::all()->groupBy('group');
 
         // Construir estructura para la vista — secrets se envían enmascarados
-        $groups = $raw->map(function ($items, $groupKey) {
-            return [
-                'key'   => $groupKey,
-                'label' => $this->groupLabel($groupKey),
-                'items' => $items->map(fn ($s) => [
-                    'key'         => $s->key,
-                    'label'       => $s->label,
-                    'description' => $s->description,
-                    'type'        => $s->type,
-                    'is_secret'   => $s->is_secret,
-                    // Secrets: valor real para editar, pero el front muestra ●●● por default
-                    'value'       => $s->value,
-                    'updated_at'  => $s->updated_at?->toIso8601String(),
-                ])->values(),
-            ];
-        })->values();
+        $groups = $raw->map(fn ($items, $groupKey) => [
+            'key' => $groupKey,
+            'label' => $this->groupLabel($groupKey),
+            'items' => $items->map(fn ($s): array => [
+                'key' => $s->key,
+                'label' => $s->label,
+                'description' => $s->description,
+                'type' => $s->type,
+                'is_secret' => $s->is_secret,
+                // Secrets: valor real para editar, pero el front muestra ●●● por default
+                'value' => $s->value,
+                'updated_at' => $s->updated_at?->toIso8601String(),
+            ])->values(),
+        ])->values();
 
         return Inertia::render('Admin/Settings/Index', [
             'groups' => $groups,
         ]);
     }
 
-    public function updateGroup(Request $request, string $group): \Illuminate\Http\RedirectResponse
+    public function updateGroup(Request $request, string $group): RedirectResponse
     {
         $items = SystemSetting::where('group', $group)->get()->keyBy('key');
         abort_if($items->isEmpty(), 404);
@@ -53,7 +53,7 @@ class SettingsController extends Controller
             $setting = $items[$key];
 
             // Validación por tipo
-            if ($setting->type === 'integer' && !is_numeric($value)) {
+            if ($setting->type === 'integer' && ! is_numeric($value)) {
                 return back()->withErrors(["El campo '{$setting->label}' debe ser un número."]);
             }
 
@@ -71,9 +71,9 @@ class SettingsController extends Controller
     private function groupLabel(string $group): string
     {
         return [
-            'pas'        => 'Oportunidades PAS',
+            'pas' => 'Oportunidades PAS',
             'mobile_app' => 'App Móvil',
-            'checkout'   => 'Checkout',
+            'checkout' => 'Checkout',
             'poliza_api' => 'API de Emisión',
         ][$group] ?? ucfirst($group);
     }

@@ -25,6 +25,6 @@ class ChatController extends Controller
             }
         }
 
-        return view('chat.index', compact('conversations', 'selectedConversation', 'messages'));
+        return view('chat.index', ['conversations' => $conversations, 'selectedConversation' => $selectedConversation, 'messages' => $messages]);
     }
 }

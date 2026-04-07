@@ -22,7 +22,7 @@ class ConversationController extends Controller
             ->paginate(25);
 
         return Inertia::render('Admin/Conversations/Index', [
-            'conversations' => $conversations->through(fn (Conversation $c) => [
+            'conversations' => $conversations->through(fn (Conversation $c): array => [
                 'id' => $c->id,
                 'external_id' => $c->external_conversation_id,
                 'ext_user_id' => $c->ext_user_id,

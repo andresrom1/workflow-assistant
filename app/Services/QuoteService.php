@@ -35,7 +35,7 @@ class QuoteService
      */
     public function createPendingQuote(Conversation $conversation, Customer $customer, Vehicle $vehicle, string $sessionUuid, ?string $coveragePreference = null): Quote
     {
-        $transaction = DB::transaction(function () use ($conversation, $customer, $vehicle, $sessionUuid, $coveragePreference) {
+        $transaction = DB::transaction(function () use ($conversation, $customer, $vehicle, $sessionUuid, $coveragePreference): array {
             $snapshot = $this->snapshotRepo->createFromEntities($customer, $vehicle, $coveragePreference);
             $quote = $this->quoteRepo->createPending($snapshot, $conversation, $sessionUuid);
 
