@@ -45,7 +45,7 @@ class WhatsAppWebhookController extends Controller
         // 1. Validar la firma HMAC-SHA256 usando el raw body.
         //    Se usa hash_equals() (tiempo constante) para prevenir timing attacks.
         $rawPayload = file_get_contents('php://input');
-        $expectedSignature = 'sha256='.hash_hmac('sha256', $rawPayload, config('services.whatsapp.app_secret'));
+        $expectedSignature = 'sha256='.hash_hmac('sha256', $rawPayload, (string) config('services.whatsapp.app_secret'));
         $receivedSignature = $request->header('X-Hub-Signature-256', '');
 
         if (! hash_equals($expectedSignature, $receivedSignature)) {

@@ -1,7 +1,5 @@
 <?php
 
-namespace Tests\Feature;
-
 use App\AI\InsuranceOrchestrator;
 use App\Jobs\ProcessConversationInbox;
 use App\Jobs\SendWhatsAppMessage;
@@ -9,194 +7,178 @@ use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
-use PHPUnit\Framework\Attributes\Test;
-use Tests\TestCase;
 
-class ProcessConversationInboxTest extends TestCase
-{
-    use RefreshDatabase;
+uses(RefreshDatabase::class);
 
-    private string $waId = '5491112345678';
+beforeEach(function () {
+    $this->waId = '5491112345678';
+    $this->phoneNumberId = '123456789';
+});
 
-    private string $phoneNumberId = '123456789';
+it('processes single message and dispatches outbound', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
 
-    #[Test]
-    public function it_processes_single_message_and_dispatches_outbound(): void
-    {
-        Bus::fake([SendWhatsAppMessage::class]);
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldReceive('handle')
+        ->once()
+        ->with('Hola quiero asegurar un auto', Mockery::type(Conversation::class))
+        ->andReturn(['text' => 'Perfecto, ¿qué vehículo querés asegurar?', 'agent' => 'CustomerIdentifierAgent']);
 
-        $orchestrator = $this->mock(InsuranceOrchestrator::class);
-        $orchestrator->shouldReceive('handle')
-            ->once()
-            ->with('Hola quiero asegurar un auto', \Mockery::type(Conversation::class))
-            ->andReturn(['text' => 'Perfecto, ¿qué vehículo querés asegurar?', 'agent' => 'CustomerIdentifierAgent']);
+    $conversation = Conversation::factory()->create([
+        'external_conversation_id' => $this->waId,
+    ]);
 
-        $conversation = Conversation::factory()->create([
-            'external_conversation_id' => $this->waId,
-        ]);
+    $message = Message::create([
+        'conversation_id' => $conversation->id,
+        'direction' => 'inbound',
+        'content' => 'Hola quiero asegurar un auto',
+        'external_message_id' => 'wamid.test001',
+        'sender_name' => 'Test User',
+        'sender_phone' => $this->waId,
+    ]);
 
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'inbound',
-            'content' => 'Hola quiero asegurar un auto',
-            'external_message_id' => 'wamid.test001',
-            'sender_name' => 'Test User',
-            'sender_phone' => $this->waId,
-        ]);
+    ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
 
-        ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
+    $this->assertNotNull($message->fresh()->processed_at);
 
-        $this->assertNotNull($message->fresh()->processed_at);
+    Bus::assertDispatched(SendWhatsAppMessage::class, function ($job) {
+        return $job->queue === 'whatsapp-outbound';
+    });
+});
 
-        Bus::assertDispatched(SendWhatsAppMessage::class, function ($job) {
-            return $job->queue === 'whatsapp-outbound';
+it('concatenates multiple messages with newline', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
+
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldReceive('handle')
+        ->once()
+        ->with("Hola quiero asegurar un auto\nEs un Renault Sandero", Mockery::type(Conversation::class))
+        ->andReturn(['text' => 'Anotado el Renault Sandero. ¿Qué cobertura preferís?', 'agent' => 'VehicleIdentifierAgent']);
+
+    $conversation = Conversation::factory()->create([
+        'external_conversation_id' => $this->waId,
+    ]);
+
+    Message::create([
+        'conversation_id' => $conversation->id,
+        'direction' => 'inbound',
+        'content' => 'Hola quiero asegurar un auto',
+        'external_message_id' => 'wamid.test002',
+        'sender_name' => 'Test User',
+        'sender_phone' => $this->waId,
+    ]);
+
+    Message::create([
+        'conversation_id' => $conversation->id,
+        'direction' => 'inbound',
+        'content' => 'Es un Renault Sandero',
+        'external_message_id' => 'wamid.test003',
+        'sender_name' => 'Test User',
+        'sender_phone' => $this->waId,
+    ]);
+
+    ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
+
+    $this->assertDatabaseMissing('messages', [
+        'conversation_id' => $conversation->id,
+        'direction' => 'inbound',
+        'processed_at' => null,
+    ]);
+});
+
+it('marks messages processed before calling ai', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
+
+    $conversation = Conversation::factory()->create([
+        'external_conversation_id' => $this->waId,
+    ]);
+
+    $message = Message::create([
+        'conversation_id' => $conversation->id,
+        'direction' => 'inbound',
+        'content' => 'Hola',
+        'external_message_id' => 'wamid.test004',
+        'sender_name' => 'Test User',
+        'sender_phone' => $this->waId,
+    ]);
+
+    $processedAtDuringAiCall = null;
+
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldReceive('handle')
+        ->once()
+        ->andReturnUsing(function () use ($message, &$processedAtDuringAiCall) {
+            $processedAtDuringAiCall = $message->fresh()->processed_at;
+
+            return ['text' => 'Respuesta', 'agent' => 'CustomerIdentifierAgent'];
         });
-    }
 
-    #[Test]
-    public function it_concatenates_multiple_messages_with_newline(): void
-    {
-        Bus::fake([SendWhatsAppMessage::class]);
+    ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
 
-        $orchestrator = $this->mock(InsuranceOrchestrator::class);
-        $orchestrator->shouldReceive('handle')
-            ->once()
-            ->with("Hola quiero asegurar un auto\nEs un Renault Sandero", \Mockery::type(Conversation::class))
-            ->andReturn(['text' => 'Anotado el Renault Sandero. ¿Qué cobertura preferís?', 'agent' => 'VehicleIdentifierAgent']);
+    $this->assertNotNull($processedAtDuringAiCall, 'processed_at debería estar seteado antes de llamar al AI');
+});
 
-        $conversation = Conversation::factory()->create([
-            'external_conversation_id' => $this->waId,
-        ]);
+it('exits cleanly when inbox is empty', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
 
-        Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'inbound',
-            'content' => 'Hola quiero asegurar un auto',
-            'external_message_id' => 'wamid.test002',
-            'sender_name' => 'Test User',
-            'sender_phone' => $this->waId,
-        ]);
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldNotReceive('handle');
 
-        Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'inbound',
-            'content' => 'Es un Renault Sandero',
-            'external_message_id' => 'wamid.test003',
-            'sender_name' => 'Test User',
-            'sender_phone' => $this->waId,
-        ]);
+    $conversation = Conversation::factory()->create([
+        'external_conversation_id' => $this->waId,
+    ]);
 
-        ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
+    ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
 
-        $this->assertDatabaseMissing('messages', [
-            'conversation_id' => $conversation->id,
-            'direction' => 'inbound',
-            'processed_at' => null,
-        ]);
-    }
+    Bus::assertNotDispatched(SendWhatsAppMessage::class);
+});
 
-    #[Test]
-    public function it_marks_messages_processed_before_calling_ai(): void
-    {
-        Bus::fake([SendWhatsAppMessage::class]);
+it('does not reprocess already processed messages', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
 
-        $conversation = Conversation::factory()->create([
-            'external_conversation_id' => $this->waId,
-        ]);
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldNotReceive('handle');
 
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'inbound',
-            'content' => 'Hola',
-            'external_message_id' => 'wamid.test004',
-            'sender_name' => 'Test User',
-            'sender_phone' => $this->waId,
-        ]);
+    $conversation = Conversation::factory()->create([
+        'external_conversation_id' => $this->waId,
+    ]);
 
-        $processedAtDuringAiCall = null;
+    Message::create([
+        'conversation_id' => $conversation->id,
+        'direction' => 'inbound',
+        'content' => 'Mensaje ya procesado',
+        'external_message_id' => 'wamid.test005',
+        'sender_name' => 'Test User',
+        'sender_phone' => $this->waId,
+        'processed_at' => now()->subMinutes(5),
+    ]);
 
-        $orchestrator = $this->mock(InsuranceOrchestrator::class);
-        $orchestrator->shouldReceive('handle')
-            ->once()
-            ->andReturnUsing(function () use ($message, &$processedAtDuringAiCall) {
-                $processedAtDuringAiCall = $message->fresh()->processed_at;
+    ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
 
-                return ['text' => 'Respuesta', 'agent' => 'CustomerIdentifierAgent'];
-            });
+    Bus::assertNotDispatched(SendWhatsAppMessage::class);
+});
 
-        ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
+it('ignores outbound messages in inbox query', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
 
-        $this->assertNotNull($processedAtDuringAiCall, 'processed_at debería estar seteado antes de llamar al AI');
-    }
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldNotReceive('handle');
 
-    #[Test]
-    public function it_exits_cleanly_when_inbox_is_empty(): void
-    {
-        Bus::fake([SendWhatsAppMessage::class]);
+    $conversation = Conversation::factory()->create([
+        'external_conversation_id' => $this->waId,
+    ]);
 
-        $orchestrator = $this->mock(InsuranceOrchestrator::class);
-        $orchestrator->shouldNotReceive('handle');
+    // Solo mensaje outbound sin procesar — no debe disparar AI
+    Message::create([
+        'conversation_id' => $conversation->id,
+        'direction' => 'outbound',
+        'content' => 'Respuesta anterior del bot',
+        'external_message_id' => 'wamid.outbound001',
+        'sender_name' => 'Bot',
+        'sender_phone' => $this->phoneNumberId,
+    ]);
 
-        $conversation = Conversation::factory()->create([
-            'external_conversation_id' => $this->waId,
-        ]);
+    ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
 
-        ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
-
-        Bus::assertNotDispatched(SendWhatsAppMessage::class);
-    }
-
-    #[Test]
-    public function it_does_not_reprocess_already_processed_messages(): void
-    {
-        Bus::fake([SendWhatsAppMessage::class]);
-
-        $orchestrator = $this->mock(InsuranceOrchestrator::class);
-        $orchestrator->shouldNotReceive('handle');
-
-        $conversation = Conversation::factory()->create([
-            'external_conversation_id' => $this->waId,
-        ]);
-
-        Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'inbound',
-            'content' => 'Mensaje ya procesado',
-            'external_message_id' => 'wamid.test005',
-            'sender_name' => 'Test User',
-            'sender_phone' => $this->waId,
-            'processed_at' => now()->subMinutes(5),
-        ]);
-
-        ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
-
-        Bus::assertNotDispatched(SendWhatsAppMessage::class);
-    }
-
-    #[Test]
-    public function it_ignores_outbound_messages_in_inbox_query(): void
-    {
-        Bus::fake([SendWhatsAppMessage::class]);
-
-        $orchestrator = $this->mock(InsuranceOrchestrator::class);
-        $orchestrator->shouldNotReceive('handle');
-
-        $conversation = Conversation::factory()->create([
-            'external_conversation_id' => $this->waId,
-        ]);
-
-        // Solo mensaje outbound sin procesar — no debe disparar AI
-        Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'outbound',
-            'content' => 'Respuesta anterior del bot',
-            'external_message_id' => 'wamid.outbound001',
-            'sender_name' => 'Bot',
-            'sender_phone' => $this->phoneNumberId,
-        ]);
-
-        ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
-
-        Bus::assertNotDispatched(SendWhatsAppMessage::class);
-    }
-}
+    Bus::assertNotDispatched(SendWhatsAppMessage::class);
+});

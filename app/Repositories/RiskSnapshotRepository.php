@@ -6,7 +6,6 @@ use App\Models\Customer;
 use App\Models\RiskSnapshot;
 use App\Models\Vehicle;
 use App\Traits\ConditionalLogger;
-use Illuminate\Support\Facades\Log;
 
 class RiskSnapshotRepository
 {
@@ -14,10 +13,6 @@ class RiskSnapshotRepository
 
     /**
      * Crea un snapshot inmutable basado en las entidades vivas.
-     * @param Customer $customer
-     * @param Vehicle $vehicle
-     * @param string|null $coveragePreference
-     * @return RiskSnapshot
      */
     public function createFromEntities(Customer $customer, Vehicle $vehicle, ?string $coveragePreference = null): RiskSnapshot
     {

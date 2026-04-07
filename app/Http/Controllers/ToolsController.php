@@ -6,8 +6,10 @@ namespace App\Http\Controllers;
 
 use App\Adapters\OpenAI\AgentToolAdapter;
 // use App\Models\Vehicle;
+use App\Contracts\AIProviderAdapterInterface;
 use App\Factories\ToolAdapterFactory;
 use App\Traits\ConditionalLogger;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -33,7 +35,7 @@ class ToolsController extends Controller
         // Detección e Instanciación centralizada
         try {
             $adapter = $this->getAdapter($request);
-        } catch (\InvalidArgumentException $e) {
+        } catch (\InvalidArgumentException) {
             return response()->json(['error' => 'Proveedor de IA no soportado'], 400);
         }
 
@@ -56,7 +58,7 @@ class ToolsController extends Controller
 
         try {
             $adapter = $this->getAdapter($request);
-        } catch (\InvalidArgumentException $e) {
+        } catch (\InvalidArgumentException) {
             return response()->json(['error' => 'Proveedor de IA no soportado'], 400);
         }
 
@@ -76,7 +78,7 @@ class ToolsController extends Controller
 
         try {
             $adapter = $this->getAdapter($request);
-        } catch (\InvalidArgumentException $e) {
+        } catch (\InvalidArgumentException) {
             return response()->json(['error' => 'Proveedor de IA no soportado'], 400);
         }
 
@@ -96,7 +98,7 @@ class ToolsController extends Controller
 
         try {
             $adapter = $this->getAdapter($request);
-        } catch (\InvalidArgumentException $e) {
+        } catch (\InvalidArgumentException) {
             return response()->json(['error' => 'Proveedor de IA no soportado'], 400);
         }
 
@@ -113,7 +115,7 @@ class ToolsController extends Controller
         $this->logCustomer('HTTP Tool Request recibido: checkout', ['body' => $request->all()]);
         try {
             $adapter = $this->getAdapter($request);
-        } catch (\InvalidArgumentException $e) {
+        } catch (\InvalidArgumentException) {
             return response()->json(['error' => 'Proveedor de IA no soportado'], 400);
         }
 
@@ -124,7 +126,7 @@ class ToolsController extends Controller
         return $this->jsonResponse($result);
     }
 
-    protected function getAdapter(Request $request): \App\Contracts\AIProviderAdapterInterface
+    protected function getAdapter(Request $request): AIProviderAdapterInterface
     {
         $providerName = $request->input('ai_provider', 'openai');
 
@@ -137,7 +139,7 @@ class ToolsController extends Controller
             ?? $request->input('openai_user_id');
     }
 
-    protected function jsonResponse(array $result): \Illuminate\Http\JsonResponse
+    protected function jsonResponse(array $result): JsonResponse
     {
         $statusCode = $result['success']
             ? 200
@@ -146,7 +148,7 @@ class ToolsController extends Controller
         return response()->json($result, $statusCode);
     }
 
-    protected function errorResponse(string $message, int $code): \Illuminate\Http\JsonResponse
+    protected function errorResponse(string $message, int $code): JsonResponse
     {
         return response()->json([
             'success' => false,

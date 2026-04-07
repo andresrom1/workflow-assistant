@@ -329,10 +329,10 @@ El formulario de checkout captura 7 fotos desde la cámara del celular. Los nave
 
 === phpunit/core rules ===
 
-# PHPUnit
+# Pest
 
-- This application uses PHPUnit for testing. All tests must be written as PHPUnit classes. Use `php artisan make:test --phpunit {name}` to create a new test.
-- If you see a test using "Pest", convert it to PHPUnit.
+- This application uses Pest for testing. All tests must be written using Pest closure syntax (`it()` / `test()`). Use `php artisan make:test {name}` to create a new test.
+- If you see a test using PHPUnit class syntax, convert it to Pest.
 - Every time a test has been updated, run that singular test.
 - When the tests relating to your feature are passing, ask the user if they would like to also run the entire test suite to make sure everything is still passing.
 - Tests should cover all happy paths, failure paths, and edge cases.
