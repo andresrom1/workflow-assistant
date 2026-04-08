@@ -324,8 +324,22 @@ El formulario de checkout captura 7 fotos desde la cámara del celular. Los nave
 
 # Laravel Pint Code Formatter
 
-- If you have modified any PHP files, you must run `vendor/bin/pint --dirty` before finalizing changes to ensure your code matches the project's expected style.
+- Pint runs automatically via a PostToolUse hook whenever a `.php` file is edited — you do NOT need to call it manually after every edit.
+- If you need to manually format: `php vendor/bin/pint --dirty`
 - Do not run `vendor/bin/pint --test`, simply run `vendor/bin/pint` to fix any formatting issues.
+
+# Code Quality Pipeline
+
+This project has three automated quality tools. Run them in this order after making code changes:
+
+| Tool | Command | When to run |
+|---|---|---|
+| **Pint** (formatter) | `composer lint:fix` | Runs automatically on every PHP file edit via hook |
+| **Rector** (refactoring) | `composer refactor` | Before finalizing a feature branch (dry-run first with `composer refactor:dry`) |
+| **PHPStan** (static analysis) | `composer analyse` | Before committing — must produce 0 errors (baseline captures pre-existing issues) |
+| **Pest** (tests) | `composer test` | After any logic change |
+
+**PHPStan baseline:** `phpstan-baseline.neon` captures 143 pre-existing errors. New code must not add new errors. When you fix a baselined error, regenerate with `vendor/bin/phpstan --generate-baseline`.
 
 === phpunit/core rules ===
 
