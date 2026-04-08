@@ -31,7 +31,28 @@
       "Bash(git checkout:*)",
       "Bash(git reset:*)",
       "Bash(git stash:*)",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "Bash(vendor/bin/pest --no-coverage)",
+      "Bash(vendor/bin/phpstan analyse:*)",
+      "Bash(php vendor/bin/pint:*)",
+      "Bash(php vendor/bin/rector:*)",
+      "Skill(update-config)",
+      "Skill(update-config:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import sys,json,subprocess; d=json.load(sys.stdin); f=d.get('tool_input',{}).get('file_path',''); r=subprocess.run(['php','vendor/bin/pint','--dirty'],cwd='C:/Development/pas-mobile/workflow-assistant',capture_output=True,text=True) if f.endswith('.php') else None; print(r.stdout.strip()) if r and r.stdout.strip() else None\" 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Formatting PHP with Pint..."
+          }
+        ]
+      }
     ]
   },
   "enableAllProjectMcpServers": true,
