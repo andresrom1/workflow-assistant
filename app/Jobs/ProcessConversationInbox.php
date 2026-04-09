@@ -44,6 +44,7 @@ class ProcessConversationInbox implements ShouldQueue
         $messages = Message::where('conversation_id', $this->conversationId)
             ->where('direction', 'inbound')
             ->whereNull('processed_at')
+            ->whereNotNull('content') // skip messages pending media transcription
             ->orderBy('created_at')
             ->get();
 

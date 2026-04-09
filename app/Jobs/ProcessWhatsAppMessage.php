@@ -2,8 +2,10 @@
 
 namespace App\Jobs;
 
+use App\Enums\MessageType;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\MessageAttachment;
 use App\Repositories\ConversationRepository;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -30,6 +32,8 @@ class ProcessWhatsAppMessage implements ShouldQueue
         private readonly string $messageType = 'text',
         private readonly ?string $extUserId = null,
         private readonly ?string $extUsername = null,
+        private readonly ?string $mediaId = null,
+        private readonly ?string $mediaMimeType = null,
     ) {}
 
     public function handle(ConversationRepository $conversationRepo): void
@@ -42,14 +46,23 @@ class ProcessWhatsAppMessage implements ShouldQueue
             return;
         }
 
-        // 2. Solo procesamos mensajes de texto por ahora.
-        if ($this->messageType !== 'text' || ($this->messageBody === '' || $this->messageBody === '0')) {
+        $type = MessageType::tryFrom($this->messageType) ?? MessageType::Text;
+
+        // 2. Ignorar tipos no soportados aún.
+        if ($type !== MessageType::Text && $type !== MessageType::Audio) {
             Cache::put($cacheKey, true, now()->addDay());
 
             return;
         }
 
-        // 3. Obtener o crear la conversación — algoritmo dual-key:
+        // 3. Guardar mensajes de texto vacíos como ingestados pero sin procesar.
+        if ($type === MessageType::Text && (trim($this->messageBody) === '' || $this->messageBody === '0')) {
+            Cache::put($cacheKey, true, now()->addDay());
+
+            return;
+        }
+
+        // 4. Obtener o crear la conversación — algoritmo dual-key:
         //    Primero por ext_user_id (BSUID, estable aunque el usuario cambie de número),
         //    luego fallback al wa_id (teléfono).
         $conversation = $this->extUserId
@@ -68,7 +81,7 @@ class ProcessWhatsAppMessage implements ShouldQueue
         // Guardar ext_user_id y ext_username si aún no están (sin sobreescribir valores existentes).
         $conversation->updateExternalIdentifiers($this->extUserId, $this->extUsername);
 
-        // 3b. Persistir el nombre del contacto en el Customer recurrente (customer_id ya vinculado).
+        // 4b. Persistir el nombre del contacto en el Customer recurrente (customer_id ya vinculado).
         if ($this->contactName && $conversation->customer_id) {
             $conversation->load('customer');
             if ($conversation->customer && ! $conversation->customer->name) {
@@ -76,31 +89,58 @@ class ProcessWhatsAppMessage implements ShouldQueue
             }
         }
 
-        // 3c. Persistir mensaje entrante (firstOrCreate evita duplicados por retry de Meta).
+        // 4c. Persistir mensaje entrante (firstOrCreate evita duplicados por retry de Meta).
         //     processed_at queda null — el inbox processor lo marcará al procesarlo.
-        Message::firstOrCreate(
+        $message = Message::firstOrCreate(
             ['external_message_id' => $this->messageId],
             [
                 'conversation_id' => $conversation->id,
                 'direction' => 'inbound',
-                'content' => $this->messageBody,
+                'type' => $type,
+                'content' => $type === MessageType::Text ? $this->messageBody : null,
                 'sender_name' => $this->contactName,
                 'sender_phone' => $this->waId,
             ]
         );
 
-        // 4. Marcar wamid como ingestado para evitar doble ingesta si Meta reenvía.
+        // 5. Marcar wamid como ingestado para evitar doble ingesta si Meta reenvía.
         Cache::put($cacheKey, true, now()->addDay());
 
-        // 5. Despachar el inbox processor con delay de 2s (ventana de debounce).
-        ProcessConversationInbox::dispatch($conversation->id, $this->waId, $this->phoneNumberId)
-            ->onQueue('whatsapp-ai')
-            ->delay(now()->addSeconds(2));
+        if ($type === MessageType::Audio) {
+            // 6a. Crear el attachment y despachar transcripción.
+            $attachment = MessageAttachment::firstOrCreate(
+                ['message_id' => $message->id],
+                [
+                    'attachment_type' => 'audio',
+                    'external_media_id' => $this->mediaId,
+                    'mime_type' => $this->mediaMimeType,
+                    'processing_status' => 'pending',
+                ]
+            );
 
-        Log::info('WhatsApp: mensaje ingestado', [
-            'wamid' => $this->messageId,
-            'conversation_id' => $conversation->id,
-        ]);
+            ProcessMediaAttachment::dispatch(
+                $attachment->id,
+                $conversation->id,
+                $this->waId,
+                $this->phoneNumberId,
+            )->onQueue('media');
+
+            Log::info('WhatsApp: audio ingestado, transcripción encolada', [
+                'wamid' => $this->messageId,
+                'conversation_id' => $conversation->id,
+                'attachment_id' => $attachment->id,
+            ]);
+        } else {
+            // 6b. Texto: despachar el inbox processor con delay de 2s (ventana de debounce).
+            ProcessConversationInbox::dispatch($conversation->id, $this->waId, $this->phoneNumberId)
+                ->onQueue('whatsapp-ai')
+                ->delay(now()->addSeconds(2));
+
+            Log::info('WhatsApp: mensaje ingestado', [
+                'wamid' => $this->messageId,
+                'conversation_id' => $conversation->id,
+            ]);
+        }
     }
 
     public function failed(\Throwable $exception): void

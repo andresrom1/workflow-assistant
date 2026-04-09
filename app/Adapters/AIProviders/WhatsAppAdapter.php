@@ -14,6 +14,7 @@ use App\Services\QuoteService;
 use App\Services\VehicleIdentificationService;
 use App\Traits\ConditionalLogger;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -321,6 +322,43 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             "Tu link de checkout está listo. Completá tus datos aquí: {$checkoutUrl}",
             ['checkout_url' => $checkoutUrl]
         );
+    }
+
+    // =========================================================================
+    // MEDIA
+    // =========================================================================
+
+    /**
+     * Downloads raw media content from the Meta Graph API.
+     *
+     * @throws \RuntimeException
+     */
+    public function downloadMedia(string $mediaId): string
+    {
+        $accessToken = config('services.whatsapp.access_token');
+        $apiVersion = config('services.whatsapp.api_version', 'v21.0');
+        $baseUrl = "https://graph.facebook.com/{$apiVersion}";
+
+        $metaResponse = Http::withToken($accessToken)
+            ->get("{$baseUrl}/{$mediaId}");
+
+        if ($metaResponse->failed()) {
+            throw new \RuntimeException("Failed to retrieve media metadata for ID {$mediaId}: ".$metaResponse->body());
+        }
+
+        $mediaUrl = $metaResponse->json('url');
+
+        if (! $mediaUrl) {
+            throw new \RuntimeException("No download URL returned for media ID {$mediaId}.");
+        }
+
+        $downloadResponse = Http::withToken($accessToken)->get($mediaUrl);
+
+        if ($downloadResponse->failed()) {
+            throw new \RuntimeException("Failed to download media from URL for ID {$mediaId}: ".$downloadResponse->body());
+        }
+
+        return $downloadResponse->body();
     }
 
     // =========================================================================
