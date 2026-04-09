@@ -450,12 +450,8 @@ El sistema usa sombras mínimas — la elevación se comunica principalmente con
 
 #### Destructivo
 ```html
-<button class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium
-               bg-red-50 dark:bg-[#1f0a0a]
-               text-red-700 dark:text-red-400
-               rounded-[10px] transition-colors
-               hover:bg-red-100 dark:hover:bg-[#2d0f0f]">
-  Eliminar datos de tarjeta
+<button class="btn btn-danger">
+  Eliminar
 </button>
 ```
 
@@ -1080,6 +1076,12 @@ body {
            disabled:opacity-50 disabled:cursor-not-allowed
            flex items-center justify-center gap-1.5;
   }
+  .btn-danger {
+    @apply px-4 py-2 text-sm;
+    background: var(--badge-danger-bg);
+    color: var(--badge-danger-txt);
+  }
+  .btn-danger:hover { filter: brightness(0.92); }
   .card {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -1162,6 +1164,7 @@ Acento primario:   bg-[#5b5ef6]  text-white
 Acento hover:      bg-[#4a4de8]
 Focus ring:        ring-3 ring-[#5b5ef6]/25
 Hover de fila:     hover:bg-[var(--border-sub)]
+Botón danger:      btn btn-danger
 ```
 
 ### Radius frecuentes

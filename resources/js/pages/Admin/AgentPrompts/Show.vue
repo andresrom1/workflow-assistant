@@ -24,17 +24,7 @@
         </div>
       </div>
 
-      <!-- Flash -->
-      <Transition name="fade-badge">
-        <div v-if="$page.props.flash?.success"
-          class="flex items-center gap-2.5 px-4 py-3 rounded-[10px] text-sm"
-          style="background:#dcfce7; border-left: 3px solid #16a349; color:#15803d;">
-          <span class="font-semibold">✓</span>
-          {{ $page.props.flash.success }}
-        </div>
-      </Transition>
-
-      <!-- Editor -->
+<!-- Editor -->
       <div class="rounded-[14px] overflow-hidden"
         style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
 
@@ -325,9 +315,6 @@ const formatDate = (iso: string) =>
 </script>
 
 <style scoped>
-.fade-badge-enter-active, .fade-badge-leave-active { transition: opacity 0.2s ease; }
-.fade-badge-enter-from, .fade-badge-leave-to { opacity: 0; }
-
 .accordion-enter-active, .accordion-leave-active {
   transition: max-height 0.2s ease, opacity 0.2s ease;
   overflow: hidden;

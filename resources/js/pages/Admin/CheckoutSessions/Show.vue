@@ -20,15 +20,7 @@
         </span>
       </div>
 
-      <!-- Flash -->
-      <div v-if="$page.props.flash?.success"
-        class="flex items-center gap-2.5 px-4 py-3 rounded-[10px] text-sm"
-        style="background:#dcfce7; border-left: 3px solid #16a349; color:#15803d;">
-        <span class="font-semibold">✓</span>
-        {{ $page.props.flash.success }}
-      </div>
-
-      <!-- Cobertura -->
+<!-- Cobertura -->
       <div v-if="session.alternative"
         class="rounded-[14px] p-5"
         style="background: var(--bg-card); border: 1px solid var(--border); border-left: 4px solid #5b5ef6; box-shadow: var(--shadow-card);">

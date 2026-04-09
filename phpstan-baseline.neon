@@ -571,18 +571,6 @@ parameters:
 			path: app/Jobs/ProcessWhatsAppMessage.php
 
 		-
-			message: '#^PHPDoc tag @use has invalid type Database\\Factories\\UserFactory\.$#'
-			identifier: class.notFound
-			count: 1
-			path: app/Models/User.php
-
-		-
-			message: '#^Type Database\\Factories\\UserFactory in generic type Illuminate\\Database\\Eloquent\\Factories\\HasFactory\<Database\\Factories\\UserFactory\> in PHPDoc tag @use is not subtype of template type TFactory of Illuminate\\Database\\Eloquent\\Factories\\Factory of trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory\.$#'
-			identifier: generics.notSubtype
-			count: 1
-			path: app/Models/User.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$año\.$#'
 			identifier: property.notFound
 			count: 1

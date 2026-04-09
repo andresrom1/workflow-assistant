@@ -15,15 +15,7 @@
         <BackLink href="/admin/checkout-sessions" label="Auditoría" />
       </div>
 
-      <!-- Flash -->
-      <div v-if="$page.props.flash?.success"
-        class="flex items-center gap-2.5 px-4 py-3 rounded-[10px] text-sm"
-        style="background:#dcfce7; border-left: 3px solid #16a349; color:#15803d;">
-        <span class="font-semibold">✓</span>
-        {{ $page.props.flash.success }}
-      </div>
-
-      <!-- Dashboard de estado -->
+<!-- Dashboard de estado -->
       <div class="rounded-[14px] p-5"
         style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
         <h2 class="text-[11px] font-semibold uppercase tracking-wider mb-4" style="color: var(--text-3);">

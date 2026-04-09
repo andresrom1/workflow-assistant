@@ -77,7 +77,7 @@
           </NavItem>
         </NavGroup>
 
-        <NavGroup :label="open ? 'Administración' : ''" :open="open">
+        <NavGroup v-if="auth?.user?.role === 'admin'" :label="open ? 'Administración' : ''" :open="open">
           <NavItem
             :open="open"
             href="/admin/checkout-sessions"
@@ -130,6 +130,21 @@
                      2.296.07 2.572-1.065z" />
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </template>
+          </NavItem>
+
+          <NavItem
+            :open="open"
+            href="/admin/users/create"
+            :active="isActive('/admin/users')"
+            label="Usuarios"
+          >
+            <template #icon>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0
+                     00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             </template>
           </NavItem>
@@ -213,6 +228,41 @@
           </button>
         </div>
 
+        <!-- Usuario autenticado + logout — visible cuando sidebar abierto -->
+        <Transition name="slide-text">
+          <div
+            v-if="open && auth?.user"
+            class="px-3 py-2.5 flex items-center gap-2"
+            :style="`border-top: 1px solid var(--sb-divider);`"
+          >
+            <div class="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white bg-[#5b5ef6]">
+              {{ auth.user.name?.charAt(0).toUpperCase() }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <Link
+                href="/profile"
+                class="text-[11px] font-medium truncate block hover:underline"
+                :style="`color: var(--sb-item-text);`"
+              >
+                {{ auth.user.name }}
+              </Link>
+            </div>
+            <Link
+              href="/logout"
+              method="post"
+              as="button"
+              class="w-6 h-6 rounded-[6px] flex items-center justify-center transition-all"
+              :style="`color: var(--sb-collapse-text);`"
+              title="Cerrar sesión"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </Link>
+          </div>
+        </Transition>
+
         <!-- Botón colapsar — solo desktop -->
         <div
           class="hidden lg:flex items-center h-11 px-3"
@@ -294,12 +344,31 @@
         <slot />
       </main>
     </div>
+
+    <!-- ─── Toast notifications ──────────────────────────────────── -->
+    <Toaster
+      position="bottom-right"
+      :duration="4000"
+      close-button
+      :style="{
+        '--normal-bg': 'var(--bg-card)',
+        '--normal-text': 'var(--text-1)',
+        '--normal-border': 'var(--border)',
+        '--success-bg': 'var(--badge-ok-bg)',
+        '--success-text': 'var(--badge-ok-txt)',
+        '--success-border': 'var(--badge-ok-bg)',
+        '--error-bg': 'var(--badge-danger-bg)',
+        '--error-text': 'var(--badge-danger-txt)',
+        '--error-border': 'var(--badge-danger-bg)',
+      }"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { usePage } from '@inertiajs/vue3'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { usePage, Link } from '@inertiajs/vue3'
+import { Toaster, toast } from 'vue-sonner'
 import NavItem from '@/components/Sidebar/NavItem.vue'
 import NavGroup from '@/components/Sidebar/NavGroup.vue'
 
@@ -319,6 +388,19 @@ onUnmounted(() => { window.removeEventListener('resize', checkMobile) })
 const page = usePage()
 const isActive = (path: string) =>
   path === '/' ? page.url === '/' : page.url.startsWith(path)
+
+// ─── Auth ─────────────────────────────────────────────────────────────────
+const auth = computed(() => (page.props as any).auth)
+
+// ─── Flash toasts ─────────────────────────────────────────────────────────
+watch(
+  () => (page.props as any).flash,
+  (flash: any) => {
+    if (flash?.success) toast.success(flash.success)
+    if (flash?.error) toast.error(flash.error)
+  },
+  { immediate: true },
+)
 
 // ─── Toggle de tema ───────────────────────────────────────────────────────
 type Theme = 'light' | 'dark' | 'system'

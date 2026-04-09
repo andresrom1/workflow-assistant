@@ -13,15 +13,7 @@
         </span>
       </div>
 
-      <!-- Flash message -->
-      <div v-if="$page.props.flash?.success"
-        class="flex items-center gap-2.5 px-4 py-3 rounded-[10px] text-sm mb-6"
-        style="background:#dcfce7; border-left: 3px solid #16a349; color:#15803d;">
-        <span class="font-semibold">✓</span>
-        {{ $page.props.flash.success }}
-      </div>
-
-      <!-- Empty state -->
+<!-- Empty state -->
       <div v-if="!conversations.data.length"
         class="rounded-[14px] p-12 text-center text-sm"
         style="background: var(--bg-card); border: 1px dashed var(--border); color: var(--text-3);">
