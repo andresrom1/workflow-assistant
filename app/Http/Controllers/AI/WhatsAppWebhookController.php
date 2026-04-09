@@ -72,15 +72,19 @@ class WhatsAppWebhookController extends Controller
 
             // Ignorar mensajes del mismo número emisor (evitar bucles).
             if ($waId && $messageId && $waId !== $phoneNumberId) {
+                $messageType = data_get($message, 'type', 'text');
+
                 ProcessWhatsAppMessage::dispatch(
                     $waId,
                     data_get($message, 'text.body', ''),
                     $messageId,
                     $phoneNumberId,
                     data_get($contact, 'profile.name', 'Usuario'),
-                    data_get($message, 'type', 'text'),
+                    $messageType,
                     $extUserId,
                     $extUsername,
+                    data_get($message, "{$messageType}.id"),
+                    data_get($message, "{$messageType}.mime_type"),
                 );
             }
         }

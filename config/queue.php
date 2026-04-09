@@ -56,6 +56,17 @@ return [
             'after_commit' => false,
         ],
 
+        // Conexión dedicada para procesamiento de media (descarga + STT).
+        // retry_after debe superar el --timeout del worker (120s).
+        'database_media' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'media',
+            'retry_after' => 150,
+            'after_commit' => false,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),
