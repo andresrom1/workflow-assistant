@@ -36,7 +36,7 @@ class QuoteAgent implements Agent, Conversational, HasTools
     {
         return 'Tu tarea es mantener al cliente comprometido mientras se procesan las cotizaciones. '
             .'Hacé preguntas conversacionales sobre el vehículo o experiencias previas con seguros. '
-            .'Cuando las cotizaciones estén listas, usá la herramienta disponible para obtenerlas. '
+            .'Cuando las cotizaciones estén listas, usá la herramienta disponible para verificarlo. '
             .'Respondé siempre en español, de forma concisa.';
     }
 

@@ -42,16 +42,31 @@ class InsuranceOrchestrator
         // Esto evita pedirle al usuario su número cuando ya lo tenemos del webhook.
         $this->tryAutoIdentifyByPhone($conversation);
 
-        $state = $conversation->aiState();
+        $stateBefore = $conversation->aiState();
 
         // Todos los agentes comparten el mismo hilo de conversación, identificado
         // por el wa_id del usuario. Esto permite que el contexto fluya entre agentes.
         $waUser = (object) ['id' => $conversation->external_conversation_id];
 
-        $agent = $this->resolveAgent($state, $conversation);
+        $agent = $this->resolveAgent($stateBefore, $conversation);
 
         /** @var AgentResponse $response */
         $response = $agent->continueLastConversation($waUser)->prompt($message);
+
+        // Detectar transición de estado: si quote_ready flipeó durante la ejecución,
+        // descartar la respuesta de QuoteAgent y encadenar a CheckoutAgent.
+        $conversation->refresh();
+        $stateAfter = $conversation->aiState();
+
+        if (! $stateBefore['quote_ready'] && $stateAfter['quote_ready']) {
+            $checkoutAgent = $this->resolveAgent($stateAfter, $conversation);
+            $checkoutResponse = $checkoutAgent->continueLastConversation($waUser)->prompt('Cotizaciones listas');
+
+            return [
+                'text' => $checkoutResponse->text,
+                'agent' => class_basename($checkoutAgent),
+            ];
+        }
 
         return [
             'text' => $response->text,

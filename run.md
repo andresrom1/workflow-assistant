@@ -14,6 +14,7 @@ php artisan queue:listen --queue=whatsapp-outbound --tries=5 --timeout=30
 
 php artisan queue:listen --queue=whatsapp-ai,whatsapp-outbound,default --tries=3 --timeout=180
 
+php artisan queue:listen database_media
 
 ngrok http 8001
 
