@@ -25,6 +25,7 @@ Homestead.yaml
 Thumbs.db
 toClaude.ia
 database/database.sqlite
+run.md
 
 
 /.phpstan-tmp

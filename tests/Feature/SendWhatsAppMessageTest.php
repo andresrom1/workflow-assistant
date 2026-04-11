@@ -1,8 +1,10 @@
 <?php
 
+use App\Enums\Modality;
 use App\Exceptions\WhatsAppSpamLimitException;
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\Conversation;
+use App\Services\Message\MessageModalityDecider;
 use App\Services\WhatsApp\WhatsAppOutboundService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -17,19 +19,26 @@ it('calls outbound service with correct parameters', function () {
     $conversation = Conversation::factory()->create();
 
     $waService = $this->mock(WhatsAppOutboundService::class);
+    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendMessage')
         ->once()
-        ->with($this->waId, 'Hola, te ayudo con tu cotización', $this->phoneNumberId, $conversation->id, null)
+        ->with($this->waId, 'Hola, te ayudo con tu cotización', $this->phoneNumberId, $conversation->id, null, false)
         ->andReturn(['messages' => [['id' => 'wamid.out001']]]);
+
+    // Decider returns TEXT (no inbound audio in this conversation)
+    $this->mock(MessageModalityDecider::class)
+        ->shouldReceive('decide')
+        ->andReturn(['modality' => Modality::Text, 'eligible' => false, 'reason' => 'no_user_audio', 'ratio' => null, 'p' => null, 'window_size' => null]);
 
     SendWhatsAppMessage::dispatchSync($this->waId, 'Hola, te ayudo con tu cotización', $this->phoneNumberId, $conversation->id);
 });
 
 it('calls outbound service without conversation id', function () {
     $waService = $this->mock(WhatsAppOutboundService::class);
+    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendMessage')
         ->once()
-        ->with($this->waId, 'Mensaje de prueba', $this->phoneNumberId, null, null)
+        ->withArgs(fn ($to, $text, $phoneId) => $to === $this->waId && $text === 'Mensaje de prueba')
         ->andReturn([]);
 
     SendWhatsAppMessage::dispatchSync($this->waId, 'Mensaje de prueba', $this->phoneNumberId);
@@ -37,6 +46,7 @@ it('calls outbound service without conversation id', function () {
 
 it('does not retry on spam limit exception', function () {
     $waService = $this->mock(WhatsAppOutboundService::class);
+    $waService->shouldReceive('sendTypingIndicator')->once();
 
     // sendMessage se llama exactamente una vez — no hay reintentos
     $waService->shouldReceive('sendMessage')
