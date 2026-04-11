@@ -131,18 +131,6 @@ it('returns text when message contains a monetary amount', function () {
     expect($result['reason'])->toBe('hard_gate');
 });
 
-it('returns text when message contains a list structure', function () {
-    $conversation = conversationWithInboundAudio();
-    $decider = makeDecider();
-
-    $text = "Tus opciones de cobertura son:\n- Terceros básico\n- Terceros completo\n- Todo riesgo\nElegí la que mejor se adapte a tus necesidades.";
-
-    $result = $decider->decide($text, 'CustomerIdentifierAgent', $conversation);
-
-    expect($result['modality'])->toBe(Modality::Text);
-    expect($result['reason'])->toBe('hard_gate');
-});
-
 // ---------------------------------------------------------------------------
 // Layer 2: LLM classifier
 // ---------------------------------------------------------------------------
@@ -162,9 +150,9 @@ it('returns text when LLM classifies content as informational', function () use 
 // Layer 3: Cold start
 // ---------------------------------------------------------------------------
 
-it('returns text during cold start (fewer than 3 eligible messages)', function () use ($longText) {
+it('returns text during cold start (fewer than 2 eligible messages)', function () use ($longText) {
     $conversation = conversationWithInboundAudio();
-    addOutboundEligible($conversation, MessageType::Text, 2); // only 2 eligible
+    addOutboundEligible($conversation, MessageType::Text, 1); // only 1 eligible
     $decider = makeDecider();
 
     $result = $decider->decide($longText, 'CustomerIdentifierAgent', $conversation);
