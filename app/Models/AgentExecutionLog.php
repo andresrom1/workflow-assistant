@@ -26,6 +26,7 @@ class AgentExecutionLog extends Model
         'outbound_message_id',
         'input_tokens',
         'output_tokens',
+        'tool_calls',
     ];
 
     protected function casts(): array
@@ -35,6 +36,7 @@ class AgentExecutionLog extends Model
             'state_after'         => 'array',
             'state_changes'       => 'array',
             'inbound_message_ids' => 'array',
+            'tool_calls'          => 'array',
             'chained'             => 'boolean',
             'step'                => 'integer',
             'duration_ms'         => 'integer',

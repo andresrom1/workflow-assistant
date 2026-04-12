@@ -234,6 +234,15 @@
                     </span>
                   </div>
 
+                  <!-- Tool calls -->
+                  <div v-if="group.parent.tool_calls?.length" class="flex flex-wrap gap-1 mt-0.5">
+                    <span v-for="tc in group.parent.tool_calls" :key="tc.name"
+                      class="inline-flex items-center gap-0.5 px-1 py-0 rounded-[3px] text-[9px] font-medium"
+                      style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);">
+                      🔧 {{ toolShortName(tc.name) }}
+                    </span>
+                  </div>
+
                   <!-- Error -->
                   <p v-if="group.parent.status === 'error'" class="text-[10px] mt-0.5 leading-tight"
                      style="color: var(--badge-danger-txt, #dc2626);">
@@ -279,6 +288,15 @@
                     </span>
                   </div>
 
+                  <!-- Tool calls (chained child) -->
+                  <div v-if="group.child.tool_calls?.length" class="flex flex-wrap gap-1 mt-0.5">
+                    <span v-for="tc in group.child.tool_calls" :key="tc.name"
+                      class="inline-flex items-center gap-0.5 px-1 py-0 rounded-[3px] text-[9px] font-medium"
+                      style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);">
+                      🔧 {{ toolShortName(tc.name) }}
+                    </span>
+                  </div>
+
                   <p v-if="group.child.status === 'error'" class="text-[10px] mt-0.5 leading-tight"
                      style="color: var(--badge-danger-txt, #dc2626);">
                     {{ group.child.error_message }}
@@ -320,6 +338,11 @@ interface MessageItem {
   created_at: string
 }
 
+interface ToolCallItem {
+  name: string
+  arguments: Record<string, unknown>
+}
+
 interface ExecutionItem {
   id: number
   agent_name: string
@@ -333,6 +356,7 @@ interface ExecutionItem {
   output_tokens: number | null
   inbound_message_ids: number[] | null
   outbound_message_id: number | null
+  tool_calls: ToolCallItem[]
   created_at: string
 }
 
@@ -626,4 +650,13 @@ const formatAudioDuration = (s: number): string => {
   const sec = s % 60
   return m + ':' + String(sec).padStart(2, '0')
 }
+
+const toolShortName = (name: string): string => ({
+  CheckCoverageRuleTool:  'cobertura?',
+  CheckoutTool:           'checkout',
+  GetQuoteTool:           'cotización',
+  IdentifyCustomerTool:   'cliente',
+  IdentifyVehicleTool:    'vehículo',
+  CoveragePreferenceTool: 'cobertura',
+} as Record<string, string>)[name] ?? name
 </script>

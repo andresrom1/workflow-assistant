@@ -98,6 +98,7 @@ class ConversationController extends Controller
                 'output_tokens'       => $log->output_tokens,
                 'inbound_message_ids' => $log->inbound_message_ids,
                 'outbound_message_id' => $log->outbound_message_id,
+                'tool_calls'          => $log->tool_calls ?? [],
                 'created_at'          => $log->created_at->toIso8601String(),
             ])
             ->all();

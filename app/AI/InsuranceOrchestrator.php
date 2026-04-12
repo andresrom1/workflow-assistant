@@ -73,6 +73,7 @@ class InsuranceOrchestrator
                 'outbound_message_id' => null,
                 'input_tokens'        => null,
                 'output_tokens'       => null,
+                'tool_calls'          => null,
             ]);
 
             throw $e;
@@ -105,6 +106,7 @@ class InsuranceOrchestrator
                 'outbound_message_id' => null,
                 'input_tokens'        => $this->extractInputTokens($response),
                 'output_tokens'       => $this->extractOutputTokens($response),
+                'tool_calls'          => $this->extractToolCalls($response),
             ]);
 
             $checkoutStateBefore  = $stateAfter;
@@ -138,6 +140,7 @@ class InsuranceOrchestrator
                 'outbound_message_id' => null,
                 'input_tokens'        => $this->extractInputTokens($checkoutResponse),
                 'output_tokens'       => $this->extractOutputTokens($checkoutResponse),
+                'tool_calls'          => $this->extractToolCalls($checkoutResponse),
             ]);
 
             return [
@@ -161,6 +164,7 @@ class InsuranceOrchestrator
             'outbound_message_id' => null,
             'input_tokens'        => $this->extractInputTokens($response),
             'output_tokens'       => $this->extractOutputTokens($response),
+            'tool_calls'          => $this->extractToolCalls($response),
         ]);
 
         return [
@@ -223,6 +227,19 @@ class InsuranceOrchestrator
             ! $state['quote_ready']         => 4,
             default                         => 5,
         };
+    }
+
+    /**
+     * Extrae los tool calls del AgentResponse para persistirlos en el log.
+     *
+     * @return array<int, array{name: string, arguments: mixed}>
+     */
+    private function extractToolCalls(AgentResponse $response): array
+    {
+        return $response->toolCalls
+            ->map(fn ($tc) => ['name' => $tc->name, 'arguments' => $tc->arguments])
+            ->values()
+            ->all();
     }
 
     /**
