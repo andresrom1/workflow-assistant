@@ -3,7 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AgentExecutionLog;
 use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\Message;
+use App\Models\MessageAttachment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -36,9 +40,95 @@ class ConversationController extends Controller
                 'status' => $c->status,
                 'ai_state' => $c->aiState(),
                 'messages_count' => $c->messages_count,
-                'last_message_at' => $c->last_message_at?->toIso8601String(),
+                'last_message_at' => $c->last_message_at->toIso8601String(),
                 'created_at' => $c->created_at->toIso8601String(),
             ]),
+        ]);
+    }
+
+    /**
+     * Vista de auditoría de una conversación individual.
+     *
+     * Retorna los mensajes y los logs de ejecución del orquestador
+     * para evaluar la calidad de las respuestas de los agentes.
+     */
+    public function show(Conversation $conversation): Response
+    {
+        $conversation->load('customer');
+
+        $messages = Message::where('conversation_id', $conversation->id)
+            ->with('attachment')
+            ->orderBy('created_at')
+            ->get()
+            ->map(function (Message $m): array {
+                $att = $m->attachment instanceof MessageAttachment ? $m->attachment : null;
+
+                return [
+                    'type'         => $m->direction === 'inbound' ? 'message_inbound' : 'message_outbound',
+                    'id'           => $m->id,
+                    'message_type' => $m->type,
+                    'content'      => $m->content,
+                    'sender_name'  => $m->sender_name,
+                    'agent_name'   => $m->agent_name,
+                    'attachment'   => $att ? [
+                        'duration_seconds' => $att->duration_seconds,
+                        'storage_url'      => $att->storage_url,
+                        'transcription'    => $att->transcription,
+                    ] : null,
+                    'created_at'   => $m->created_at->toIso8601String(),
+                ];
+            })
+            ->all();
+
+        $logs = AgentExecutionLog::where('conversation_id', $conversation->id)
+            ->orderBy('created_at')
+            ->get();
+
+        $executions = $logs
+            ->map(fn (AgentExecutionLog $log): array => [
+                'id'                  => $log->id,
+                'agent_name'          => $log->agent_name,
+                'step'                => $log->step,
+                'state_changes'       => $log->state_changes,
+                'chained'             => $log->chained,
+                'status'              => $log->status,
+                'error_message'       => $log->error_message,
+                'duration_ms'         => $log->duration_ms,
+                'input_tokens'        => $log->input_tokens,
+                'output_tokens'       => $log->output_tokens,
+                'inbound_message_ids' => $log->inbound_message_ids,
+                'outbound_message_id' => $log->outbound_message_id,
+                'created_at'          => $log->created_at->toIso8601String(),
+            ])
+            ->all();
+
+        $customer = $conversation->customer instanceof Customer ? $conversation->customer : null;
+
+        return Inertia::render('Admin/Conversations/Show', [
+            'conversation' => [
+                'id'              => $conversation->id,
+                'external_id'     => $conversation->external_conversation_id,
+                'ext_user_id'     => $conversation->ext_user_id,
+                'ext_username'    => $conversation->ext_username,
+                'customer'        => $customer ? [
+                    'id'    => $customer->id,
+                    'name'  => $customer->name,
+                    'phone' => $customer->phone,
+                ] : null,
+                'channel'         => $conversation->channel,
+                'status'          => $conversation->status,
+                'ai_state'        => $conversation->aiState(),
+                'created_at'      => $conversation->created_at->toIso8601String(),
+                'last_message_at' => $conversation->last_message_at->toIso8601String(),
+            ],
+            'messages'   => $messages,
+            'executions' => $executions,
+            'stats'      => [
+                'total_invocations'   => $logs->count(),
+                'total_duration_ms'   => (int) $logs->sum('duration_ms'),
+                'total_input_tokens'  => $logs->sum('input_tokens') ?: null,
+                'total_output_tokens' => $logs->sum('output_tokens') ?: null,
+            ],
         ]);
     }
 

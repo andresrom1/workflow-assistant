@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Enums\Modality;
 use App\Exceptions\WhatsAppSpamLimitException;
+use App\Models\AgentExecutionLog;
 use App\Models\Conversation;
 use App\Models\MessageAttachment;
 use App\Services\Media\MediaStorageService;
@@ -31,6 +32,7 @@ class SendWhatsAppMessage implements ShouldQueue
         private readonly string $phoneNumberId,
         private readonly ?int $conversationId = null,
         private readonly ?string $agentName = null,
+        private readonly ?int $executionLogId = null,
     ) {}
 
     public function handle(
@@ -117,6 +119,10 @@ class SendWhatsAppMessage implements ShouldQueue
                 'processing_status' => 'done',
                 'processed_at' => now(),
             ]);
+
+            $this->linkOutboundMessage($message->id);
+        } else {
+            $this->linkLatestOutboundMessage();
         }
     }
 
@@ -136,8 +142,44 @@ class SendWhatsAppMessage implements ShouldQueue
                 $this->agentName,
                 $decision['eligible'],
             );
+
+            $this->linkLatestOutboundMessage();
         } catch (WhatsAppSpamLimitException $e) {
             $this->fail($e);
+        }
+    }
+
+    /**
+     * Vincula un mensaje outbound específico al log de ejecución del agente.
+     */
+    private function linkOutboundMessage(int $messageId): void
+    {
+        if (! $this->executionLogId) {
+            return;
+        }
+
+        AgentExecutionLog::where('id', $this->executionLogId)
+            ->update(['outbound_message_id' => $messageId]);
+    }
+
+    /**
+     * Busca el último mensaje outbound de la conversación y lo vincula al log.
+     * Usado cuando el servicio no retorna el modelo directamente (ej: sendMessage).
+     * Es confiable porque ProcessConversationInbox usa WithoutOverlapping por conversación.
+     */
+    private function linkLatestOutboundMessage(): void
+    {
+        if (! $this->executionLogId || ! $this->conversationId) {
+            return;
+        }
+
+        $message = \App\Models\Message::where('conversation_id', $this->conversationId)
+            ->where('direction', 'outbound')
+            ->latest()
+            ->first();
+
+        if ($message) {
+            $this->linkOutboundMessage($message->id);
         }
     }
 

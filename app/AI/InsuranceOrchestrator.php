@@ -14,6 +14,7 @@ use App\AI\Tools\CoveragePreferenceTool;
 use App\AI\Tools\GetQuoteTool;
 use App\AI\Tools\IdentifyCustomerTool;
 use App\AI\Tools\IdentifyVehicleTool;
+use App\Models\AgentExecutionLog;
 use App\Models\Conversation;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
@@ -32,9 +33,8 @@ class InsuranceOrchestrator
      *
      * El estado se actualiza dentro de cada Tool al ejecutarse exitosamente,
      * por lo que en el próximo mensaje el orquestador derivará al siguiente agente.
-     */
-    /**
-     * @return array{text: string, agent: string}
+     *
+     * @return array{text: string, agent: string, execution_log_ids: int[]}
      */
     public function handle(string $message, Conversation $conversation): array
     {
@@ -43,34 +43,130 @@ class InsuranceOrchestrator
         $this->tryAutoIdentifyByPhone($conversation);
 
         $stateBefore = $conversation->aiState();
+        $step        = $this->stepFromState($stateBefore);
 
         // Todos los agentes comparten el mismo hilo de conversación, identificado
         // por el wa_id del usuario. Esto permite que el contexto fluya entre agentes.
         $waUser = (object) ['id' => $conversation->external_conversation_id];
+        $agent  = $this->resolveAgent($stateBefore, $conversation);
 
-        $agent = $this->resolveAgent($stateBefore, $conversation);
+        $start = hrtime(true);
 
-        /** @var AgentResponse $response */
-        $response = $agent->continueLastConversation($waUser)->prompt($message);
+        try {
+            /** @var AgentResponse $response */
+            $response = $agent->continueLastConversation($waUser)->prompt($message);
+        } catch (\Throwable $e) {
+            $durationMs = (int) round((hrtime(true) - $start) / 1e6);
+
+            AgentExecutionLog::create([
+                'conversation_id'     => $conversation->id,
+                'agent_name'          => class_basename($agent),
+                'step'                => $step,
+                'state_before'        => $stateBefore,
+                'state_after'         => $stateBefore,
+                'state_changes'       => [],
+                'chained'             => false,
+                'status'              => 'error',
+                'error_message'       => $e->getMessage(),
+                'duration_ms'         => $durationMs,
+                'inbound_message_ids' => null,
+                'outbound_message_id' => null,
+                'input_tokens'        => null,
+                'output_tokens'       => null,
+            ]);
+
+            throw $e;
+        }
+
+        $durationMs = (int) round((hrtime(true) - $start) / 1e6);
 
         // Detectar transición de estado: si quote_ready flipeó durante la ejecución,
         // descartar la respuesta de QuoteAgent y encadenar a CheckoutAgent.
         $conversation->refresh();
-        $stateAfter = $conversation->aiState();
+        $stateAfter   = $conversation->aiState();
+        $stateChanges = array_filter(
+            $stateAfter,
+            fn (bool $val, string $key): bool => $val !== ($stateBefore[$key] ?? false),
+            ARRAY_FILTER_USE_BOTH
+        );
 
         if (! $stateBefore['quote_ready'] && $stateAfter['quote_ready']) {
-            $checkoutAgent = $this->resolveAgent($stateAfter, $conversation);
-            $checkoutResponse = $checkoutAgent->continueLastConversation($waUser)->prompt('Cotizaciones listas');
+            $quoteLog = AgentExecutionLog::create([
+                'conversation_id'     => $conversation->id,
+                'agent_name'          => class_basename($agent),
+                'step'                => $step,
+                'state_before'        => $stateBefore,
+                'state_after'         => $stateAfter,
+                'state_changes'       => $stateChanges,
+                'chained'             => true,
+                'status'              => 'success',
+                'duration_ms'         => $durationMs,
+                'inbound_message_ids' => null,
+                'outbound_message_id' => null,
+                'input_tokens'        => $this->extractInputTokens($response),
+                'output_tokens'       => $this->extractOutputTokens($response),
+            ]);
+
+            $checkoutStateBefore  = $stateAfter;
+            $checkoutAgent        = $this->resolveAgent($checkoutStateBefore, $conversation);
+            $checkoutStep         = $this->stepFromState($checkoutStateBefore);
+            $checkoutStart        = hrtime(true);
+
+            /** @var AgentResponse $checkoutResponse */
+            $checkoutResponse   = $checkoutAgent->continueLastConversation($waUser)->prompt('Cotizaciones listas');
+            $checkoutDurationMs = (int) round((hrtime(true) - $checkoutStart) / 1e6);
+
+            $conversation->refresh();
+            $checkoutStateAfter   = $conversation->aiState();
+            $checkoutStateChanges = array_filter(
+                $checkoutStateAfter,
+                fn (bool $val, string $key): bool => $val !== ($checkoutStateBefore[$key] ?? false),
+                ARRAY_FILTER_USE_BOTH
+            );
+
+            $checkoutLog = AgentExecutionLog::create([
+                'conversation_id'     => $conversation->id,
+                'agent_name'          => class_basename($checkoutAgent),
+                'step'                => $checkoutStep,
+                'state_before'        => $checkoutStateBefore,
+                'state_after'         => $checkoutStateAfter,
+                'state_changes'       => $checkoutStateChanges,
+                'chained'             => false,
+                'status'              => 'success',
+                'duration_ms'         => $checkoutDurationMs,
+                'inbound_message_ids' => null,
+                'outbound_message_id' => null,
+                'input_tokens'        => $this->extractInputTokens($checkoutResponse),
+                'output_tokens'       => $this->extractOutputTokens($checkoutResponse),
+            ]);
 
             return [
-                'text' => $checkoutResponse->text,
-                'agent' => class_basename($checkoutAgent),
+                'text'              => $checkoutResponse->text,
+                'agent'             => class_basename($checkoutAgent),
+                'execution_log_ids' => [$quoteLog->id, $checkoutLog->id],
             ];
         }
 
+        $log = AgentExecutionLog::create([
+            'conversation_id'     => $conversation->id,
+            'agent_name'          => class_basename($agent),
+            'step'                => $step,
+            'state_before'        => $stateBefore,
+            'state_after'         => $stateAfter,
+            'state_changes'       => $stateChanges,
+            'chained'             => false,
+            'status'              => 'success',
+            'duration_ms'         => $durationMs,
+            'inbound_message_ids' => null,
+            'outbound_message_id' => null,
+            'input_tokens'        => $this->extractInputTokens($response),
+            'output_tokens'       => $this->extractOutputTokens($response),
+        ]);
+
         return [
-            'text' => $response->text,
-            'agent' => class_basename($agent),
+            'text'              => $response->text,
+            'agent'             => class_basename($agent),
+            'execution_log_ids' => [$log->id],
         ];
     }
 
@@ -111,6 +207,44 @@ class InsuranceOrchestrator
             $conversation->updateAiState(['customer_identified' => true]);
             $conversation->refresh();
         }
+    }
+
+    /**
+     * Mapea el ai_state al ordinal del paso activo (1–5).
+     *
+     * @param  array<string, bool>  $state
+     */
+    private function stepFromState(array $state): int
+    {
+        return match (true) {
+            ! $state['customer_identified'] => 1,
+            ! $state['vehicle_identified']  => 2,
+            ! $state['coverage_set']        => 3,
+            ! $state['quote_ready']         => 4,
+            default                         => 5,
+        };
+    }
+
+    /**
+     * Extrae tokens de entrada del AgentResponse.
+     * Retorna null si el SDK reportó 0 (valor por defecto — no trackeado).
+     */
+    private function extractInputTokens(AgentResponse $response): ?int
+    {
+        $tokens = $response->usage->promptTokens;
+
+        return $tokens > 0 ? $tokens : null;
+    }
+
+    /**
+     * Extrae tokens de salida del AgentResponse.
+     * Retorna null si el SDK reportó 0 (valor por defecto — no trackeado).
+     */
+    private function extractOutputTokens(AgentResponse $response): ?int
+    {
+        $tokens = $response->usage->completionTokens;
+
+        return $tokens > 0 ? $tokens : null;
     }
 
     /**
