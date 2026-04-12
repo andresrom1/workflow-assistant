@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\AI\InsuranceOrchestrator;
+use App\Models\AgentExecutionLog;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Bus\Queueable;
@@ -65,9 +66,15 @@ class ProcessConversationInbox implements ShouldQueue
         Message::whereIn('id', $messages->pluck('id'))
             ->update(['processed_at' => now()]);
 
-        $reply = $orchestrator->handle($combinedBody, $conversation);
+        $reply        = $orchestrator->handle($combinedBody, $conversation);
+        $inboundIds   = $messages->pluck('id')->all();
+        $lastLogId    = end($reply['execution_log_ids']) ?: null;
 
-        SendWhatsAppMessage::dispatch($this->waId, $reply['text'], $this->phoneNumberId, $this->conversationId, $reply['agent'])
+        // Vincular los mensajes inbound que dispararon esta ejecución
+        AgentExecutionLog::whereIn('id', $reply['execution_log_ids'])
+            ->update(['inbound_message_ids' => json_encode($inboundIds)]);
+
+        SendWhatsAppMessage::dispatch($this->waId, $reply['text'], $this->phoneNumberId, $this->conversationId, $reply['agent'], $lastLogId)
             ->onQueue('whatsapp-outbound');
 
         $contactName = $messages->first()?->sender_name;

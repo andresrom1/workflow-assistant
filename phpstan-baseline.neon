@@ -217,12 +217,6 @@ parameters:
 			path: app/Http/Controllers/Admin/ConversationController.php
 
 		-
-			message: '#^Using nullsafe method call on non\-nullable type Carbon\\Carbon\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 1
-			path: app/Http/Controllers/Admin/ConversationController.php
-
-		-
 			message: '#^Anonymous function should return array\{key\: \(int\|string\), label\: string, items\: Illuminate\\Support\\Collection\<int, array\{key\: string, label\: string, description\: string\|null, type\: string, is_secret\: bool, value\: string\|null, updated_at\: string\|null\}\>\} but returns array\{key\: \(int\|string\), label\: string, items\: Illuminate\\Support\\Collection\<int, array\{key\: string, label\: string, description\: string\|null, type\: string, is_secret\: bool, value\: string\|null, updated_at\: string\|null\}\>\}\.$#'
 			identifier: return.type
 			count: 1
@@ -665,6 +659,12 @@ parameters:
 			identifier: property.onlyWritten
 			count: 1
 			path: app/Services/CustomerIdentificationService.php
+
+		-
+			message: '#^Constant App\\Services\\Message\\ContentClassifier\:\:INSTRUCTIONS_1 is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: app/Services/Message/ContentClassifier.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$aseguradora\.$#'

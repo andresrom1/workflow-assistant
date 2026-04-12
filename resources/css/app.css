@@ -146,6 +146,7 @@
 
   --accent-50:  #1a1a2e;
   --accent-100: #1e1e3f;
+  --accent-200: #2d2d5c;
   --accent-700: #4a4de8;
   --shadow-card: 0 1px 4px rgba(0,0,0,.3);
   --shadow-focus: 0 0 0 3px rgba(155,157,251,.45);
@@ -205,6 +206,16 @@ body {
 
 /* ── Clases utilitarias del sistema ──────────────────────────────────────── */
 @layer components {
+
+  .msg-highlight {
+    box-shadow: var(--shadow-focus);
+    transition: box-shadow 300ms ease;
+  }
+
+  .msg-hover {
+    box-shadow: 0 0 0 2px var(--accent-400);
+    transition: box-shadow 200ms ease;
+  }
 
   .field {
     @apply w-full px-3 py-2 text-sm outline-none rounded-[10px] transition-all;

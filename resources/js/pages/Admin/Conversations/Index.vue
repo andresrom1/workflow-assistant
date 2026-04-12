@@ -32,7 +32,7 @@
                 <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Estado del flujo</th>
                 <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Mensajes</th>
                 <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Última actividad</th>
-                <th class="px-4 py-3 w-28"></th>
+                <th class="px-4 py-3 w-36"></th>
               </tr>
             </thead>
             <tbody>
@@ -83,24 +83,33 @@
                   {{ formatDate(c.last_message_at ?? c.created_at) }}
                 </td>
 
-                <!-- Acción: Resetear -->
-                <td class="px-4 py-3 text-right">
-                  <form
-                    :action="`/admin/conversations/${c.id}/reset`"
-                    method="POST"
-                    @submit.prevent="confirmReset($event, c)"
-                  >
-                    <input type="hidden" name="_token" :value="csrfToken" />
-                    <button
-                      type="submit"
-                      class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors"
-                      style="background: var(--badge-danger-bg); color: var(--badge-danger-txt); border: 1px solid transparent;"
-                      @mouseenter="$event.currentTarget.style.opacity = '0.8'"
-                      @mouseleave="$event.currentTarget.style.opacity = '1'"
+                <!-- Acciones -->
+                <td class="px-4 py-3">
+                  <div class="flex items-center justify-end gap-2">
+                    <a
+                      :href="`/admin/conversations/${c.id}`"
+                      class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-colors"
+                      style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
                     >
-                      ↺ Resetear
-                    </button>
-                  </form>
+                      Ver →
+                    </a>
+                    <form
+                      :action="`/admin/conversations/${c.id}/reset`"
+                      method="POST"
+                      @submit.prevent="confirmReset($event, c)"
+                    >
+                      <input type="hidden" name="_token" :value="csrfToken" />
+                      <button
+                        type="submit"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors"
+                        style="background: var(--badge-danger-bg); color: var(--badge-danger-txt); border: 1px solid transparent;"
+                        @mouseenter="$event.currentTarget.style.opacity = '0.8'"
+                        @mouseleave="$event.currentTarget.style.opacity = '1'"
+                      >
+                        ↺ Resetear
+                      </button>
+                    </form>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -142,24 +151,33 @@
               </span>
             </div>
 
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-2">
               <span class="text-[11px]" style="color: var(--text-3);">
                 {{ formatDate(c.last_message_at ?? c.created_at) }}
               </span>
-              <form
-                :action="`/admin/conversations/${c.id}/reset`"
-                method="POST"
-                @submit.prevent="confirmReset($event, c)"
-              >
-                <input type="hidden" name="_token" :value="csrfToken" />
-                <button
-                  type="submit"
-                  class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold"
-                  style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);"
+              <div class="flex items-center gap-2">
+                <a
+                  :href="`/admin/conversations/${c.id}`"
+                  class="inline-flex items-center px-2.5 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap"
+                  style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
                 >
-                  ↺ Resetear
-                </button>
-              </form>
+                  Ver →
+                </a>
+                <form
+                  :action="`/admin/conversations/${c.id}/reset`"
+                  method="POST"
+                  @submit.prevent="confirmReset($event, c)"
+                >
+                  <input type="hidden" name="_token" :value="csrfToken" />
+                  <button
+                    type="submit"
+                    class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold"
+                    style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);"
+                  >
+                    ↺ Resetear
+                  </button>
+                </form>
+              </div>
             </div>
           </div>
         </div>
