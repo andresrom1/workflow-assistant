@@ -26,10 +26,10 @@ return new class extends Migration
             $table->string('chasis')->nullable(); // Nro de chasis
             $table->boolean('is_complete')->default(false); // Si tiene todos los datos
             $table->softDeletes(); // ← Soft deletes
-            
+
             $table->json('metadata')->nullable(); // Datos adicionales
             $table->timestamps();
-            
+
             $table->index('patente');
             $table->index('customer_id');
         });

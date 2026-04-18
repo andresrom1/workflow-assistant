@@ -4,7 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     /**
      * Run the migrations.
      */
@@ -29,7 +30,7 @@ return new class extends Migration {
                 'mobile_opportunity_id',
                 'mobile_reference',
                 'sent_to_mobile_at',
-                'expected_resolution_at'
+                'expected_resolution_at',
             ]);
         });
     }

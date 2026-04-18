@@ -19,8 +19,7 @@ class CheckQuoteAcceptance implements ShouldQueue
     public function __construct(
         protected Quote $quote,
         protected RiskSnapshot $snapshot
-    ) {
-    }
+    ) {}
 
     /**
      * Verifica si la cotización fue aceptada.
@@ -35,6 +34,7 @@ class CheckQuoteAcceptance implements ShouldQueue
         // o en 'offered_pas' (el PAS nunca respondió).
         if ($this->quote->status !== 'pending' && $this->quote->status !== 'offered_pas') {
             Log::info("[CheckQuoteAcceptance] Quote #{$this->quote->id} ya no requiere fallback (Status: {$this->quote->status}).");
+
             return;
         }
 

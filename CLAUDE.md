@@ -60,6 +60,34 @@ and delegates to a specialized sub-agent per step:
 
 State is updated inside each Tool's `handle()` method upon success (not in the orchestrator).
 
+### Editar prompts de agentes — REQUIERE SYNC MANUAL
+
+Los prompts viven en `resources/prompts/agents/*.md` pero el runtime los carga de la tabla `agent_prompts` (ver `AgentPrompt::activeFor($key)`). El archivo `.md` es solo fallback. Cada agente cachea el resultado con `Cache::rememberForever("agent_prompt:{$agentKey}")`.
+
+**Editar el `.md` NO basta.** Hay que:
+1. Actualizar el row activo en `agent_prompts` con el nuevo contenido (`content = file_get_contents(...)`).
+2. Invalidar la caché: `Cache::forget("agent_prompt:{$agentKey}")`.
+
+Sin estos dos pasos, el LLM sigue sirviendo el prompt viejo y el fix no se nota aunque el `.md` esté actualizado en el repo.
+
+Agent keys actuales: `coverage_check`, `customer_identifier`, `vehicle_identifier`, `coverage_preference`, `checkout_closer`. (QuoteAgent no tiene row en DB — usa el `.md` directo.)
+
+Snippet rápido para sincronizar todos los prompts desde los archivos:
+```php
+foreach (['coverage_check', 'customer_identifier', 'vehicle_identifier', 'coverage_preference', 'checkout_closer'] as $key) {
+    $file = match ($key) {
+        'coverage_check' => 'CoverageCheckAgent.md',
+        'customer_identifier' => 'CustomerIdentifierAgent.md',
+        'vehicle_identifier' => 'VehicleIdentifierAgent.md',
+        'coverage_preference' => 'CoveragePreferenceAgent.md',
+        'checkout_closer' => 'CheckoutAgent.md',
+    };
+    AgentPrompt::where('agent_key', $key)->where('is_active', true)
+        ->update(['content' => file_get_contents(resource_path("prompts/agents/{$file}"))]);
+    Cache::forget("agent_prompt:{$key}");
+}
+```
+
 ### Agent anatomy (laravel/ai v0.4.2)
 ```php
 class MyAgent implements Agent, Conversational, HasTools
@@ -178,6 +206,33 @@ El formulario de checkout captura 7 fotos desde la cámara del celular. Los nave
 - `CheckoutSession.photo_paths`: almacena URLs públicas de R2 (resueltas en `submit()`)
 - `DeleteOrphanPhoto` job: `Storage::disk('r2')->delete($path)` con 3 reintentos
 - `CleanupTempPhotos` command: borra fotos temp > 24h
+
+## RAG — Documentacion de Coberturas (pgvector)
+
+Sistema de dos agentes para responder consultas de coberturas con precision:
+- **Frontal** (los 5 agentes del orquestador) verifica `full_details` primero, luego delega al Experto via `CheckCoverageRuleTool`.
+- **Experto** (`AnonymousAgent` con `SearchCompanyDocumentationTool`) busca en pgvector los chunks relevantes de la documentacion de la compania.
+
+### Pipeline: PDF → texto → chunks → embeddings → pgvector
+1. Admin sube PDF en `/coverage-documents` (CRUD Inertia)
+2. Extraccion: `ExtractCoverageDocumentText` job (queue default) envia el PDF al LLM para transcripcion literal. Modo alternativo: el admin pega el texto manualmente.
+3. El admin revisa/edita el texto extraido en la vista Show.
+4. Al guardar: `ChunkAndEmbedService` corre **sincrono** — chunking por headers markdown + `Embeddings::for()->dimensions(1536)->generate()` + insert en `coverage_chunks`.
+5. Query-time: `SearchCompanyDocumentationTool` genera embedding de la query, busca con `nearestNeighbors()` (cosine distance) filtrado por `company_slug`.
+
+### Archivos clave
+- `app/Models/CoverageDocument.php` / `CoverageChunk.php` — pgvector con `HasNeighbors` trait
+- `app/Services/ChunkAndEmbedService.php` — chunking + embeddings (sincrono)
+- `app/Jobs/ExtractCoverageDocumentText.php` — extraccion AI (async, queue default)
+- `app/AI/Tools/SearchCompanyDocumentationTool.php` — busqueda RAG en pgvector
+- `app/AI/Tools/CheckCoverageRuleTool.php` — Expert Agent con `full_details` + RAG
+- `resources/prompts/agents/CoverageCheckAgent.md` — prompt del agente experto
+
+### Requisitos de despliegue
+- **PostgreSQL** con extension `pgvector` (`CREATE EXTENSION vector;`)
+- **php.ini**: `upload_max_filesize = 50M` y `post_max_size = 50M` (los PDFs de manuales de aseguradoras pueden superar 20MB)
+- Si se usa Nginx: `client_max_body_size 50m;` en el bloque server
+- La validacion Laravel permite hasta 50MB (`max:51200` en `CoverageDocumentController@store`)
 
 ## Verification Scripts
 

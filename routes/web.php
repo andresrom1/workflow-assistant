@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\CoverageDocumentController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QuoteController;
@@ -49,6 +50,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
 
     Route::resource('quotes', QuoteController::class)->only(['index', 'show']);
+
+    Route::resource('coverage-documents', CoverageDocumentController::class)
+        ->only(['index', 'store', 'show', 'update', 'destroy']);
 
     // ─── Solo Admin ───────────────────────────────────────────────────────────
     Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function () {

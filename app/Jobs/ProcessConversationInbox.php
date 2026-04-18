@@ -66,9 +66,9 @@ class ProcessConversationInbox implements ShouldQueue
         Message::whereIn('id', $messages->pluck('id'))
             ->update(['processed_at' => now()]);
 
-        $reply        = $orchestrator->handle($combinedBody, $conversation);
-        $inboundIds   = $messages->pluck('id')->all();
-        $lastLogId    = end($reply['execution_log_ids']) ?: null;
+        $reply = $orchestrator->handle($combinedBody, $conversation);
+        $inboundIds = $messages->pluck('id')->all();
+        $lastLogId = end($reply['execution_log_ids']) ?: null;
 
         // Vincular los mensajes inbound que dispararon esta ejecución
         AgentExecutionLog::whereIn('id', $reply['execution_log_ids'])

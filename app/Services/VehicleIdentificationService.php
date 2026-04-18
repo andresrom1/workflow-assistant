@@ -5,23 +5,21 @@ namespace App\Services;
 use App\Models\Customer;
 use App\Models\Vehicle;
 use App\Repositories\VehicleRepository;
-//use App\Repositories\ConversationRepository;
-use Illuminate\Support\Facades\Log;
+// use App\Repositories\ConversationRepository;
 use App\Traits\ConditionalLogger;
-use App\Services\PlateNormalizerService;
-use Illuminate\Support\Facades\Validator;
+
 class VehicleIdentificationService
 {
     use ConditionalLogger;
-    //protected ConversationRepository $conversationRepository;
+    // protected ConversationRepository $conversationRepository;
 
     public function __construct(
         private readonly VehicleRepository $vehicleRepo,
         private readonly PlateNormalizerService $plate,
-        //ConversationRepository $conversationRepository
+        // ConversationRepository $conversationRepository
     ) {
 
-        //$this->conversationRepository = $conversationRepository;
+        // $this->conversationRepository = $conversationRepository;
     }
 
     /**
@@ -50,9 +48,10 @@ class VehicleIdentificationService
      * Actualiza un vehículo existente aplicando política de actualización.
      * Actualizamos: Dueño, CP, Versión, Combustible, Marca y Modelo.
      * Inmutable: Año (Preservamos la integridad temporal del registro).
-     * @param Vehicle  $vehicle El vehículo a actualizar
-     * @param Customer $newOwner El nuevo dueño del vehículo
-     * @param array  $data Datos validados y completos del vehículo
+     *
+     * @param  Vehicle  $vehicle  El vehículo a actualizar
+     * @param  Customer  $newOwner  El nuevo dueño del vehículo
+     * @param  array  $data  Datos validados y completos del vehículo
      * @return Vehicle El vehículo actualizado
      */
     public function updateVehicle(Vehicle $vehicle, Customer $newOwner, array $data): Vehicle
@@ -97,7 +96,7 @@ class VehicleIdentificationService
             'version',
             'year',
             'combustible',
-            'codigo_postal'
+            'codigo_postal',
         ];
 
         return array_intersect_key($data, array_flip($allowedFields));

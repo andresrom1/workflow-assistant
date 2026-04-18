@@ -22,7 +22,7 @@ return new class extends Migration
             $table->timestamp('completed_at')->nullable(); // Ver si es necesario
             $table->timestamps();
             $table->softDeletes(); // ← Soft deletes
-            
+
             $table->index('dni');
             $table->index('email');
             $table->index('phone');

@@ -13,6 +13,5 @@ class QuoteOfferedToPas
 
     public function __construct(
         public Quote $quote
-    ) {
-    }
+    ) {}
 }

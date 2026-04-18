@@ -43,12 +43,12 @@ class InsuranceOrchestrator
         $this->tryAutoIdentifyByPhone($conversation);
 
         $stateBefore = $conversation->aiState();
-        $step        = $this->stepFromState($stateBefore);
+        $step = $this->stepFromState($stateBefore);
 
         // Todos los agentes comparten el mismo hilo de conversación, identificado
         // por el wa_id del usuario. Esto permite que el contexto fluya entre agentes.
         $waUser = (object) ['id' => $conversation->external_conversation_id];
-        $agent  = $this->resolveAgent($stateBefore, $conversation);
+        $agent = $this->resolveAgent($stateBefore, $conversation);
 
         $start = hrtime(true);
 
@@ -59,21 +59,21 @@ class InsuranceOrchestrator
             $durationMs = (int) round((hrtime(true) - $start) / 1e6);
 
             AgentExecutionLog::create([
-                'conversation_id'     => $conversation->id,
-                'agent_name'          => class_basename($agent),
-                'step'                => $step,
-                'state_before'        => $stateBefore,
-                'state_after'         => $stateBefore,
-                'state_changes'       => [],
-                'chained'             => false,
-                'status'              => 'error',
-                'error_message'       => $e->getMessage(),
-                'duration_ms'         => $durationMs,
+                'conversation_id' => $conversation->id,
+                'agent_name' => class_basename($agent),
+                'step' => $step,
+                'state_before' => $stateBefore,
+                'state_after' => $stateBefore,
+                'state_changes' => [],
+                'chained' => false,
+                'status' => 'error',
+                'error_message' => $e->getMessage(),
+                'duration_ms' => $durationMs,
                 'inbound_message_ids' => null,
                 'outbound_message_id' => null,
-                'input_tokens'        => null,
-                'output_tokens'       => null,
-                'tool_calls'          => null,
+                'input_tokens' => null,
+                'output_tokens' => null,
+                'tool_calls' => null,
             ]);
 
             throw $e;
@@ -84,7 +84,7 @@ class InsuranceOrchestrator
         // Detectar transición de estado: si quote_ready flipeó durante la ejecución,
         // descartar la respuesta de QuoteAgent y encadenar a CheckoutAgent.
         $conversation->refresh();
-        $stateAfter   = $conversation->aiState();
+        $stateAfter = $conversation->aiState();
         $stateChanges = array_filter(
             $stateAfter,
             fn (bool $val, string $key): bool => $val !== ($stateBefore[$key] ?? false),
@@ -93,33 +93,33 @@ class InsuranceOrchestrator
 
         if (! $stateBefore['quote_ready'] && $stateAfter['quote_ready']) {
             $quoteLog = AgentExecutionLog::create([
-                'conversation_id'     => $conversation->id,
-                'agent_name'          => class_basename($agent),
-                'step'                => $step,
-                'state_before'        => $stateBefore,
-                'state_after'         => $stateAfter,
-                'state_changes'       => $stateChanges,
-                'chained'             => true,
-                'status'              => 'success',
-                'duration_ms'         => $durationMs,
+                'conversation_id' => $conversation->id,
+                'agent_name' => class_basename($agent),
+                'step' => $step,
+                'state_before' => $stateBefore,
+                'state_after' => $stateAfter,
+                'state_changes' => $stateChanges,
+                'chained' => true,
+                'status' => 'success',
+                'duration_ms' => $durationMs,
                 'inbound_message_ids' => null,
                 'outbound_message_id' => null,
-                'input_tokens'        => $this->extractInputTokens($response),
-                'output_tokens'       => $this->extractOutputTokens($response),
-                'tool_calls'          => $this->extractToolCalls($response),
+                'input_tokens' => $this->extractInputTokens($response),
+                'output_tokens' => $this->extractOutputTokens($response),
+                'tool_calls' => $this->extractToolCalls($response),
             ]);
 
-            $checkoutStateBefore  = $stateAfter;
-            $checkoutAgent        = $this->resolveAgent($checkoutStateBefore, $conversation);
-            $checkoutStep         = $this->stepFromState($checkoutStateBefore);
-            $checkoutStart        = hrtime(true);
+            $checkoutStateBefore = $stateAfter;
+            $checkoutAgent = $this->resolveAgent($checkoutStateBefore, $conversation);
+            $checkoutStep = $this->stepFromState($checkoutStateBefore);
+            $checkoutStart = hrtime(true);
 
             /** @var AgentResponse $checkoutResponse */
-            $checkoutResponse   = $checkoutAgent->continueLastConversation($waUser)->prompt('Cotizaciones listas');
+            $checkoutResponse = $checkoutAgent->continueLastConversation($waUser)->prompt('Cotizaciones listas');
             $checkoutDurationMs = (int) round((hrtime(true) - $checkoutStart) / 1e6);
 
             $conversation->refresh();
-            $checkoutStateAfter   = $conversation->aiState();
+            $checkoutStateAfter = $conversation->aiState();
             $checkoutStateChanges = array_filter(
                 $checkoutStateAfter,
                 fn (bool $val, string $key): bool => $val !== ($checkoutStateBefore[$key] ?? false),
@@ -127,49 +127,49 @@ class InsuranceOrchestrator
             );
 
             $checkoutLog = AgentExecutionLog::create([
-                'conversation_id'     => $conversation->id,
-                'agent_name'          => class_basename($checkoutAgent),
-                'step'                => $checkoutStep,
-                'state_before'        => $checkoutStateBefore,
-                'state_after'         => $checkoutStateAfter,
-                'state_changes'       => $checkoutStateChanges,
-                'chained'             => false,
-                'status'              => 'success',
-                'duration_ms'         => $checkoutDurationMs,
+                'conversation_id' => $conversation->id,
+                'agent_name' => class_basename($checkoutAgent),
+                'step' => $checkoutStep,
+                'state_before' => $checkoutStateBefore,
+                'state_after' => $checkoutStateAfter,
+                'state_changes' => $checkoutStateChanges,
+                'chained' => false,
+                'status' => 'success',
+                'duration_ms' => $checkoutDurationMs,
                 'inbound_message_ids' => null,
                 'outbound_message_id' => null,
-                'input_tokens'        => $this->extractInputTokens($checkoutResponse),
-                'output_tokens'       => $this->extractOutputTokens($checkoutResponse),
-                'tool_calls'          => $this->extractToolCalls($checkoutResponse),
+                'input_tokens' => $this->extractInputTokens($checkoutResponse),
+                'output_tokens' => $this->extractOutputTokens($checkoutResponse),
+                'tool_calls' => $this->extractToolCalls($checkoutResponse),
             ]);
 
             return [
-                'text'              => $checkoutResponse->text,
-                'agent'             => class_basename($checkoutAgent),
+                'text' => $checkoutResponse->text,
+                'agent' => class_basename($checkoutAgent),
                 'execution_log_ids' => [$quoteLog->id, $checkoutLog->id],
             ];
         }
 
         $log = AgentExecutionLog::create([
-            'conversation_id'     => $conversation->id,
-            'agent_name'          => class_basename($agent),
-            'step'                => $step,
-            'state_before'        => $stateBefore,
-            'state_after'         => $stateAfter,
-            'state_changes'       => $stateChanges,
-            'chained'             => false,
-            'status'              => 'success',
-            'duration_ms'         => $durationMs,
+            'conversation_id' => $conversation->id,
+            'agent_name' => class_basename($agent),
+            'step' => $step,
+            'state_before' => $stateBefore,
+            'state_after' => $stateAfter,
+            'state_changes' => $stateChanges,
+            'chained' => false,
+            'status' => 'success',
+            'duration_ms' => $durationMs,
             'inbound_message_ids' => null,
             'outbound_message_id' => null,
-            'input_tokens'        => $this->extractInputTokens($response),
-            'output_tokens'       => $this->extractOutputTokens($response),
-            'tool_calls'          => $this->extractToolCalls($response),
+            'input_tokens' => $this->extractInputTokens($response),
+            'output_tokens' => $this->extractOutputTokens($response),
+            'tool_calls' => $this->extractToolCalls($response),
         ]);
 
         return [
-            'text'              => $response->text,
-            'agent'             => class_basename($agent),
+            'text' => $response->text,
+            'agent' => class_basename($agent),
             'execution_log_ids' => [$log->id],
         ];
     }
@@ -222,10 +222,10 @@ class InsuranceOrchestrator
     {
         return match (true) {
             ! $state['customer_identified'] => 1,
-            ! $state['vehicle_identified']  => 2,
-            ! $state['coverage_set']        => 3,
-            ! $state['quote_ready']         => 4,
-            default                         => 5,
+            ! $state['vehicle_identified'] => 2,
+            ! $state['coverage_set'] => 3,
+            ! $state['quote_ready'] => 4,
+            default => 5,
         };
     }
 

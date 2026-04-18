@@ -21,7 +21,7 @@ class TestScenarioSeeder extends Seeder
     {
         // 1. Crear Cliente con Vehículo y Conversación
         $customer = Customer::factory()
-            ->has(Vehicle::factory()->count(1)) 
+            ->has(Vehicle::factory()->count(1))
             ->has(Conversation::factory()->count(1))
             ->create();
 
@@ -34,7 +34,7 @@ class TestScenarioSeeder extends Seeder
         // 3. Vincular Vehículo a Conversación (Many-to-Many Pivot)
         $conversation->vehicles()->attach($vehicle->id, ['is_primary' => true]);
 
-        $this->command->info("🔹 Entidades Base Creadas.");
+        $this->command->info('🔹 Entidades Base Creadas.');
 
         // 4. 🔥 SIMULACIÓN DE AGENTE: Iniciar Cotización
         // Llamamos al mismo servicio que usa el AgentToolAdapter.
@@ -42,16 +42,16 @@ class TestScenarioSeeder extends Seeder
         $quote = $quoteService->createPendingQuote($conversation, $customer, $vehicle);
 
         // Output de confirmación
-        $this->command->info("✅ Escenario Completo Generado:");
+        $this->command->info('✅ Escenario Completo Generado:');
         $this->command->info("   Customer: {$customer->name} (ID: {$customer->id})");
         $this->command->info("   Vehicle:  {$vehicle->marca} {$vehicle->modelo} (ID: {$vehicle->id})");
         $this->command->info("   Quote:    #{$quote->id} (Status: {$quote->status})");
-        
+
         // Aviso sobre colas
         if (config('queue.default') !== 'sync') {
             $this->command->warn("   ⚠️  La cola no es 'sync'. Ejecuta 'php artisan queue:work' para procesar las alternativas.");
         } else {
-            $this->command->info("   ✨ Alternativas generadas (Cola Sync).");
+            $this->command->info('   ✨ Alternativas generadas (Cola Sync).');
         }
     }
 }

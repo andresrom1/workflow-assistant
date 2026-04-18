@@ -64,18 +64,19 @@ class ConversationController extends Controller
                 $att = $m->attachment instanceof MessageAttachment ? $m->attachment : null;
 
                 return [
-                    'type'         => $m->direction === 'inbound' ? 'message_inbound' : 'message_outbound',
-                    'id'           => $m->id,
+                    'type' => $m->direction === 'inbound' ? 'message_inbound' : 'message_outbound',
+                    'id' => $m->id,
                     'message_type' => $m->type,
-                    'content'      => $m->content,
-                    'sender_name'  => $m->sender_name,
-                    'agent_name'   => $m->agent_name,
-                    'attachment'   => $att ? [
+                    'content' => $m->content,
+                    'sender_name' => $m->sender_name,
+                    'agent_name' => $m->agent_name,
+                    'ai_provider' => $m->ai_provider,
+                    'attachment' => $att ? [
                         'duration_seconds' => $att->duration_seconds,
-                        'storage_url'      => $att->storage_url,
-                        'transcription'    => $att->transcription,
+                        'storage_url' => $att->storage_url,
+                        'transcription' => $att->transcription,
                     ] : null,
-                    'created_at'   => $m->created_at->toIso8601String(),
+                    'created_at' => $m->created_at->toIso8601String(),
                 ];
             })
             ->all();
@@ -86,20 +87,20 @@ class ConversationController extends Controller
 
         $executions = $logs
             ->map(fn (AgentExecutionLog $log): array => [
-                'id'                  => $log->id,
-                'agent_name'          => $log->agent_name,
-                'step'                => $log->step,
-                'state_changes'       => $log->state_changes,
-                'chained'             => $log->chained,
-                'status'              => $log->status,
-                'error_message'       => $log->error_message,
-                'duration_ms'         => $log->duration_ms,
-                'input_tokens'        => $log->input_tokens,
-                'output_tokens'       => $log->output_tokens,
+                'id' => $log->id,
+                'agent_name' => $log->agent_name,
+                'step' => $log->step,
+                'state_changes' => $log->state_changes,
+                'chained' => $log->chained,
+                'status' => $log->status,
+                'error_message' => $log->error_message,
+                'duration_ms' => $log->duration_ms,
+                'input_tokens' => $log->input_tokens,
+                'output_tokens' => $log->output_tokens,
                 'inbound_message_ids' => $log->inbound_message_ids,
                 'outbound_message_id' => $log->outbound_message_id,
-                'tool_calls'          => $log->tool_calls ?? [],
-                'created_at'          => $log->created_at->toIso8601String(),
+                'tool_calls' => $log->tool_calls ?? [],
+                'created_at' => $log->created_at->toIso8601String(),
             ])
             ->all();
 
@@ -107,27 +108,27 @@ class ConversationController extends Controller
 
         return Inertia::render('Admin/Conversations/Show', [
             'conversation' => [
-                'id'              => $conversation->id,
-                'external_id'     => $conversation->external_conversation_id,
-                'ext_user_id'     => $conversation->ext_user_id,
-                'ext_username'    => $conversation->ext_username,
-                'customer'        => $customer ? [
-                    'id'    => $customer->id,
-                    'name'  => $customer->name,
+                'id' => $conversation->id,
+                'external_id' => $conversation->external_conversation_id,
+                'ext_user_id' => $conversation->ext_user_id,
+                'ext_username' => $conversation->ext_username,
+                'customer' => $customer ? [
+                    'id' => $customer->id,
+                    'name' => $customer->name,
                     'phone' => $customer->phone,
                 ] : null,
-                'channel'         => $conversation->channel,
-                'status'          => $conversation->status,
-                'ai_state'        => $conversation->aiState(),
-                'created_at'      => $conversation->created_at->toIso8601String(),
+                'channel' => $conversation->channel,
+                'status' => $conversation->status,
+                'ai_state' => $conversation->aiState(),
+                'created_at' => $conversation->created_at->toIso8601String(),
                 'last_message_at' => $conversation->last_message_at->toIso8601String(),
             ],
-            'messages'   => $messages,
+            'messages' => $messages,
             'executions' => $executions,
-            'stats'      => [
-                'total_invocations'   => $logs->count(),
-                'total_duration_ms'   => (int) $logs->sum('duration_ms'),
-                'total_input_tokens'  => $logs->sum('input_tokens') ?: null,
+            'stats' => [
+                'total_invocations' => $logs->count(),
+                'total_duration_ms' => (int) $logs->sum('duration_ms'),
+                'total_input_tokens' => $logs->sum('input_tokens') ?: null,
                 'total_output_tokens' => $logs->sum('output_tokens') ?: null,
             ],
         ]);

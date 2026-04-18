@@ -4,7 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     /**
      * Run the migrations.
      */
@@ -14,13 +15,13 @@ return new class extends Migration {
             $table->id();
 
             // Relaciones (Vínculos blandos o duros)
-            // Usamos nullable en vehicle_id por si el vehículo se borra físicamente, 
+            // Usamos nullable en vehicle_id por si el vehículo se borra físicamente,
             // aunque el snapshot debe persistir.
             $table->foreignId('vehicle_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('customer_id')->nullable()->constrained()->nullOnDelete();
 
             // --- SNAPSHOT DEL VEHÍCULO (Copia dura de la tabla vehicles) ---
-            // Guardamos estos datos TEXTUALMENTE para evitar que un cambio 
+            // Guardamos estos datos TEXTUALMENTE para evitar que un cambio
             // en la tabla vehicles (ej: corrección de modelo) corrompa esta cotización.
             $table->string('marca'); // Ej: Fiat
             $table->string('modelo'); // Ej: Cronos

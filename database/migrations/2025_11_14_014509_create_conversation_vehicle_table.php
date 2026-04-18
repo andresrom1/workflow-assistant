@@ -14,7 +14,7 @@ return new class extends Migration
             $table->foreignId('vehicle_id')->constrained()->onDelete('cascade');
             $table->boolean('is_primary')->default(false); // El vehículo principal de la cotización
             $table->timestamps();
-            
+
             $table->unique(['conversation_id', 'vehicle_id']);
             $table->index('conversation_id');
             $table->index('vehicle_id');

@@ -10,11 +10,11 @@ class AgentPromptSeeder extends Seeder
     /** @var array<string, string> Mapeo agent_key → nombre de archivo en resources/prompts/agents/ */
     private const FILE_MAP = [
         'customer_identifier' => 'CustomerIdentifierAgent.md',
-        'vehicle_identifier'  => 'VehicleIdentifierAgent.md',
+        'vehicle_identifier' => 'VehicleIdentifierAgent.md',
         'coverage_preference' => 'CoveragePreferenceAgent.md',
-        'quote_reception'     => 'QuoteAgent.md',
-        'checkout_closer'     => 'CheckoutAgent.md',
-        'coverage_check'      => 'CoverageCheckAgent.md',
+        'quote_reception' => 'QuoteAgent.md',
+        'checkout_closer' => 'CheckoutAgent.md',
+        'coverage_check' => 'CoverageCheckAgent.md',
     ];
 
     public function run(): void

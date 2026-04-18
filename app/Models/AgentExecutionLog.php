@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\AgentExecutionLogFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AgentExecutionLog extends Model
 {
-    /** @use HasFactory<\Database\Factories\AgentExecutionLogFactory> */
+    /** @use HasFactory<AgentExecutionLogFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -32,16 +33,16 @@ class AgentExecutionLog extends Model
     protected function casts(): array
     {
         return [
-            'state_before'        => 'array',
-            'state_after'         => 'array',
-            'state_changes'       => 'array',
+            'state_before' => 'array',
+            'state_after' => 'array',
+            'state_changes' => 'array',
             'inbound_message_ids' => 'array',
-            'tool_calls'          => 'array',
-            'chained'             => 'boolean',
-            'step'                => 'integer',
-            'duration_ms'         => 'integer',
-            'input_tokens'        => 'integer',
-            'output_tokens'       => 'integer',
+            'tool_calls' => 'array',
+            'chained' => 'boolean',
+            'step' => 'integer',
+            'duration_ms' => 'integer',
+            'input_tokens' => 'integer',
+            'output_tokens' => 'integer',
             'outbound_message_id' => 'integer',
         ];
     }

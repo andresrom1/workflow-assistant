@@ -5,7 +5,6 @@ namespace App\AI\Agents;
 use App\AI\Tools\CheckCoverageRuleTool;
 use App\AI\Tools\CoveragePreferenceTool;
 use App\Models\AgentPrompt;
-use Illuminate\Support\Facades\Cache;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
@@ -19,6 +18,9 @@ class CoveragePreferenceAgent implements Agent, Conversational, HasTools
 
     protected string $agentKey = 'coverage_preference';
 
+    /** @var array<int, string> */
+    protected array $sharedBlocks = ['shared_style', 'shared_grounding'];
+
     public function __construct(
         private readonly CoveragePreferenceTool $tool,
         private readonly CheckCoverageRuleTool $coverageTool,
@@ -26,20 +28,7 @@ class CoveragePreferenceAgent implements Agent, Conversational, HasTools
 
     public function instructions(): Stringable|string
     {
-        return Cache::rememberForever(
-            "agent_prompt:{$this->agentKey}",
-            fn () => AgentPrompt::activeFor($this->agentKey)?->content ?? $this->fallbackInstructions()
-        );
-    }
-
-    protected function fallbackInstructions(): string
-    {
-        return 'Tu tarea es identificar la cobertura que necesita el cliente y registrar su preferencia. '
-            .'Las coberturas son: A (Responsabilidad Civil), B (Robo/Incendio Total), '
-            .'C (Terceros Completos) y D (Todo Riesgo). '
-            .'Explicá brevemente las diferencias cuando el cliente lo necesite. '
-            .'Una vez que el cliente elija, usá la herramienta disponible pasando coverage_code (A/B/C/D), patente y reasoning. '
-            .'Respondé siempre en español, de forma concisa.';
+        return AgentPrompt::compose($this->agentKey, $this->sharedBlocks);
     }
 
     /**

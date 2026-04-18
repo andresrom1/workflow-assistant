@@ -3,7 +3,6 @@
 namespace App\Services\Message;
 
 use Illuminate\Support\Facades\Log;
-use Laravel\Ai\Enums\Lab;
 
 use function Laravel\Ai\agent;
 
@@ -60,7 +59,7 @@ class ContentClassifier
     {
         try {
             $response = agent(instructions: self::INSTRUCTIONS)
-                ->prompt($text, provider: Lab::OpenAI, model: 'gpt-4o-mini');
+                ->prompt($text);
 
             $result = strtolower(trim($response->text));
 

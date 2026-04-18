@@ -26,7 +26,7 @@ class CheckoutTestDataSeeder extends Seeder
         $timestamp = now()->timestamp;
         $uniqueEmail = "test.checkout.{$timestamp}@example.com";
         $uniqueDni = (string) (10000000 + $timestamp % 70000000);
-        $uniquePatente = 'TST' . substr($timestamp, -4);
+        $uniquePatente = 'TST'.substr($timestamp, -4);
 
         // 1. Crear o recuperar entidades base (Customer, Vehicle, Conversation)
         $customer = Customer::firstOrCreate(
@@ -88,7 +88,7 @@ class CheckoutTestDataSeeder extends Seeder
             'risk_snapshot_id' => $riskSnapshot->id,
             'conversation_id' => $conversation->id,
             'status' => 'processed',
-            'external_ref_id' => 'test_' . Str::uuid(),
+            'external_ref_id' => 'test_'.Str::uuid(),
             'expires_at' => now()->addDays(7),
         ]);
 

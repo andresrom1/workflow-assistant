@@ -6,13 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\AgentPrompt;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class AgentPromptController extends Controller
 {
     /** @var array<string, string> */
-    private const FILE_MAP = [
+    private const AGENT_FILE_MAP = [
         'customer_identifier' => 'CustomerIdentifierAgent.md',
         'vehicle_identifier' => 'VehicleIdentifierAgent.md',
         'coverage_preference' => 'CoveragePreferenceAgent.md',
@@ -31,29 +32,29 @@ class AgentPromptController extends Controller
         'coverage_check' => 'CoverageCheckAgent',
     ];
 
+    /** @var array<string, string> */
+    private const SHARED_FILE_MAP = [
+        'shared_style' => 'shared_style.md',
+        'shared_grounding' => 'shared_grounding.md',
+    ];
+
+    /** @var array<string, string> */
+    private const SHARED_LABELS = [
+        'shared_style' => 'Estilo compartido',
+        'shared_grounding' => 'Grounding compartido',
+    ];
+
     public function index(): Response
     {
-        $agents = collect(self::AGENT_LABELS)->map(function (string $label, string $key): array {
-            $active = AgentPrompt::activeFor($key);
-
-            return [
-                'key' => $key,
-                'label' => $label,
-                'version' => $active?->version,
-                'updated_at' => $active?->updated_at?->toIso8601String(),
-                'preview' => $active instanceof AgentPrompt ? $this->extractPreview($active->content) : null,
-                'has_prompt' => $active instanceof AgentPrompt,
-            ];
-        })->values();
-
         return Inertia::render('Admin/AgentPrompts/Index', [
-            'agents' => $agents,
+            'agents' => $this->buildPromptList(self::AGENT_LABELS),
+            'sharedBlocks' => $this->buildPromptList(self::SHARED_LABELS),
         ]);
     }
 
     public function show(string $agentKey): Response
     {
-        abort_unless(array_key_exists($agentKey, self::AGENT_LABELS), 404);
+        abort_unless($this->isKnownKey($agentKey), 404);
 
         $versions = AgentPrompt::forAgent($agentKey)
             ->orderByDesc('version')
@@ -68,18 +69,30 @@ class AgentPromptController extends Controller
             ]);
 
         $active = $versions->firstWhere('is_active', true);
+        $type = $this->typeFor($agentKey);
 
-        return Inertia::render('Admin/AgentPrompts/Show', [
+        $payload = [
             'agentKey' => $agentKey,
-            'agentLabel' => self::AGENT_LABELS[$agentKey],
+            'agentLabel' => $this->labelFor($agentKey),
+            'type' => $type,
             'activeVersion' => $active,
             'versions' => $versions,
-        ]);
+        ];
+
+        if ($type === 'agent') {
+            $payload['composedPreview'] = AgentPrompt::compose(
+                $agentKey,
+                ['shared_style', 'shared_grounding']
+            );
+            $payload['inheritedBlocks'] = array_keys(self::SHARED_LABELS);
+        }
+
+        return Inertia::render('Admin/AgentPrompts/Show', $payload);
     }
 
     public function store(Request $request, string $agentKey): RedirectResponse
     {
-        abort_unless(array_key_exists($agentKey, self::AGENT_LABELS), 404);
+        abort_unless($this->isKnownKey($agentKey), 404);
 
         $validated = $request->validate([
             'content' => ['required', 'string', 'min:20'],
@@ -88,6 +101,7 @@ class AgentPromptController extends Controller
 
         $newPrompt = AgentPrompt::create([
             'agent_key' => $agentKey,
+            'type' => $this->typeFor($agentKey),
             'content' => $validated['content'],
             'version' => AgentPrompt::nextVersionFor($agentKey),
             'is_active' => false,
@@ -112,15 +126,58 @@ class AgentPromptController extends Controller
             ->with('success', "Versión {$agentPrompt->version} restaurada correctamente.");
     }
 
+    /**
+     * @param  array<string, string>  $labels
+     * @return Collection<int, array{key: string, label: string, version: int|null, updated_at: string|null, preview: string|null, has_prompt: bool}>
+     */
+    private function buildPromptList(array $labels)
+    {
+        return collect($labels)->map(function (string $label, string $key): array {
+            $active = AgentPrompt::activeFor($key);
+
+            return [
+                'key' => $key,
+                'label' => $label,
+                'version' => $active?->version,
+                'updated_at' => $active?->updated_at?->toIso8601String(),
+                'preview' => $active instanceof AgentPrompt ? $this->extractPreview($active->content) : null,
+                'has_prompt' => $active instanceof AgentPrompt,
+            ];
+        })->values();
+    }
+
+    private function isKnownKey(string $key): bool
+    {
+        return array_key_exists($key, self::AGENT_LABELS) || array_key_exists($key, self::SHARED_LABELS);
+    }
+
+    private function typeFor(string $key): string
+    {
+        return array_key_exists($key, self::SHARED_LABELS) ? 'shared' : 'agent';
+    }
+
+    private function labelFor(string $key): string
+    {
+        return self::AGENT_LABELS[$key] ?? self::SHARED_LABELS[$key];
+    }
+
     private function writePromptFile(string $agentKey, string $content): void
     {
-        $file = self::FILE_MAP[$agentKey] ?? null;
+        if (isset(self::AGENT_FILE_MAP[$agentKey])) {
+            $path = resource_path('prompts/agents/'.self::AGENT_FILE_MAP[$agentKey]);
+        } elseif (isset(self::SHARED_FILE_MAP[$agentKey])) {
+            $dir = resource_path('prompts/shared');
 
-        if (! $file) {
+            if (! is_dir($dir)) {
+                mkdir($dir, 0o755, true);
+            }
+
+            $path = $dir.'/'.self::SHARED_FILE_MAP[$agentKey];
+        } else {
             return;
         }
 
-        file_put_contents(resource_path("prompts/agents/{$file}"), $content);
+        file_put_contents($path, $content);
     }
 
     private function extractPreview(string $content): string

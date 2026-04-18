@@ -28,7 +28,7 @@ class WhatsAppOutboundService
      * @param  string  $to  Número en formato E.164 SIN el "+" (ej: "5491112345678")
      * @param  string  $phoneNumberId  ID del número emisor (no el E.164)
      */
-    public function sendMessage(string $to, string $text, string $phoneNumberId, ?int $conversationId = null, ?string $agentName = null, bool $audioEligible = false): array
+    public function sendMessage(string $to, string $text, string $phoneNumberId, ?int $conversationId = null, ?string $agentName = null, bool $audioEligible = false, ?string $aiProvider = null): array
     {
         $response = $this->post($phoneNumberId, [
             'messaging_product' => 'whatsapp',
@@ -46,6 +46,7 @@ class WhatsAppOutboundService
                 'conversation_id' => $conversationId,
                 'direction' => 'outbound',
                 'agent_name' => $agentName,
+                'ai_provider' => $aiProvider,
                 'audio_eligible' => $audioEligible,
                 'content' => $text,
                 'external_message_id' => data_get($response, 'messages.0.id'),
@@ -123,7 +124,7 @@ class WhatsAppOutboundService
      * @param  string  $mediaId  Meta media_id from uploadMedia()
      * @param  string  $phoneNumberId  Sender phone number ID
      */
-    public function sendAudioMessage(string $to, string $mediaId, string $phoneNumberId, ?int $conversationId = null, ?string $agentName = null, ?string $content = null): ?Message
+    public function sendAudioMessage(string $to, string $mediaId, string $phoneNumberId, ?int $conversationId = null, ?string $agentName = null, ?string $content = null, ?string $aiProvider = null): ?Message
     {
         $response = $this->post($phoneNumberId, [
             'messaging_product' => 'whatsapp',
@@ -142,6 +143,7 @@ class WhatsAppOutboundService
                 'type' => 'audio',
                 'content' => $content,
                 'agent_name' => $agentName,
+                'ai_provider' => $aiProvider,
                 'audio_eligible' => true,
                 'external_message_id' => data_get($response, 'messages.0.id'),
                 'sender_phone' => $phoneNumberId,

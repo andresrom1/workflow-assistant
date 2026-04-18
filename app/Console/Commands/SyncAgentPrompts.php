@@ -16,11 +16,11 @@ class SyncAgentPrompts extends Command
     /** @var array<string, string> */
     private const FILE_MAP = [
         'customer_identifier' => 'CustomerIdentifierAgent.md',
-        'vehicle_identifier'  => 'VehicleIdentifierAgent.md',
+        'vehicle_identifier' => 'VehicleIdentifierAgent.md',
         'coverage_preference' => 'CoveragePreferenceAgent.md',
-        'quote_reception'     => 'QuoteAgent.md',
-        'checkout_closer'     => 'CheckoutAgent.md',
-        'coverage_check'      => 'CoverageCheckAgent.md',
+        'quote_reception' => 'QuoteAgent.md',
+        'checkout_closer' => 'CheckoutAgent.md',
+        'coverage_check' => 'CoverageCheckAgent.md',
     ];
 
     public function handle(): int
@@ -68,10 +68,10 @@ class SyncAgentPrompts extends Command
 
         $prompt = AgentPrompt::create([
             'agent_key' => $key,
-            'content'   => $newContent,
-            'version'   => $version,
+            'content' => $newContent,
+            'version' => $version,
             'is_active' => false,
-            'notes'     => "Synced from {$filename}",
+            'notes' => "Synced from {$filename}",
         ]);
 
         $prompt->activate();

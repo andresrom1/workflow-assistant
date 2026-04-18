@@ -160,6 +160,11 @@
                   <p class="text-[10px] font-semibold" :style="{ color: agentColor(msg.agent_name) }">
                     {{ agentShortName(msg.agent_name) }}
                   </p>
+                  <span v-if="msg.ai_provider"
+                    class="text-[9px] font-mono px-1 py-px rounded"
+                    style="background: var(--bg-raised); color: var(--text-3); border: 1px solid var(--border);">
+                    {{ msg.ai_provider }}
+                  </span>
                 </div>
                 <p class="text-sm whitespace-pre-wrap" style="color: var(--text-1);">{{ msg.content }}</p>
                 <div class="flex items-center gap-2 mt-1">

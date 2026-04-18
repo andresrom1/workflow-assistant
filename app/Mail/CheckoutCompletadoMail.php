@@ -22,7 +22,7 @@ class CheckoutCompletadoMail extends Mailable
     use Queueable, SerializesModels;
 
     public function __construct(
-        public readonly Quote          $quote,
+        public readonly Quote $quote,
         public readonly CheckoutSession $session,
     ) {}
 
@@ -41,11 +41,11 @@ class CheckoutCompletadoMail extends Mailable
         return new Content(
             view: 'emails.checkout-completado',
             with: [
-                'quote'       => $this->quote,
-                'session'     => $this->session,
+                'quote' => $this->quote,
+                'session' => $this->session,
                 'alternative' => $this->quote->alternatives()
-                                    ->find($this->quote->checkout_alternative_id),
-                'snap'        => $this->quote->riskSnapshot,
+                    ->find($this->quote->checkout_alternative_id),
+                'snap' => $this->quote->riskSnapshot,
             ],
         );
     }

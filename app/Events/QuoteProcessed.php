@@ -5,8 +5,6 @@ namespace App\Events;
 use App\Models\Quote;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PresenceChannel;
-use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -26,7 +24,7 @@ class QuoteProcessed implements ShouldBroadcast
     /**
      * Get the channels the event should broadcast on.
      *
-     * @return array<int, \Illuminate\Broadcasting\Channel>
+     * @return array<int, Channel>
      */
     public function broadcastOn(): array
     {
@@ -34,8 +32,8 @@ class QuoteProcessed implements ShouldBroadcast
         // Usamos loadMissing para asegurar que tenemos la relación
         Log::info(__METHOD__.__LINE__." [Event] Valor de Quote: {$this->quote}");
         $this->quote->loadMissing('conversation');
-        $channelName = 'chat.' . $this->quote->session_uuid;
-        
+        $channelName = 'chat.'.$this->quote->session_uuid;
+
         Log::info(__METHOD__.__LINE__." [Event] Broadcasting QuoteProcessed en canal: {$channelName}");
 
         return [
@@ -53,10 +51,10 @@ class QuoteProcessed implements ShouldBroadcast
         $this->quote->load('alternatives');
 
         return [
-            'type'     => 'QUOTE_READY',
+            'type' => 'QUOTE_READY',
             'quote_id' => $this->quote->id,
-            'requires_ai_injection' => true, // Flag para el Frontend  
-            'thread_id' => $this->quote->conversation->external_conversation_id,     
+            'requires_ai_injection' => true, // Flag para el Frontend
+            'thread_id' => $this->quote->conversation->external_conversation_id,
         ];
     }
 }

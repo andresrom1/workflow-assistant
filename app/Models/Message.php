@@ -16,6 +16,7 @@ class Message extends Model
         'type',
         'audio_eligible',
         'agent_name',
+        'ai_provider',
         'content',
         'external_message_id',
         'sender_name',

@@ -1,9 +1,9 @@
 <?php
 
-use App\AI\InsuranceOrchestrator;
 use App\Adapters\AIProviders\WhatsAppAdapter;
 use App\AI\Agents\CustomerIdentifierAgent;
-use App\AI\Agents\VehicleIdentifierAgent;
+use App\AI\InsuranceOrchestrator;
+use App\AI\Tools\IdentifyCustomerTool;
 use App\Models\AgentExecutionLog;
 use App\Models\Conversation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -28,7 +28,7 @@ function fakeAgentResponse(string $text = 'respuesta del agente'): AgentResponse
  */
 function fakeAgent(AgentResponse $response): object
 {
-    $agent = Mockery::mock(CustomerIdentifierAgent::class . ',' . Conversational::class);
+    $agent = Mockery::mock(CustomerIdentifierAgent::class.','.Conversational::class);
     $agent->shouldReceive('continueLastConversation')->andReturnSelf();
     $agent->shouldReceive('prompt')->andReturn($response);
 
@@ -52,13 +52,13 @@ function makeOrchestrator(): InsuranceOrchestrator
 function freshConversation(): Conversation
 {
     return Conversation::factory()->create([
-        'external_conversation_id' => 'thread_' . uniqid(),
+        'external_conversation_id' => 'thread_'.uniqid(),
         'metadata' => ['ai_state' => [
             'customer_identified' => false,
-            'vehicle_identified'  => false,
-            'coverage_set'        => false,
-            'quote_ready'         => false,
-            'checkout_done'       => false,
+            'vehicle_identified' => false,
+            'coverage_set' => false,
+            'quote_ready' => false,
+            'checkout_done' => false,
         ]],
     ]);
 }
@@ -68,7 +68,7 @@ it('creates an agent_execution_log on successful handle', function () {
 
     $orchestrator = $this->partialMock(InsuranceOrchestrator::class, function ($mock) {
         $response = fakeAgentResponse();
-        $agent    = fakeAgent($response);
+        $agent = fakeAgent($response);
         $mock->shouldReceive('handle')->passthru();
     });
 
@@ -80,8 +80,7 @@ it('creates an agent_execution_log on successful handle', function () {
     $orchestrator = new InsuranceOrchestrator($adapter);
 
     // Mockear los tools que usan los agentes
-    $this->mock(\App\AI\Tools\IdentifyCustomerTool::class, fn ($mock) =>
-        $mock->shouldReceive('handle')->andReturn(json_encode(['success' => true]))
+    $this->mock(IdentifyCustomerTool::class, fn ($mock) => $mock->shouldReceive('handle')->andReturn(json_encode(['success' => true]))
     );
 
     // Por simplicidad, mockear el agente vía el container
@@ -103,15 +102,15 @@ it('records duration_ms as a positive integer via assertDatabaseHas', function (
     $conversation = freshConversation();
 
     $log = AgentExecutionLog::create([
-        'conversation_id'     => $conversation->id,
-        'agent_name'          => 'CustomerIdentifierAgent',
-        'step'                => 1,
-        'state_before'        => ['customer_identified' => false, 'vehicle_identified' => false, 'coverage_set' => false, 'quote_ready' => false, 'checkout_done' => false],
-        'state_after'         => ['customer_identified' => true, 'vehicle_identified' => false, 'coverage_set' => false, 'quote_ready' => false, 'checkout_done' => false],
-        'state_changes'       => ['customer_identified' => true],
-        'chained'             => false,
-        'status'              => 'success',
-        'duration_ms'         => 1500,
+        'conversation_id' => $conversation->id,
+        'agent_name' => 'CustomerIdentifierAgent',
+        'step' => 1,
+        'state_before' => ['customer_identified' => false, 'vehicle_identified' => false, 'coverage_set' => false, 'quote_ready' => false, 'checkout_done' => false],
+        'state_after' => ['customer_identified' => true, 'vehicle_identified' => false, 'coverage_set' => false, 'quote_ready' => false, 'checkout_done' => false],
+        'state_changes' => ['customer_identified' => true],
+        'chained' => false,
+        'status' => 'success',
+        'duration_ms' => 1500,
         'inbound_message_ids' => null,
         'outbound_message_id' => null,
     ]);

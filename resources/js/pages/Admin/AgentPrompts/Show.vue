@@ -7,10 +7,15 @@
         <div class="flex items-center gap-3">
           <BackLink href="/admin/agent-prompts" label="Agentes" />
           <div>
-            <div class="flex items-center gap-2.5">
+            <div class="flex items-center gap-2.5 flex-wrap">
               <h1 class="text-xl sm:text-2xl font-semibold tracking-tight" style="color: var(--text-1);">
                 {{ agentLabel }}
               </h1>
+              <span v-if="type === 'shared'"
+                class="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                style="background: var(--bg-raised); color: var(--text-2); border: 1px dashed var(--border);">
+                bloque compartido
+              </span>
               <span v-if="activeVersion"
                 class="text-[11px] px-2.5 py-0.5 rounded-full font-semibold"
                 style="background: var(--badge-ok-bg); color: var(--badge-ok-txt);">
@@ -20,7 +25,43 @@
             <p class="text-sm mt-0.5" style="color: var(--text-3);">
               Editá el prompt y guardalo como nueva versión. Los cambios tienen efecto inmediato.
             </p>
+            <div v-if="type === 'agent' && inheritedBlocks && inheritedBlocks.length"
+              class="mt-2 flex items-center gap-2 flex-wrap">
+              <span class="text-[10px] uppercase tracking-wider" style="color: var(--text-3);">Hereda</span>
+              <span v-for="block in inheritedBlocks" :key="block"
+                class="text-[10px] px-2 py-0.5 rounded-full font-mono"
+                style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border-sub);">
+                {{ block }}
+              </span>
+            </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Preview del prompt compuesto (solo agentes) -->
+      <div v-if="type === 'agent' && composedPreview"
+        class="rounded-[14px] overflow-hidden"
+        style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <button
+          @click="showComposed = !showComposed"
+          class="w-full flex items-center justify-between px-5 py-3 text-left transition-colors"
+          style="background: var(--bg-raised); border-bottom: 1px solid var(--border);"
+        >
+          <div class="flex items-center gap-2">
+            <span style="color: var(--text-1);" class="text-sm font-semibold">
+              Prompt compuesto (lo que recibe el LLM)
+            </span>
+            <span class="text-[11px]" style="color: var(--text-3);">
+              {{ composedPreview.length }} caracteres · {{ composedLines }} líneas
+            </span>
+          </div>
+          <span class="text-[11px]" style="color: var(--text-3);">
+            {{ showComposed ? 'Ocultar' : 'Ver' }}
+          </span>
+        </button>
+        <div v-if="showComposed" class="p-5 font-mono text-[12px] leading-relaxed overflow-y-auto"
+          style="background: #0d1117; color: #e6edf3; max-height: 400px;">
+          <pre class="whitespace-pre-wrap">{{ composedPreview }}</pre>
         </div>
       </div>
 
@@ -247,11 +288,16 @@ interface VersionEntry {
 const props = defineProps<{
   agentKey: string
   agentLabel: string
+  type?: 'agent' | 'shared'
   activeVersion: VersionEntry | null
   versions: VersionEntry[]
+  composedPreview?: string
+  inheritedBlocks?: string[]
 }>()
 
 const $page = usePage()
+const showComposed = ref(false)
+const composedLines = computed(() => (props.composedPreview ?? '').split('\n').length)
 
 // ─── Editor state ────────────────────────────────────────────────────────────
 

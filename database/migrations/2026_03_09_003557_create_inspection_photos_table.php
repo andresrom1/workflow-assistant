@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('uploaded_by_ip', 45)->nullable(); // IPv6 safe
             $table->timestamp('confirmed_at')->nullable();
             $table->timestamps();
-        
+
             $table->unique(['quote_id', 'photo_key']); // evita duplicados
             $table->index(['status', 'created_at']);   // para el cleanup query
         });

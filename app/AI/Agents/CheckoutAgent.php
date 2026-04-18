@@ -5,7 +5,6 @@ namespace App\AI\Agents;
 use App\AI\Tools\CheckCoverageRuleTool;
 use App\AI\Tools\CheckoutTool;
 use App\Models\AgentPrompt;
-use Illuminate\Support\Facades\Cache;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
@@ -19,6 +18,9 @@ class CheckoutAgent implements Agent, Conversational, HasTools
 
     protected string $agentKey = 'checkout_closer';
 
+    /** @var array<int, string> */
+    protected array $sharedBlocks = ['shared_style', 'shared_grounding'];
+
     public function __construct(
         private readonly CheckoutTool $tool,
         private readonly CheckCoverageRuleTool $coverageTool,
@@ -26,19 +28,7 @@ class CheckoutAgent implements Agent, Conversational, HasTools
 
     public function instructions(): Stringable|string
     {
-        return Cache::rememberForever(
-            "agent_prompt:{$this->agentKey}",
-            fn () => AgentPrompt::activeFor($this->agentKey)?->content ?? $this->fallbackInstructions()
-        );
-    }
-
-    protected function fallbackInstructions(): string
-    {
-        return 'Tu tarea es presentar las cotizaciones disponibles y ayudar al cliente a elegir. '
-            .'Presentá las mejores 2-3 opciones de forma clara. '
-            .'Cuando el cliente confirme cuál alternativa desea, usá la herramienta disponible '
-            .'pasando el quoteId y quote_alternative_id correspondientes. '
-            .'Respondé siempre en español, de forma concisa y amigable.';
+        return AgentPrompt::compose($this->agentKey, $this->sharedBlocks);
     }
 
     /**

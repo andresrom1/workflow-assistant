@@ -2,29 +2,29 @@
 
 namespace App\Services\Quote\Strategies;
 
+use App\Events\QuoteOfferedToPas;
 use App\Models\Quote;
 use App\Models\RiskSnapshot;
 use App\Services\Quote\QuoteResolutionStrategyInterface;
-use App\Events\QuoteOfferedToPas;
+use App\Services\SettingsService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
-use App\Services\SettingsService;
 
 class MobileAppQuoteResolution implements QuoteResolutionStrategyInterface
 {
     public function resolve(Quote $quote, RiskSnapshot $snapshot): void
     {
-        $settings    = app(SettingsService::class);
-        $endpoint    = $settings->get('mobile_app.endpoint', config('services.mobile_app.endpoint'));
-        $timeout     = (int) $settings->get('pas.opportunity_timeout_minutes', 30);
+        $settings = app(SettingsService::class);
+        $endpoint = $settings->get('mobile_app.endpoint', config('services.mobile_app.endpoint'));
+        $timeout = (int) $settings->get('pas.opportunity_timeout_minutes', 30);
         $httpTimeout = (int) $settings->get('pas.http_timeout_seconds', 10);
 
         if (empty($endpoint)) {
-            throw new \Exception("El endpoint de la app móvil no está configurado.");
+            throw new \Exception('El endpoint de la app móvil no está configurado.');
         }
 
-        Log::info(__METHOD__ . " Ofreciendo Quote ID: {$quote->id} a PAS vía Mobile App en {$endpoint}");
+        Log::info(__METHOD__." Ofreciendo Quote ID: {$quote->id} a PAS vía Mobile App en {$endpoint}");
 
         $payload = [
             'quote_id' => $quote->id,
@@ -44,12 +44,12 @@ class MobileAppQuoteResolution implements QuoteResolutionStrategyInterface
                 ])
                 ->post($endpoint, $payload);
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 throw new \Exception("Error al enviar oportunidad a PAS (HTTP {$response->status()}): {$response->body()}");
             }
 
             $responseData = $response->json();
-            $opportunityId = $responseData['opportunity_id'] ?? ('opp_' . uniqid());
+            $opportunityId = $responseData['opportunity_id'] ?? ('opp_'.uniqid());
 
             // 3. Actualizar Quote
             $quote->update([
@@ -72,7 +72,7 @@ class MobileAppQuoteResolution implements QuoteResolutionStrategyInterface
             QuoteOfferedToPas::dispatch($quote);
 
         } catch (Throwable $e) {
-            Log::error("[MobileAppQuoteResolution] Fallo al ofrecer a PAS: " . $e->getMessage());
+            Log::error('[MobileAppQuoteResolution] Fallo al ofrecer a PAS: '.$e->getMessage());
 
             $quote->update(['status' => 'failed']);
 

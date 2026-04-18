@@ -6,6 +6,7 @@ use App\Enums\Modality;
 use App\Exceptions\WhatsAppSpamLimitException;
 use App\Models\AgentExecutionLog;
 use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Services\Media\MediaStorageService;
 use App\Services\Media\TextToSpeechService;
@@ -106,6 +107,7 @@ class SendWhatsAppMessage implements ShouldQueue
             $this->conversationId,
             $this->agentName,
             $this->text,
+            config('ai.default'),
         );
 
         if ($message) {
@@ -141,6 +143,7 @@ class SendWhatsAppMessage implements ShouldQueue
                 $this->conversationId,
                 $this->agentName,
                 $decision['eligible'],
+                config('ai.default'),
             );
 
             $this->linkLatestOutboundMessage();
@@ -173,7 +176,7 @@ class SendWhatsAppMessage implements ShouldQueue
             return;
         }
 
-        $message = \App\Models\Message::where('conversation_id', $this->conversationId)
+        $message = Message::where('conversation_id', $this->conversationId)
             ->where('direction', 'outbound')
             ->latest()
             ->first();

@@ -1,4 +1,5 @@
 <?php
+
 // app/Http/Controllers/TestingController.php
 
 namespace App\Http\Controllers;
@@ -48,7 +49,7 @@ class TestingController extends Controller
     public function freshMigrations(Request $request)
     {
         // Solo permitir si está explícitamente habilitado
-        if (!config('app.allow_fresh_migrations', false)) {
+        if (! config('app.allow_fresh_migrations', false)) {
             abort(403, 'Fresh migrations not allowed');
         }
 
@@ -68,7 +69,7 @@ class TestingController extends Controller
     public function databaseStatus()
     {
         $tables = DB::select('SELECT name FROM sqlite_master WHERE type="table" ORDER BY name');
-        
+
         $counts = [];
         foreach ($tables as $table) {
             $tableName = $table->name;
@@ -91,16 +92,16 @@ class TestingController extends Controller
     public function cleanDatabase()
     {
         $tables = DB::select('SELECT name FROM sqlite_master WHERE type="table" ORDER BY name');
-        
+
         DB::statement('PRAGMA foreign_keys = OFF');
-        
+
         foreach ($tables as $table) {
             $tableName = $table->name;
-            if (!in_array($tableName, ['sqlite_sequence', 'migrations'])) {
+            if (! in_array($tableName, ['sqlite_sequence', 'migrations'])) {
                 DB::table($tableName)->truncate();
             }
         }
-        
+
         DB::statement('PRAGMA foreign_keys = ON');
 
         return response()->json([

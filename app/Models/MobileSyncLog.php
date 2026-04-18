@@ -14,12 +14,12 @@ class MobileSyncLog extends Model
         'response_data',
         'status',
         'error_message',
-        'synced_at'
+        'synced_at',
     ];
 
     protected $casts = [
         'response_data' => 'array',
-        'synced_at' => 'datetime'
+        'synced_at' => 'datetime',
     ];
 
     public function quote(): BelongsTo

@@ -20,8 +20,7 @@ class RequestQuotesFromProviders implements ShouldQueue
     public function __construct(
         protected Quote $quote,
         protected RiskSnapshot $snapshot
-    ) {
-    }
+    ) {}
 
     /**
      * El Job ahora delega la resolución al QuoteService,
@@ -33,9 +32,9 @@ class RequestQuotesFromProviders implements ShouldQueue
 
         try {
             $quoteService->resolveQuote($this->quote, $this->snapshot);
-            Log::info("[Job] Resolución completada exitosamente.");
+            Log::info('[Job] Resolución completada exitosamente.');
         } catch (Throwable $e) {
-            Log::error("[Job] Fallo en la resolución: " . $e->getMessage());
+            Log::error('[Job] Fallo en la resolución: '.$e->getMessage());
             $this->fail($e);
         }
     }
