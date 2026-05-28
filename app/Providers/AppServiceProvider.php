@@ -11,6 +11,8 @@ use App\Repositories\ConversationRepository;
 use App\Repositories\CustomerRepository;
 use App\Repositories\VehicleRepository;
 use App\Services\CustomerIdentificationService;
+use App\Services\Firebase\FirebaseTokenVerifier;
+use App\Services\Firebase\KreaitTokenVerifier;
 use App\Services\VehicleIdentificationService;
 use App\Services\WhatsApp\WhatsAppOutboundService;
 use Illuminate\Support\ServiceProvider;
@@ -40,6 +42,9 @@ class AppServiceProvider extends ServiceProvider
         // WhatsApp
         $this->app->singleton(WhatsAppOutboundService::class);
         $this->app->singleton(InsuranceOrchestrator::class);
+
+        // Verificación de Firebase ID Token (Admin SDK kreait). Se mockea en tests.
+        $this->app->singleton(FirebaseTokenVerifier::class, KreaitTokenVerifier::class);
     }
 
     public function boot(): void
