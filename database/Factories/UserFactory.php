@@ -50,15 +50,4 @@ class UserFactory extends Factory
     {
         return $this->state(['email_verified_at' => null]);
     }
-
-    /**
-     * Usuario móvil autenticado vía Firebase (OAuth, sin password).
-     */
-    public function firebase(): static
-    {
-        return $this->state(fn (): array => [
-            'firebase_uid' => 'uid_'.fake()->unique()->bothify('??????????'),
-            'password' => null,
-        ]);
-    }
 }

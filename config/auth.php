@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\MobileAccount;
 use App\Models\User;
 
 return [
@@ -42,6 +43,12 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // Guard de la app móvil (mango-mobile). Sanctum-driven, sin sesión.
+        'mobile' => [
+            'driver' => 'sanctum',
+            'provider' => 'mobile_accounts',
+        ],
     ],
 
     /*
@@ -67,10 +74,10 @@ return [
             'model' => env('AUTH_MODEL', User::class),
         ],
 
-        // 'users' => [
-        //     'driver' => 'database',
-        //     'table' => 'users',
-        // ],
+        'mobile_accounts' => [
+            'driver' => 'eloquent',
+            'model' => MobileAccount::class,
+        ],
     ],
 
     /*

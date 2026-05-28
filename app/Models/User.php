@@ -6,25 +6,23 @@ use App\Enums\UserRole;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens;
 
 /**
+ * Usuario del admin panel (Breeze, sesión cookie).
+ *
+ * No tiene nada que ver con la app móvil: esa identidad vive en
+ * App\Models\MobileAccount.
+ *
  * @property UserRole $role
- * @property string|null $firebase_uid
- * @property string|null $avatar_url
- * @property int|null $customer_id
  */
 class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasFactory, Notifiable;
 
     /**
-     * The attributes that are mass assignable.
-     *
      * @var list<string>
      */
     protected $fillable = [
@@ -32,14 +30,9 @@ class User extends Authenticatable implements MustVerifyEmail
         'email',
         'password',
         'role',
-        'firebase_uid',
-        'avatar_url',
-        'customer_id',
     ];
 
     /**
-     * The attributes that should be hidden for serialization.
-     *
      * @var list<string>
      */
     protected $hidden = [
@@ -48,8 +41,6 @@ class User extends Authenticatable implements MustVerifyEmail
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
      * @return array<string, string>
      */
     protected function casts(): array
@@ -64,23 +55,5 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isAdmin(): bool
     {
         return $this->role === UserRole::Admin;
-    }
-
-    /**
-     * El tomador (Customer) vinculado a esta cuenta OAuth. Null hasta el claim.
-     *
-     * @return BelongsTo<Customer, $this>
-     */
-    public function customer(): BelongsTo
-    {
-        return $this->belongsTo(Customer::class);
-    }
-
-    /**
-     * Si la cuenta ya está vinculada a un tomador (recibe sus pólizas).
-     */
-    public function isLinked(): bool
-    {
-        return $this->customer_id !== null;
     }
 }

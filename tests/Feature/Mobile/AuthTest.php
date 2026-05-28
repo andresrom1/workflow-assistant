@@ -2,7 +2,7 @@
 
 use App\Exceptions\InvalidFirebaseTokenException;
 use App\Models\Customer;
-use App\Models\User;
+use App\Models\MobileAccount;
 use App\Services\Firebase\FirebaseTokenVerifier;
 use App\Services\Firebase\VerifiedIdentity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,7 +36,7 @@ function identity(
     return new VerifiedIdentity($uid, $email, $name, $avatarUrl, $emailVerified);
 }
 
-it('intercambia un firebase token por un sanctum token y crea el usuario', function () {
+it('intercambia un firebase token por un sanctum token y crea la cuenta móvil', function () {
     fakeVerifier(identity());
 
     $response = $this->postJson('/api/mobile/v1/auth/session', [
@@ -50,18 +50,34 @@ it('intercambia un firebase token por un sanctum token y crea el usuario', funct
             'linked' => false,
         ]);
 
-    $this->assertDatabaseHas('users', [
+    $this->assertDatabaseHas('mobile_accounts', [
         'firebase_uid' => 'uid_abc',
         'email' => 'tomas@gmail.com',
     ]);
 });
 
-it('recupera el mismo usuario en logins sucesivos con el mismo firebase_uid', function () {
+it('recupera la misma cuenta en logins sucesivos con el mismo firebase_uid', function () {
     fakeVerifier(identity());
     $this->postJson('/api/mobile/v1/auth/session', ['firebase_token' => 't1'])->assertOk();
     $this->postJson('/api/mobile/v1/auth/session', ['firebase_token' => 't2'])->assertOk();
 
-    expect(User::where('firebase_uid', 'uid_abc')->count())->toBe(1);
+    expect(MobileAccount::where('firebase_uid', 'uid_abc')->count())->toBe(1);
+});
+
+it('vincula una cuenta existente por email cuando llega un firebase_uid nuevo', function () {
+    // La cuenta ya existía con otro firebase_uid (ej. el usuario re-instaló la
+    // app y Google le rotó el UID, o vino un Apple ID nuevo con el mismo email).
+    $existing = MobileAccount::factory()->create([
+        'firebase_uid' => 'uid_viejo',
+        'email' => 'tomas@gmail.com',
+    ]);
+
+    fakeVerifier(identity(uid: 'uid_nuevo', email: 'tomas@gmail.com'));
+    $this->postJson('/api/mobile/v1/auth/session', ['firebase_token' => 't'])->assertOk();
+
+    // Misma fila, UID actualizado.
+    expect(MobileAccount::where('email', 'tomas@gmail.com')->count())->toBe(1);
+    expect($existing->fresh()->firebase_uid)->toBe('uid_nuevo');
 });
 
 it('no pisa nombre/email con null en logins posteriores (caso Apple)', function () {
@@ -73,7 +89,7 @@ it('no pisa nombre/email con null en logins posteriores (caso Apple)', function 
     fakeVerifier(identity(uid: 'uid_apple', email: null, name: null, avatarUrl: null));
     $this->postJson('/api/mobile/v1/auth/session', ['firebase_token' => 't2'])->assertOk();
 
-    $this->assertDatabaseHas('users', [
+    $this->assertDatabaseHas('mobile_accounts', [
         'firebase_uid' => 'uid_apple',
         'name' => 'Ana Pérez',
         'email' => 'ana@icloud.com',
@@ -87,7 +103,7 @@ it('rechaza el email relay de Apple', function () {
         ->assertStatus(422)
         ->assertJson(['code' => 'apple_relay_email']);
 
-    $this->assertDatabaseMissing('users', ['firebase_uid' => 'uid_relay']);
+    $this->assertDatabaseMissing('mobile_accounts', ['firebase_uid' => 'uid_relay']);
 });
 
 it('devuelve 401 cuando el token de firebase es inválido', function () {
@@ -116,34 +132,34 @@ it('vincula la cuenta cuando email + dni matchean un tomador', function () {
         'email' => 'tomas@gmail.com',
         'dni' => '30123456',
     ]);
-    $user = User::factory()->firebase()->create(['email' => 'tomas@gmail.com']);
-    Sanctum::actingAs($user);
+    $account = MobileAccount::factory()->create(['email' => 'tomas@gmail.com']);
+    Sanctum::actingAs($account, ['*'], 'mobile');
 
     $this->postJson('/api/mobile/v1/auth/link', ['dni' => '30123456'])
         ->assertOk()
         ->assertJson(['linked' => true]);
 
-    expect($user->fresh()->customer_id)->toBe($customer->id);
+    expect($account->fresh()->customer_id)->toBe($customer->id);
 });
 
 it('falla la vinculación con dni incorrecto', function () {
     Customer::factory()->create(['email' => 'tomas@gmail.com', 'dni' => '30123456']);
-    $user = User::factory()->firebase()->create(['email' => 'tomas@gmail.com']);
-    Sanctum::actingAs($user);
+    $account = MobileAccount::factory()->create(['email' => 'tomas@gmail.com']);
+    Sanctum::actingAs($account, ['*'], 'mobile');
 
     $this->postJson('/api/mobile/v1/auth/link', ['dni' => '00000000'])
         ->assertStatus(422)
         ->assertJson(['code' => 'link_failed']);
 
-    expect($user->fresh()->customer_id)->toBeNull();
+    expect($account->fresh()->customer_id)->toBeNull();
 });
 
-it('no permite vincular un tomador ya tomado por otra cuenta', function () {
+it('no permite vincular un tomador ya reclamado por otra cuenta', function () {
     $customer = Customer::factory()->create(['email' => 'tomas@gmail.com', 'dni' => '30123456']);
-    User::factory()->firebase()->create(['customer_id' => $customer->id]);
+    MobileAccount::factory()->linked($customer->id)->create();
 
-    $user = User::factory()->firebase()->create(['email' => 'tomas@gmail.com']);
-    Sanctum::actingAs($user);
+    $account = MobileAccount::factory()->create(['email' => 'tomas@gmail.com']);
+    Sanctum::actingAs($account, ['*'], 'mobile');
 
     $this->postJson('/api/mobile/v1/auth/link', ['dni' => '30123456'])
         ->assertStatus(422)
@@ -156,10 +172,10 @@ it('link y logout requieren autenticación', function () {
 });
 
 it('logout borra el token actual', function () {
-    $user = User::factory()->firebase()->create();
-    $token = $user->createToken('mobile')->plainTextToken;
+    $account = MobileAccount::factory()->create();
+    $token = $account->createToken('mobile')->plainTextToken;
 
     $this->withToken($token)->postJson('/api/mobile/v1/auth/logout')->assertOk();
 
-    expect($user->fresh()->tokens()->count())->toBe(0);
+    expect($account->fresh()->tokens()->count())->toBe(0);
 });
