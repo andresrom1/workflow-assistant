@@ -34,6 +34,12 @@ class Customer extends Model
         return $this->hasMany(Vehicle::class);
     }
 
+    /** @return HasMany<Risk, $this> */
+    public function risks(): HasMany
+    {
+        return $this->hasMany(Risk::class);
+    }
+
     /**
      * PAS (Productor Asesor de Seguros) asignado al cliente.
      *
