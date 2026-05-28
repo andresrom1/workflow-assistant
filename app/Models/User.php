@@ -5,17 +5,21 @@ namespace App\Models;
 use App\Enums\UserRole;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 /**
- * Usuario del admin panel (Breeze, sesión cookie).
+ * Usuario del admin panel (Breeze, sesión cookie). Cuando role=pas, también
+ * representa al Productor Asesor de Seguros: su perfil (matrícula, teléfono,
+ * avatar) vive en `metadata` JSONB.
  *
- * No tiene nada que ver con la app móvil: esa identidad vive en
- * App\Models\MobileAccount.
+ * No tiene nada que ver con la identidad de la app móvil: esa identidad vive
+ * en App\Models\MobileAccount.
  *
  * @property UserRole $role
+ * @property array<string, mixed> $metadata
  */
 class User extends Authenticatable implements MustVerifyEmail
 {
@@ -30,6 +34,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'email',
         'password',
         'role',
+        'metadata',
     ];
 
     /**
@@ -49,11 +54,38 @@ class User extends Authenticatable implements MustVerifyEmail
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => UserRole::class,
+            'metadata' => 'array',
         ];
     }
 
     public function isAdmin(): bool
     {
         return $this->role === UserRole::Admin;
+    }
+
+    public function isPas(): bool
+    {
+        return $this->role === UserRole::Pas;
+    }
+
+    /** @param  Builder<self>  $query */
+    public function scopePas(Builder $query): void
+    {
+        $query->where('role', UserRole::Pas);
+    }
+
+    public function pasMatricula(): ?string
+    {
+        return $this->metadata['matricula'] ?? null;
+    }
+
+    public function pasPhone(): ?string
+    {
+        return $this->metadata['phone'] ?? null;
+    }
+
+    public function pasAvatarUrl(): ?string
+    {
+        return $this->metadata['avatar_url'] ?? null;
     }
 }

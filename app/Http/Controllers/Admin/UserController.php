@@ -21,6 +21,7 @@ class UserController extends Controller
                 'label' => match ($role) {
                     UserRole::Admin => 'Administrador',
                     UserRole::User => 'Usuario',
+                    UserRole::Pas => 'PAS',
                 },
             ], UserRole::cases()),
             'users' => User::orderBy('name')->get()->map(fn (User $user) => [
