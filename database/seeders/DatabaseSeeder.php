@@ -17,6 +17,9 @@ class DatabaseSeeder extends Seeder
         $this->call([
             AdminUserSeeder::class,
             AgentPromptSeeder::class,
+            MobilePasSeeder::class,
+            CustomerSeeder::class,
+            MobileRiskSeeder::class,
         ]);
     }
 }

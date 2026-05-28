@@ -3,25 +3,27 @@
 namespace Database\Seeders;
 
 use App\Models\Customer;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 /**
- * Seed mínimo de tomadores (Customer) para probar la vinculación de identidad
- * de Fase 1. El seed completo de pólizas/PAS llega en Fase 2.
+ * Seed de tomadores (Customer) — fixtures fijos + 1 opcional con tu email
+ * OAuth real para testear claim end-to-end.
  *
- * El Customer cumple el rol de "tomador": es contra estos registros que se
- * matchea (email verificado por OAuth + DNI) cuando el usuario hace el claim.
+ * Cada Customer queda con `pas_id` apuntando al PAS sembrado por
+ * MobilePasSeeder (modelo "asesor dedicado": un PAS por cliente).
  *
  * Para probar el flujo end-to-end con login real, definí en .env:
- *   MANGO_DEV_CUSTOMER_EMAIL=tu-cuenta-google@gmail.com
- *   MANGO_DEV_CUSTOMER_DNI=12345678
- * y se creará un tomador con TU email OAuth, así el match funciona.
+ *   MANGO_DEV_CUSTOMER_EMAIL=tu-email@gmail.com  (el mismo que tu OAuth)
+ *   MANGO_DEV_CUSTOMER_DNI=12345678               (tu DNI real)
  */
 class CustomerSeeder extends Seeder
 {
     public function run(): void
     {
-        // Tomadores fijos de prueba (las credenciales están documentadas en ROADMAP.md).
+        $pas = User::pas()->first();
+        $pasId = $pas?->id;
+
         $fixtures = [
             [
                 'name' => 'Tomás Iglesias',
@@ -37,13 +39,12 @@ class CustomerSeeder extends Seeder
             ],
         ];
 
-        // Tomador con el email OAuth real del dev, para test end-to-end del claim.
         if ($devEmail = env('MANGO_DEV_CUSTOMER_EMAIL')) {
             $fixtures[] = [
-                'name' => 'Dev MANGO',
+                'name' => env('MANGO_DEV_CUSTOMER_NAME', 'Dev MANGO'),
                 'dni' => (string) env('MANGO_DEV_CUSTOMER_DNI', '99999999'),
                 'email' => $devEmail,
-                'phone' => '+5491100000000',
+                'phone' => env('MANGO_DEV_CUSTOMER_PHONE', '+5491100000000'),
             ];
         }
 
@@ -51,6 +52,7 @@ class CustomerSeeder extends Seeder
             Customer::updateOrCreate(
                 ['email' => $data['email']],
                 [
+                    'pas_id' => $pasId,
                     'name' => $data['name'],
                     'dni' => $data['dni'],
                     'phone' => $data['phone'],
