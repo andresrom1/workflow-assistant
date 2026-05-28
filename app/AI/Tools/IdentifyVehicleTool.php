@@ -3,6 +3,8 @@
 namespace App\AI\Tools;
 
 use App\Adapters\AIProviders\WhatsAppAdapter;
+use App\AI\Concerns\HasMockReplay;
+use App\AI\Contracts\Mockable;
 use App\Models\Conversation;
 use App\Traits\ConditionalLogger;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -10,9 +12,10 @@ use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
-class IdentifyVehicleTool implements Tool
+class IdentifyVehicleTool implements Mockable, Tool
 {
     use ConditionalLogger;
+    use HasMockReplay;
 
     public function __construct(
         private readonly WhatsAppAdapter $adapter,
@@ -57,6 +60,10 @@ class IdentifyVehicleTool implements Tool
 
     public function handle(Request $request): string
     {
+        if (($mock = $this->interceptIfReplay($request)) !== null) {
+            return $mock;
+        }
+
         $this->logToolCall($request->all());
 
         // El sessionUuid se genera aquí porque en el flujo WhatsApp no existe
@@ -75,5 +82,25 @@ class IdentifyVehicleTool implements Tool
         }
 
         return json_encode($result);
+    }
+
+    public function mockResponse(Request $request): string
+    {
+        return json_encode([
+            'success' => true,
+            'mock' => true,
+            'vehicle' => [
+                'id' => 0,
+                'patente' => $request['patente'] ?? 'ABC123',
+                'marca' => $request['marca'] ?? 'Toyota',
+                'modelo' => $request['modelo'] ?? 'Corolla',
+                'version' => $request['version'] ?? 'XEI',
+                'year' => $request['year'] ?? 2020,
+                'combustible' => $request['combustible'] ?? 'nafta',
+                'codigo_postal' => $request['codigo_postal'] ?? '1000',
+            ],
+            'quote_id' => 0,
+            'message' => 'Vehículo registrado y cotización iniciada (mock). Las aseguradoras tardan unos segundos.',
+        ]);
     }
 }

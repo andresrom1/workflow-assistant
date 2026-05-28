@@ -120,9 +120,47 @@
 
     </div>
   </div>
+
+  <!-- Modal confirmar deprecar documento -->
+  <Transition name="fade">
+    <div v-if="showDeprecateModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-black/50" @click="showDeprecateModal = false" />
+      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
+           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">
+          ¿Deprecar este documento?
+        </h3>
+        <p class="text-sm font-medium mb-3" style="color: var(--text-2);">
+          {{ document.company_name }} — {{ document.original_filename }}
+        </p>
+        <ul class="text-sm space-y-1.5 mb-5">
+          <li style="color: var(--badge-ok-txt);">✓ El documento queda archivado para auditoría</li>
+          <li style="color: var(--badge-danger-txt);">✗ Se excluye de todas las búsquedas RAG</li>
+          <li style="color: var(--badge-danger-txt);">✗ Esta acción no se puede revertir</li>
+        </ul>
+        <div class="flex justify-end gap-2">
+          <button
+            @click="showDeprecateModal = false"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="submitDeprecate"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);"
+          >
+            Deprecar
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import BackLink from '@/components/UI/BackLink.vue'
 
@@ -160,10 +198,15 @@ const saveContent = () => {
   })
 }
 
+const showDeprecateModal = ref(false)
+
 const confirmDeprecate = () => {
-  if (confirm('Estas seguro de que queres deprecar este documento? No podra usarse en busquedas RAG.')) {
-    deprecateForm.delete(`/coverage-documents/${props.document.id}`)
-  }
+  showDeprecateModal.value = true
+}
+
+const submitDeprecate = () => {
+  showDeprecateModal.value = false
+  deprecateForm.delete(`/coverage-documents/${props.document.id}`)
 }
 
 const formatDate = (iso: string | null): string => {
@@ -208,3 +251,8 @@ const statusBadgeStyle = !props.document.is_active
   ? 'background: var(--border-sub); color: var(--text-3);'
   : (statusStyles[props.document.extraction_status] ?? '')
 </script>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>

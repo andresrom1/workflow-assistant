@@ -27,6 +27,7 @@ toClaude.ia
 database/database.sqlite
 run.md
 .claude/settings.local.json
+.claude/worktrees/
 
 
 /.phpstan-tmp

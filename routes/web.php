@@ -1,9 +1,12 @@
 <?php
 
+use App\Http\Controllers\Admin\AgentExecutionLogAnnotationController;
 use App\Http\Controllers\Admin\AgentPromptController;
+use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Admin\CheckoutAuditController;
 use App\Http\Controllers\Admin\ConversationController;
 use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Admin\StudioController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CheckoutController;
@@ -79,15 +82,46 @@ Route::middleware(['auth'])->group(function () {
             ->name('conversations.show');
         Route::post('/conversations/{conversation}/reset', [ConversationController::class, 'reset'])
             ->name('conversations.reset');
+        Route::post('/conversations/{conversation}/analyze-semantics', [ConversationController::class, 'analyzeSemantics'])
+            ->name('conversations.analyze-semantics');
+
+        Route::post('/execution-logs/{log}/annotations', [AgentExecutionLogAnnotationController::class, 'store'])
+            ->name('execution-logs.annotations.store');
+        Route::delete('/execution-logs/{log}/annotations', [AgentExecutionLogAnnotationController::class, 'destroy'])
+            ->name('execution-logs.annotations.destroy');
 
         Route::get('/agent-prompts', [AgentPromptController::class, 'index'])
             ->name('agent-prompts.index');
+        Route::get('/agent-prompts/view/{agentPrompt}', [AgentPromptController::class, 'view'])
+            ->name('agent-prompts.view');
         Route::get('/agent-prompts/{agentKey}', [AgentPromptController::class, 'show'])
             ->name('agent-prompts.show');
         Route::post('/agent-prompts/{agentKey}', [AgentPromptController::class, 'store'])
             ->name('agent-prompts.store');
         Route::post('/agent-prompts/{agentPrompt}/activate', [AgentPromptController::class, 'activate'])
             ->name('agent-prompts.activate');
+
+        // Draft flow (Fase 4)
+        Route::post('/agent-prompts/{agentKey}/drafts', [AgentPromptController::class, 'createDraft'])
+            ->name('agent-prompts.drafts.create');
+        Route::put('/agent-prompts/drafts/{agentPrompt}', [AgentPromptController::class, 'updateDraft'])
+            ->name('agent-prompts.drafts.update');
+        Route::post('/agent-prompts/drafts/{agentPrompt}/promote', [AgentPromptController::class, 'promoteDraft'])
+            ->name('agent-prompts.drafts.promote');
+        Route::post('/agent-prompts/drafts/{agentPrompt}/take-control', [AgentPromptController::class, 'takeDraftControl'])
+            ->name('agent-prompts.drafts.take-control');
+        Route::delete('/agent-prompts/drafts/{agentPrompt}', [AgentPromptController::class, 'discardDraft'])
+            ->name('agent-prompts.drafts.discard');
+
+        // Analytics — Heatmap de steps (Fase 3)
+        Route::get('/analytics/funnel', [AnalyticsController::class, 'funnel'])
+            ->name('analytics.funnel');
+
+        // Studio — Reevaluación de turn (Fase 6)
+        Route::get('/studio/reevaluate/{log}', [StudioController::class, 'show'])
+            ->name('studio.show');
+        Route::post('/studio/reevaluate', [StudioController::class, 'reevaluate'])
+            ->name('studio.reevaluate');
 
         // Gestión de usuarios
         Route::get('/users/create', [UserController::class, 'create'])->name('users.create');

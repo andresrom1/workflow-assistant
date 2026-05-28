@@ -22,13 +22,26 @@ class Conversation extends Model
         'ended_at',
         'ext_user_id',
         'ext_username',
+        'flags',
+        'turns_in_current_step',
+        'last_health_analysis_at',
+        'semantic_analysis',
+        'last_semantic_analysis_at',
+        'semantic_analysis_turn_count',
+        'last_message_at',
     ];
 
     protected $casts = [
         'metadata' => 'array',
+        'flags' => 'array',
         'started_at' => 'datetime',
         'ended_at' => 'datetime',
         'last_message_at' => 'datetime',
+        'last_health_analysis_at' => 'datetime',
+        'turns_in_current_step' => 'integer',
+        'semantic_analysis' => 'array',
+        'last_semantic_analysis_at' => 'datetime',
+        'semantic_analysis_turn_count' => 'integer',
     ];
 
     public function customer(): BelongsTo
@@ -96,10 +109,23 @@ class Conversation extends Model
      */
     public function updateAiState(array $patch): void
     {
-        $meta = $this->metadata ?? [];
-        $meta['ai_state'] = array_merge($this->aiState(), $patch);
+        $previous = $this->aiState();
+        $next = array_merge($previous, $patch);
 
-        $this->update(['metadata' => $meta]);
+        $meta = $this->metadata ?? [];
+        $meta['ai_state'] = $next;
+
+        $updates = ['metadata' => $meta];
+
+        // Si alguna flag pasó de false → true (avance de step), resetear el contador.
+        foreach ($patch as $key => $value) {
+            if ($value === true && ($previous[$key] ?? false) === false) {
+                $updates['turns_in_current_step'] = 0;
+                break;
+            }
+        }
+
+        $this->update($updates);
     }
 
     /**

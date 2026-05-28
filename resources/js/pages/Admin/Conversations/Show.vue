@@ -70,6 +70,88 @@
         </div>
       </div>
 
+      <!-- Análisis semántico (Tier 2) -->
+      <div v-if="semantic_analysis_enabled || conversation.semantic_analysis"
+        class="rounded-[14px] overflow-hidden"
+        style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <button type="button" @click="semanticOpen = !semanticOpen"
+          class="w-full flex items-center justify-between px-5 py-3 border-b"
+          :style="`background: var(--bg-raised); border-color: var(--border); ${semanticOpen ? '' : 'border-bottom-color: transparent;'}`">
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">
+              🤖 Análisis IA
+            </span>
+            <span v-if="positiveSemanticFlags.length"
+              class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+              style="background: #fee2e2; color: #991b1b;">
+              {{ positiveSemanticFlags.length }} detectado{{ positiveSemanticFlags.length === 1 ? '' : 's' }}
+            </span>
+            <span v-else-if="conversation.semantic_analysis"
+              class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+              style="background: var(--badge-ok-bg); color: var(--badge-ok-txt);">
+              Sin hallazgos
+            </span>
+            <span v-else class="text-[11px]" style="color: var(--text-3);">Sin análisis aún</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span v-if="conversation.last_semantic_analysis_at" class="text-[10px]" style="color: var(--text-3);">
+              {{ formatDate(conversation.last_semantic_analysis_at) }}
+            </span>
+            <span class="text-[10px]" style="color: var(--text-3);">{{ semanticOpen ? '▾' : '▸' }}</span>
+          </div>
+        </button>
+
+        <div v-if="semanticOpen" class="px-5 py-4 space-y-3">
+          <div v-if="!conversation.semantic_analysis" class="text-sm" style="color: var(--text-3);">
+            Esta conversación todavía no fue analizada. Usá el botón de abajo para disparar un análisis manual.
+          </div>
+
+          <div v-else>
+            <!-- Flags detectados con reasoning -->
+            <div v-if="positiveSemanticFlags.length" class="space-y-2 mb-3">
+              <div v-for="flag in positiveSemanticFlags" :key="flag"
+                class="rounded-[10px] p-3"
+                style="background: var(--bg-raised); border: 1px solid var(--border);">
+                <div class="flex items-center gap-2 mb-1">
+                  <span>{{ semanticFlagEmoji(flag) }}</span>
+                  <span class="text-[12px] font-semibold" style="color: var(--text-1);">
+                    {{ semanticFlagLabel(flag) }}
+                  </span>
+                </div>
+                <p v-if="conversation.semantic_analysis.reasoning[flag]"
+                  class="text-[12px] leading-relaxed pl-6" style="color: var(--text-2);">
+                  {{ conversation.semantic_analysis.reasoning[flag] }}
+                </p>
+              </div>
+            </div>
+
+            <div v-else class="text-sm mb-3" style="color: var(--text-2);">
+              El análisis no detectó ningún problema semántico en los últimos
+              {{ conversation.semantic_analysis.window_turns }} turnos.
+            </div>
+
+            <div class="text-[10px]" style="color: var(--text-3);">
+              Ventana: {{ conversation.semantic_analysis.window_turns }} turnos ·
+              Mensajes analizados: {{ conversation.semantic_analysis.messages_analyzed }}
+            </div>
+          </div>
+
+          <div v-if="semantic_analysis_enabled" class="pt-2">
+            <button type="button" @click="reanalyzeSemantics"
+              :disabled="reanalyzing"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-opacity"
+              :style="reanalyzing
+                ? 'background: var(--border-sub); color: var(--text-3); cursor: not-allowed;'
+                : 'background: var(--accent-100); color: var(--dot-accent); border: 1px solid var(--border);'">
+              {{ reanalyzing ? 'Encolando…' : '↻ Re-analizar ahora' }}
+            </button>
+            <span class="text-[10px] ml-2" style="color: var(--text-3);">
+              Bypasa el throttle · puede tardar unos segundos en aparecer tras refresh
+            </span>
+          </div>
+        </div>
+      </div>
+
       <!-- Chat + flujo lateral -->
       <div ref="gridContainer" class="grid grid-cols-1 lg:grid-cols-[1fr_200px] gap-4 items-start">
 
@@ -228,6 +310,28 @@
                     <span class="text-[10px] font-mono" style="color: var(--text-2);">
                       {{ formatDuration(group.parent.duration_ms) }}
                     </span>
+                    <button
+                      @click.stop="viewPrompt(group.parent)"
+                      class="ml-1 text-[10px] px-1 py-0 rounded-[3px] transition-colors inline-flex items-center gap-0.5"
+                      :title="group.parent.agent_prompt_id ? 'Ver el prompt que corrió en este turn' : 'Sin FK — muestra la versión activa actual'"
+                      style="color: var(--text-3); border: 1px solid var(--border);"
+                      @mouseenter="e => (e.currentTarget as HTMLElement).style.color = 'var(--text-1)'"
+                      @mouseleave="e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'"
+                    >
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M9 8h6m-7 12h8a2 2 0 002-2V6a2 2 0 00-2-2H8a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                      </svg>
+                      <span v-if="!group.parent.agent_prompt_id">⚠</span>
+                    </button>
+                    <Link
+                      v-if="canReevaluate(group.parent.agent_name)"
+                      :href="`/admin/studio/reevaluate/${group.parent.id}`"
+                      class="text-[10px] px-1 py-0 rounded-[3px] transition-colors inline-flex items-center gap-0.5"
+                      title="Reevaluar este turn con un prompt editado"
+                      style="color: var(--text-3); border: 1px solid var(--border);"
+                    >
+                      🧪 reevaluar
+                    </Link>
                   </div>
 
                   <!-- State changes -->
@@ -264,6 +368,71 @@
                     <span class="text-[10px]" style="color: var(--text-3);">{{ formatTime(group.parent.created_at) }}</span>
                     <span class="text-[9px] font-mono" style="color: var(--text-3); opacity: 0.5;">#{{ group.parent.id }}</span>
                   </div>
+
+                  <!-- Annotation controls (parent) -->
+                  <div class="mt-1 flex items-center gap-1" @click.stop>
+                    <button type="button"
+                      @click="submitAnnotation(group.parent, true)"
+                      :title="myAnnotation(group.parent)?.verdict === true ? 'Quitar 👍' : 'Marcar 👍'"
+                      class="w-5 h-5 rounded flex items-center justify-center transition-opacity"
+                      :class="myAnnotation(group.parent)?.verdict === true ? '' : 'opacity-40 hover:opacity-100'"
+                      :style="myAnnotation(group.parent)?.verdict === true
+                        ? 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);'
+                        : 'color: var(--text-3);'">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke="currentColor" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H5.904m10.598-9.75H14.25M5.904 18.5c.083.205.173.405.27.602.197.4-.078.898-.523.898h-.908c-.889 0-1.713-.518-1.972-1.368a12 12 0 0 1-.521-3.507c0-1.553.295-3.036.831-4.398C3.387 9.953 4.167 9.5 5 9.5h1.053c.472 0 .745.556.5.96a8.958 8.958 0 0 0-1.302 4.665c0 1.194.232 2.333.654 3.375Z" />
+                      </svg>
+                    </button>
+                    <button type="button"
+                      @click="submitAnnotation(group.parent, false)"
+                      :title="myAnnotation(group.parent)?.verdict === false ? 'Editar 👎' : 'Marcar 👎'"
+                      class="w-5 h-5 rounded flex items-center justify-center transition-opacity"
+                      :class="myAnnotation(group.parent)?.verdict === false ? '' : 'opacity-40 hover:opacity-100'"
+                      :style="myAnnotation(group.parent)?.verdict === false
+                        ? 'background: #fee2e2; color: #991b1b;'
+                        : 'color: var(--text-3);'">
+                      <!-- <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> -->
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke="currentColor" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.498 15.25H4.372c-1.026 0-1.945-.694-2.054-1.715a12.137 12.137 0 0 1-.068-1.285c0-2.848.992-5.464 2.649-7.521C5.287 4.247 5.886 4 6.504 4h4.016a4.5 4.5 0 0 1 1.423.23l3.114 1.04a4.5 4.5 0 0 0 1.423.23h1.294M7.498 15.25c.618 0 .991.724.725 1.282A7.471 7.471 0 0 0 7.5 19.75 2.25 2.25 0 0 0 9.75 22a.75.75 0 0 0 .75-.75v-.633c0-.573.11-1.14.322-1.672.304-.76.93-1.33 1.653-1.715a9.04 9.04 0 0 0 2.86-2.4c.498-.634 1.226-1.08 2.032-1.08h.384m-10.253 1.5H9.7m8.075-9.75c.01.05.027.1.05.148.593 1.2.925 2.55.925 3.977 0 1.487-.36 2.89-.999 4.125m.023-8.25c-.076-.365.183-.75.575-.75h.908c.889 0 1.713.518 1.972 1.368.339 1.11.521 2.287.521 3.507 0 1.553-.295 3.036-.831 4.398-.306.774-1.086 1.227-1.918 1.227h-1.053c-.472 0-.745-.556-.5-.96a8.95 8.95 0 0 0 .303-.54" />
+                      </svg>
+
+                    </button>
+                    <button v-if="myAnnotation(group.parent)" type="button"
+                      @click="clearAnnotation(group.parent)"
+                      title="Quitar anotación"
+                      class="text-[9px] opacity-40 hover:opacity-100 ml-1"
+                      style="color: var(--text-3);">limpiar
+                    </button>
+                    <span v-for="a in otherAnnotations(group.parent)" :key="a.id"
+                      :title="`${a.user_name ?? 'otro admin'}${a.note ? ': ' + a.note : ''}`"
+                      class="text-[10px] ml-0.5"
+                      :style="a.verdict
+                        ? 'color: var(--badge-ok-txt);'
+                        : 'color: #991b1b;'">
+                      {{ a.verdict ? '👍' : '👎' }}
+                    </span>
+                  </div>
+
+                  <!-- Negative annotation popover (parent) -->
+                  <div v-if="openAnnotationId === group.parent.id" @click.stop
+                    class="mt-1.5 p-2 rounded-[8px]"
+                    style="background: var(--bg-raised); border: 1px solid var(--border);">
+                    <textarea v-model="annotationNote"
+                      placeholder="¿Qué estuvo mal en este turn?"
+                      rows="2"
+                      class="w-full text-[11px] px-1.5 py-1 rounded outline-none"
+                      style="background: var(--bg-card); color: var(--text-1); border: 1px solid var(--border);"></textarea>
+                    <div class="flex gap-1.5 mt-1.5">
+                      <button type="button"
+                        @click="saveNegativeAnnotation(group.parent)"
+                        class="text-[10px] px-2 py-0.5 rounded font-medium"
+                        style="background: var(--accent-100); color: var(--dot-accent);">Guardar</button>
+                      <button type="button"
+                        @click="openAnnotationId = null"
+                        class="text-[10px] px-2 py-0.5 rounded"
+                        style="color: var(--text-3);">Cancelar</button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -283,6 +452,28 @@
                     <span class="text-[10px] font-mono" style="color: var(--text-2);">
                       {{ formatDuration(group.child.duration_ms) }}
                     </span>
+                    <button
+                      @click.stop="viewPrompt(group.child)"
+                      class="ml-1 text-[10px] px-1 py-0 rounded-[3px] transition-colors inline-flex items-center gap-0.5"
+                      :title="group.child.agent_prompt_id ? 'Ver el prompt que corrió en este turn' : 'Sin FK — muestra la versión activa actual'"
+                      style="color: var(--text-3); border: 1px solid var(--border);"
+                      @mouseenter="e => (e.currentTarget as HTMLElement).style.color = 'var(--text-1)'"
+                      @mouseleave="e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'"
+                    >
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M9 8h6m-7 12h8a2 2 0 002-2V6a2 2 0 00-2-2H8a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                      </svg>
+                      <span v-if="!group.child.agent_prompt_id">⚠</span>
+                    </button>
+                    <Link
+                      v-if="canReevaluate(group.child.agent_name)"
+                      :href="`/admin/studio/reevaluate/${group.child.id}`"
+                      class="text-[10px] px-1 py-0 rounded-[3px] transition-colors inline-flex items-center gap-0.5"
+                      title="Reevaluar este turn con un prompt editado"
+                      style="color: var(--text-3); border: 1px solid var(--border);"
+                    >
+                      🧪 reevaluar
+                    </Link>
                   </div>
 
                   <div v-if="Object.keys(group.child.state_changes ?? {}).length" class="flex flex-wrap gap-1 mt-0.5">
@@ -311,6 +502,64 @@
                     <span class="text-[10px]" style="color: var(--text-3);">{{ formatTime(group.child.created_at) }}</span>
                     <span class="text-[9px] font-mono" style="color: var(--text-3); opacity: 0.5;">#{{ group.child.id }}</span>
                   </div>
+
+                  <!-- Annotation controls (child) -->
+                  <div class="mt-1 flex items-center gap-1" @click.stop>
+                    <button type="button"
+                      @click="submitAnnotation(group.child, true)"
+                      :title="myAnnotation(group.child)?.verdict === true ? 'Quitar 👍' : 'Marcar 👍'"
+                      class="w-5 h-5 rounded flex items-center justify-center transition-opacity"
+                      :class="myAnnotation(group.child)?.verdict === true ? '' : 'opacity-40 hover:opacity-100'"
+                      :style="myAnnotation(group.child)?.verdict === true
+                        ? 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);'
+                        : 'color: var(--text-3);'">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </button>
+                    <button type="button"
+                      @click="submitAnnotation(group.child, false)"
+                      :title="myAnnotation(group.child)?.verdict === false ? 'Editar 👎' : 'Marcar 👎'"
+                      class="w-5 h-5 rounded flex items-center justify-center transition-opacity"
+                      :class="myAnnotation(group.child)?.verdict === false ? '' : 'opacity-40 hover:opacity-100'"
+                      :style="myAnnotation(group.child)?.verdict === false
+                        ? 'background: #fee2e2; color: #991b1b;'
+                        : 'color: var(--text-3);'">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                    <button v-if="myAnnotation(group.child)" type="button"
+                      @click="clearAnnotation(group.child)"
+                      title="Quitar anotación"
+                      class="text-[9px] opacity-40 hover:opacity-100 ml-1"
+                      style="color: var(--text-3);">limpiar</button>
+                    <span v-for="a in otherAnnotations(group.child)" :key="a.id"
+                      :title="`${a.user_name ?? 'otro admin'}${a.note ? ': ' + a.note : ''}`"
+                      class="text-[10px] ml-0.5"
+                      :style="a.verdict
+                        ? 'color: var(--badge-ok-txt);'
+                        : 'color: #991b1b;'">
+                      {{ a.verdict ? '👍' : '👎' }}
+                    </span>
+                  </div>
+
+                  <!-- Negative annotation popover (child) -->
+                  <div v-if="openAnnotationId === group.child.id" @click.stop
+                    class="mt-1.5 p-2 rounded-[8px]"
+                    style="background: var(--bg-raised); border: 1px solid var(--border);">
+                    <textarea v-model="annotationNote"
+                      placeholder="¿Qué estuvo mal en este turn?"
+                      rows="2"
+                      class="w-full text-[11px] px-1.5 py-1 rounded outline-none"
+                      style="background: var(--bg-card); color: var(--text-1); border: 1px solid var(--border);"></textarea>
+                    <div class="flex gap-1.5 mt-1.5">
+                      <button type="button"
+                        @click="saveNegativeAnnotation(group.child)"
+                        class="text-[10px] px-2 py-0.5 rounded font-medium"
+                        style="background: var(--accent-100); color: var(--dot-accent);">Guardar</button>
+                      <button type="button"
+                        @click="openAnnotationId = null"
+                        class="text-[10px] px-2 py-0.5 rounded"
+                        style="color: var(--text-3);">Cancelar</button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -319,12 +568,21 @@
       </div>
     </div>
   </div>
+
+  <PromptSlideOver
+    :open="promptSlideOverOpen"
+    :prompt-id="promptSlideOverId"
+    :fallback-warning="promptSlideOverFallback"
+    @close="closePromptSlideOver"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { Link, router } from '@inertiajs/vue3'
 import AgentFlowGraph from '@/components/AgentFlowGraph.vue'
 import BackLink from '@/components/UI/BackLink.vue'
+import PromptSlideOver from '@/components/PromptSlideOver.vue'
 
 // ── Types ──
 
@@ -348,9 +606,20 @@ interface ToolCallItem {
   arguments: Record<string, unknown>
 }
 
+interface AnnotationItem {
+  id: number
+  verdict: boolean
+  note: string | null
+  user_id: number
+  user_name: string | null
+  is_mine: boolean
+  updated_at: string
+}
+
 interface ExecutionItem {
   id: number
   agent_name: string
+  agent_prompt_id: number | null
   step: number
   state_changes: Record<string, boolean> | null
   chained: boolean
@@ -363,11 +632,22 @@ interface ExecutionItem {
   outbound_message_id: number | null
   tool_calls: ToolCallItem[]
   created_at: string
+  annotations: AnnotationItem[]
 }
 
 interface ExecutionGroup {
   parent: ExecutionItem
   child: ExecutionItem | null
+}
+
+type SemanticFlag = 'user_frustrated' | 'agent_confused' | 'semantic_loop' | 'context_loss' | 'hallucination' | 'incorrect_answer'
+
+interface SemanticAnalysis {
+  flags: Partial<Record<SemanticFlag, boolean>>
+  reasoning: Partial<Record<SemanticFlag, string>>
+  analyzed_at: string
+  window_turns: number
+  messages_analyzed: number
 }
 
 const props = defineProps<{
@@ -380,9 +660,14 @@ const props = defineProps<{
     channel: string
     status: string
     ai_state: Record<string, boolean>
+    flags: Partial<Record<string, boolean>>
+    semantic_analysis: SemanticAnalysis | null
+    last_semantic_analysis_at: string | null
     created_at: string
     last_message_at: string
   }
+  semantic_analysis_enabled: boolean
+  active_prompt_ids_by_agent: Record<string, number>
   messages: MessageItem[]
   executions: ExecutionItem[]
   stats: {
@@ -664,4 +949,122 @@ const toolShortName = (name: string): string => ({
   IdentifyVehicleTool:    'vehículo',
   CoveragePreferenceTool: 'cobertura',
 } as Record<string, string>)[name] ?? name
+
+// ── Annotations ──
+
+const openAnnotationId = ref<number | null>(null)
+// ── Prompt slide-over ──
+const promptSlideOverOpen = ref(false)
+const promptSlideOverId = ref<number | null>(null)
+const promptSlideOverFallback = ref(false)
+
+const viewPrompt = (exec: ExecutionItem) => {
+  if (exec.agent_prompt_id) {
+    promptSlideOverId.value = exec.agent_prompt_id
+    promptSlideOverFallback.value = false
+  } else {
+    // Log previo a Fase 5 — sin FK. Fallback a la activa actual del agente.
+    const fallbackId = props.active_prompt_ids_by_agent[exec.agent_name]
+    if (!fallbackId) return
+    promptSlideOverId.value = fallbackId
+    promptSlideOverFallback.value = true
+  }
+  promptSlideOverOpen.value = true
+}
+
+const closePromptSlideOver = () => {
+  promptSlideOverOpen.value = false
+}
+
+const REEVALUABLE_AGENTS = new Set([
+  'CustomerIdentifierAgent',
+  'VehicleIdentifierAgent',
+  'CoveragePreferenceAgent',
+  'QuoteAgent',
+  'CheckoutAgent',
+])
+const canReevaluate = (agentName: string): boolean => REEVALUABLE_AGENTS.has(agentName)
+
+const annotationNote = ref('')
+
+const myAnnotation = (exec: ExecutionItem): AnnotationItem | null =>
+  exec.annotations?.find(a => a.is_mine) ?? null
+
+const otherAnnotations = (exec: ExecutionItem): AnnotationItem[] =>
+  exec.annotations?.filter(a => !a.is_mine) ?? []
+
+const submitAnnotation = (exec: ExecutionItem, verdict: boolean) => {
+  const mine = myAnnotation(exec)
+
+  if (verdict === true) {
+    // 👍 — upsert sin popover
+    router.post(`/admin/execution-logs/${exec.id}/annotations`,
+      { verdict: true, note: mine?.note ?? null },
+      { preserveScroll: true, preserveState: true, only: ['executions'] })
+    openAnnotationId.value = null
+    return
+  }
+
+  // 👎 — abrir popover para escribir nota
+  if (openAnnotationId.value === exec.id) {
+    openAnnotationId.value = null
+    return
+  }
+  annotationNote.value = mine?.verdict === false ? (mine.note ?? '') : ''
+  openAnnotationId.value = exec.id
+}
+
+const saveNegativeAnnotation = (exec: ExecutionItem) => {
+  router.post(`/admin/execution-logs/${exec.id}/annotations`,
+    { verdict: false, note: annotationNote.value.trim() || null },
+    { preserveScroll: true, preserveState: true, only: ['executions'] })
+  openAnnotationId.value = null
+}
+
+const clearAnnotation = (exec: ExecutionItem) => {
+  router.delete(`/admin/execution-logs/${exec.id}/annotations`,
+    { preserveScroll: true, preserveState: true, only: ['executions'] })
+  openAnnotationId.value = null
+}
+
+// ── Semantic analysis panel (Tier 2) ──
+
+const SEMANTIC_FLAGS: SemanticFlag[] = [
+  'user_frustrated', 'agent_confused', 'semantic_loop',
+  'context_loss', 'hallucination', 'incorrect_answer',
+]
+
+const SEMANTIC_META: Record<SemanticFlag, { label: string; emoji: string }> = {
+  user_frustrated:   { label: 'Usuario frustrado',        emoji: '😤' },
+  agent_confused:    { label: 'Agente confundido',        emoji: '🤔' },
+  semantic_loop:     { label: 'Loop semántico',           emoji: '🔂' },
+  context_loss:      { label: 'Pérdida de contexto',      emoji: '🧠' },
+  hallucination:     { label: 'Alucinación',              emoji: '👻' },
+  incorrect_answer:  { label: 'Respuesta incorrecta',     emoji: '❌' },
+}
+
+const semanticFlagLabel = (f: SemanticFlag): string => SEMANTIC_META[f].label
+const semanticFlagEmoji = (f: SemanticFlag): string => SEMANTIC_META[f].emoji
+
+const positiveSemanticFlags = computed<SemanticFlag[]>(() => {
+  const sa = props.conversation.semantic_analysis
+  if (!sa) return []
+  return SEMANTIC_FLAGS.filter((f) => sa.flags[f] === true)
+})
+
+const semanticOpen = ref<boolean>(!!props.conversation.semantic_analysis)
+const reanalyzing = ref(false)
+
+const reanalyzeSemantics = () => {
+  reanalyzing.value = true
+  router.post(
+    `/admin/conversations/${props.conversation.id}/analyze-semantics`,
+    {},
+    {
+      preserveScroll: true,
+      preserveState: true,
+      onFinish: () => { reanalyzing.value = false },
+    },
+  )
+}
 </script>

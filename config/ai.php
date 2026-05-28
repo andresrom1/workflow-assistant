@@ -40,6 +40,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Semantic analysis (Tier 2 de auditoría de conversaciones)
+    |--------------------------------------------------------------------------
+    |
+    | Controla el análisis semántico con IA que audita conversaciones en busca
+    | de frustración, confusión, loops semánticos, pérdida de contexto, alucinaciones
+    | y respuestas incorrectas. Gateado por feature flag para evitar costos
+    | inesperados mientras se calibra.
+    |
+    */
+
+    'semantic_analysis' => [
+        'enabled' => env('AI_SEMANTIC_ANALYSIS_ENABLED', false),
+        'model' => env('AI_SEMANTIC_ANALYSIS_MODEL', 'deepseek-reasoner'),
+        'provider' => env('AI_SEMANTIC_ANALYSIS_PROVIDER', 'deepseek'),
+        'window_turns' => (int) env('AI_SEMANTIC_ANALYSIS_WINDOW_TURNS', 6),
+        'throttle_minutes' => (int) env('AI_SEMANTIC_ANALYSIS_THROTTLE_MIN', 5),
+        'trigger_every_n_turns' => (int) env('AI_SEMANTIC_ANALYSIS_TRIGGER_EVERY', 3),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | AI Providers
     |--------------------------------------------------------------------------
     |

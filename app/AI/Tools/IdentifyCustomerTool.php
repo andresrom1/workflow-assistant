@@ -3,15 +3,18 @@
 namespace App\AI\Tools;
 
 use App\Adapters\AIProviders\WhatsAppAdapter;
+use App\AI\Concerns\HasMockReplay;
+use App\AI\Contracts\Mockable;
 use App\Models\Conversation;
 use App\Traits\ConditionalLogger;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
-class IdentifyCustomerTool implements Tool
+class IdentifyCustomerTool implements Mockable, Tool
 {
     use ConditionalLogger;
+    use HasMockReplay;
 
     public function __construct(
         private readonly WhatsAppAdapter $adapter,
@@ -41,6 +44,10 @@ class IdentifyCustomerTool implements Tool
 
     public function handle(Request $request): string
     {
+        if (($mock = $this->interceptIfReplay($request)) !== null) {
+            return $mock;
+        }
+
         $this->logToolCall($request->all());
 
         $result = $this->adapter->identifyCustomer(
@@ -57,5 +64,23 @@ class IdentifyCustomerTool implements Tool
         }
 
         return json_encode($result);
+    }
+
+    public function mockResponse(Request $request): string
+    {
+        $type = $request['identifier_type'] ?? 'phone';
+        $value = $request['identifier_value'] ?? 'N/A';
+
+        return json_encode([
+            'success' => true,
+            'mock' => true,
+            'customer' => [
+                'id' => 0,
+                'name' => 'Cliente de replay',
+                'email' => $type === 'email' ? $value : 'replay@example.com',
+                'phone' => $type === 'phone' ? $value : '1100000000',
+            ],
+            'message' => "Cliente identificado por {$type} (mock).",
+        ]);
     }
 }

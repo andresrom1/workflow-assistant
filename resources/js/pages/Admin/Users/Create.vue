@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from 'vue'
 import { useForm, usePage } from '@inertiajs/vue3'
 
 const props = defineProps({
@@ -20,6 +21,8 @@ const form = useForm({
 const resetForm = useForm({})
 const deleteForm = useForm({})
 
+const confirmTarget = ref(null)
+
 const submit = () => {
   form.post('/admin/users', {
     onSuccess: () => form.reset(),
@@ -27,15 +30,26 @@ const submit = () => {
 }
 
 const resetPassword = (userId) => {
-  if (confirm('¿Confirmar reseteo de contraseña? La nueva contraseña temporal se mostrará en pantalla.')) {
-    resetForm.post(`/admin/users/${userId}/reset-password`)
+  confirmTarget.value = {
+    title: '¿Resetear contraseña?',
+    description: 'Se generará una contraseña temporal que se mostrará en pantalla.',
+    actionLabel: 'Resetear',
+    callback: () => resetForm.post(`/admin/users/${userId}/reset-password`),
   }
 }
 
 const deleteUser = (userId, userName) => {
-  if (confirm(`¿Eliminar al usuario "${userName}"? Esta acción no se puede deshacer.`)) {
-    deleteForm.delete(`/admin/users/${userId}`)
+  confirmTarget.value = {
+    title: '¿Eliminar usuario?',
+    description: `"${userName}" será eliminado permanentemente. Esta acción no se puede deshacer.`,
+    actionLabel: 'Eliminar',
+    callback: () => deleteForm.delete(`/admin/users/${userId}`),
   }
+}
+
+const submitConfirm = () => {
+  confirmTarget.value?.callback()
+  confirmTarget.value = null
 }
 </script>
 
@@ -232,4 +246,41 @@ const deleteUser = (userId, userName) => {
       </div>
     </div>
   </div>
+
+  <!-- Modal de confirmación -->
+  <Transition name="fade">
+    <div v-if="confirmTarget" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-black/50" @click="confirmTarget = null" />
+      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
+           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">
+          {{ confirmTarget.title }}
+        </h3>
+        <p class="text-sm mb-5" style="color: var(--text-2);">
+          {{ confirmTarget.description }}
+        </p>
+        <div class="flex justify-end gap-2">
+          <button
+            @click="confirmTarget = null"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="submitConfirm"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);"
+          >
+            {{ confirmTarget.actionLabel }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
 </template>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>

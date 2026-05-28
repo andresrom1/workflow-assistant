@@ -13,7 +13,42 @@
         </span>
       </div>
 
-<!-- Empty state -->
+<!-- Filtros por salud -->
+      <div class="mb-5">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">
+            Filtrar:
+          </span>
+          <button
+            v-for="flag in flagDefs"
+            :key="flag.key"
+            @click="toggleFlag(flag.key)"
+            type="button"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors"
+            :style="chipStyle(flag.key)"
+          >
+            <span>{{ flag.emoji }}</span>
+            <span>{{ flag.label }}</span>
+            <span class="px-1 rounded text-[10px]"
+              :style="isFlagActive(flag.key)
+                ? 'background:rgba(255,255,255,0.25); color:inherit;'
+                : 'background:var(--border); color:var(--text-3);'">
+              {{ flagCounts[flag.key] ?? 0 }}
+            </span>
+          </button>
+          <button
+            v-if="filters.flags.length"
+            @click="clearFlags"
+            type="button"
+            class="ml-1 text-[11px] underline"
+            style="color: var(--text-3);"
+          >
+            Limpiar
+          </button>
+        </div>
+      </div>
+
+      <!-- Empty state -->
       <div v-if="!conversations.data.length"
         class="rounded-[14px] p-12 text-center text-sm"
         style="background: var(--bg-card); border: 1px dashed var(--border); color: var(--text-3);">
@@ -50,12 +85,20 @@
 
                 <!-- Cliente -->
                 <td class="px-4 py-3">
-                  <p class="text-sm font-semibold" style="color: var(--text-1);">
-                    {{ c.customer?.name ?? c.ext_username ?? 'Anónimo' }}
-                  </p>
-                  <p class="text-[11px] mt-0.5 font-mono" style="color: var(--text-3);">
+                  <div class="flex items-center gap-2 mb-0.5">
+                    <p class="text-sm font-semibold" style="color: var(--text-1);">
+                      {{ c.customer?.name ?? c.ext_username ?? 'Anónimo' }}
+                    </p>
+                    <span v-if="c.status === 'archived'"
+                      class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                      style="background: var(--border-sub); color: var(--text-3);">
+                      Archivada
+                    </span>
+                  </div>
+                  <p class="text-[11px] font-mono" style="color: var(--text-3);">
                     {{ c.customer?.phone ?? c.ext_user_id ?? '—' }}
                   </p>
+                  <p class="text-[10px] font-mono mt-0.5" style="color: var(--text-3); opacity: 0.6;">#{{ c.id }}</p>
                 </td>
 
                 <!-- Estado del flujo AI -->
@@ -94,6 +137,7 @@
                       Ver →
                     </a>
                     <form
+                      v-if="c.status !== 'archived'"
                       :action="`/admin/conversations/${c.id}/reset`"
                       method="POST"
                       @submit.prevent="confirmReset($event, c)"
@@ -101,12 +145,12 @@
                       <input type="hidden" name="_token" :value="csrfToken" />
                       <button
                         type="submit"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-colors"
                         style="background: var(--badge-danger-bg); color: var(--badge-danger-txt); border: 1px solid transparent;"
                         @mouseenter="$event.currentTarget.style.opacity = '0.8'"
                         @mouseleave="$event.currentTarget.style.opacity = '1'"
                       >
-                        ↺ Resetear
+                        ↺ Archivar
                       </button>
                     </form>
                   </div>
@@ -131,12 +175,20 @@
                   </span>
                   <span class="text-[10px]" style="color: var(--text-3);">{{ c.messages_count }} msgs</span>
                 </div>
-                <p class="text-sm font-semibold truncate" style="color: var(--text-1);">
-                  {{ c.customer?.name ?? c.ext_username ?? 'Anónimo' }}
-                </p>
+                <div class="flex items-center gap-2">
+                  <p class="text-sm font-semibold truncate" style="color: var(--text-1);">
+                    {{ c.customer?.name ?? c.ext_username ?? 'Anónimo' }}
+                  </p>
+                  <span v-if="c.status === 'archived'"
+                    class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0"
+                    style="background: var(--border-sub); color: var(--text-3);">
+                    Archivada
+                  </span>
+                </div>
                 <p class="text-[11px] font-mono mt-0.5" style="color: var(--text-3);">
                   {{ c.customer?.phone ?? c.ext_user_id ?? '—' }}
                 </p>
+                <p class="text-[10px] font-mono mt-0.5" style="color: var(--text-3); opacity: 0.6;">#{{ c.id }}</p>
               </div>
             </div>
 
@@ -164,6 +216,7 @@
                   Ver →
                 </a>
                 <form
+                  v-if="c.status !== 'archived'"
                   :action="`/admin/conversations/${c.id}/reset`"
                   method="POST"
                   @submit.prevent="confirmReset($event, c)"
@@ -171,10 +224,10 @@
                   <input type="hidden" name="_token" :value="csrfToken" />
                   <button
                     type="submit"
-                    class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold"
+                    class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap"
                     style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);"
                   >
-                    ↺ Resetear
+                    ↺ Archivar
                   </button>
                 </form>
               </div>
@@ -204,10 +257,54 @@
 
     </div>
   </div>
+
+  <!-- Modal de confirmación de archivado -->
+  <Transition name="fade">
+    <div v-if="archiveTarget" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-black/50" @click="archiveTarget = null" />
+      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
+           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">
+          ¿Archivar conversación?
+        </h3>
+        <p class="text-sm font-medium mb-3" style="color: var(--text-2);">
+          {{ archiveTarget.identifier }}
+        </p>
+        <ul class="text-sm space-y-1.5 mb-5">
+          <li style="color: var(--badge-ok-txt);">✓ Mensajes, cotizaciones y contexto del LLM conservados</li>
+          <li style="color: var(--badge-ok-txt);">✓ Conversación accesible para auditoría</li>
+          <li style="color: var(--badge-danger-txt);">✗ El próximo mensaje inicia el flujo desde cero</li>
+        </ul>
+        <div class="flex justify-end gap-2">
+          <button
+            @click="archiveTarget = null"
+            class="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="submitArchive"
+            class="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+            style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);"
+          >
+            Archivar
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { ref } from 'vue'
+import { router } from '@inertiajs/vue3'
+
+type Tier1Flag = 'loops' | 'stuck' | 'tool_errors' | 'abandoned' | 'long'
+type Tier2Flag = 'user_frustrated' | 'agent_confused' | 'semantic_loop' | 'context_loss' | 'hallucination' | 'incorrect_answer'
+type HealthFlag = Tier1Flag | Tier2Flag
+
+const props = defineProps<{
   conversations: {
     data: Array<{
       id: number
@@ -218,6 +315,7 @@ defineProps<{
       channel: string
       status: string
       ai_state: Record<string, boolean>
+      flags: Partial<Record<HealthFlag, boolean>>
       messages_count: number
       last_message_at: string | null
       created_at: string
@@ -227,15 +325,73 @@ defineProps<{
     prev_page_url: string | null
     next_page_url: string | null
   }
+  filters: { flags: HealthFlag[] }
+  flag_counts: Record<HealthFlag, number>
 }>()
+
+const flagCounts = props.flag_counts
+
+type FlagDef = { key: HealthFlag; label: string; emoji: string; tier: 1 | 2 }
+
+const flagDefs: FlagDef[] = [
+  { key: 'loops',             label: 'Loops',        emoji: '🔁', tier: 1 },
+  { key: 'stuck',             label: 'Estancadas',   emoji: '⏳', tier: 1 },
+  { key: 'tool_errors',       label: 'Tool errors',  emoji: '⚠️', tier: 1 },
+  { key: 'abandoned',         label: 'Abandonadas',  emoji: '🕒', tier: 1 },
+  { key: 'long',              label: 'Largas',       emoji: '📜', tier: 1 },
+  { key: 'user_frustrated',   label: 'Frustrado',    emoji: '😤', tier: 2 },
+  { key: 'agent_confused',    label: 'Confundido',   emoji: '🤔', tier: 2 },
+  { key: 'semantic_loop',     label: 'Loop semántico', emoji: '🔂', tier: 2 },
+  { key: 'context_loss',      label: 'Perdió contexto', emoji: '🧠', tier: 2 },
+  { key: 'hallucination',     label: 'Alucinación',  emoji: '👻', tier: 2 },
+  { key: 'incorrect_answer',  label: 'Resp. incorrecta', emoji: '❌', tier: 2 },
+]
+
+const isFlagActive = (flag: HealthFlag) => props.filters.flags.includes(flag)
+
+const chipStyle = (flag: HealthFlag) => {
+  const def = flagDefs.find((f) => f.key === flag)
+  const active = isFlagActive(flag)
+  if (active) {
+    return 'background:var(--badge-danger-bg); color:var(--badge-danger-txt); border:1px solid var(--badge-danger-txt);'
+  }
+  // Tier 2 = outline (bg transparente) para distinguir de Tier 1 (filled)
+  if (def?.tier === 2) {
+    return 'background:transparent; color:var(--text-2); border:1px dashed var(--border);'
+  }
+  return 'background:var(--bg-card); color:var(--text-2); border:1px solid var(--border);'
+}
+
+const toggleFlag = (flag: HealthFlag) => {
+  const next = isFlagActive(flag)
+    ? props.filters.flags.filter((f) => f !== flag)
+    : [...props.filters.flags, flag]
+  router.get('', { flags: next }, { preserveState: true, preserveScroll: true, replace: true })
+}
+
+const clearFlags = () => {
+  router.get('', {}, { preserveState: true, preserveScroll: true, replace: true })
+}
 
 const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? ''
 
+interface ArchiveTarget {
+  form: HTMLFormElement
+  identifier: string
+}
+
+const archiveTarget = ref<ArchiveTarget | null>(null)
+
 const confirmReset = (e: Event, c: { ext_user_id: string | null; ext_username: string | null; customer: { name: string | null } | null }) => {
-  const identifier = c.customer?.name ?? c.ext_username ?? c.ext_user_id ?? 'este usuario'
-  if (confirm(`¿Resetear la conversación de ${identifier}?\n\nEsto borrará todos los mensajes, cotizaciones y la memoria del agente IA. El próximo mensaje iniciará el flujo desde cero.`)) {
-    (e.target as HTMLFormElement).submit()
+  archiveTarget.value = {
+    form: e.target as HTMLFormElement,
+    identifier: c.customer?.name ?? c.ext_username ?? c.ext_user_id ?? 'este usuario',
   }
+}
+
+const submitArchive = () => {
+  archiveTarget.value?.form.submit()
+  archiveTarget.value = null
 }
 
 const channelLabel = (ch: string) => ({
@@ -263,3 +419,8 @@ const formatDate = (iso: string | null) => {
   return new Date(iso).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
 }
 </script>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>

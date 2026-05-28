@@ -15,6 +15,7 @@ use App\AI\Tools\GetQuoteTool;
 use App\AI\Tools\IdentifyCustomerTool;
 use App\AI\Tools\IdentifyVehicleTool;
 use App\Models\AgentExecutionLog;
+use App\Models\AgentPrompt;
 use App\Models\Conversation;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
@@ -61,6 +62,7 @@ class InsuranceOrchestrator
             AgentExecutionLog::create([
                 'conversation_id' => $conversation->id,
                 'agent_name' => class_basename($agent),
+                'agent_prompt_id' => $this->resolveAgentPromptId($agent),
                 'step' => $step,
                 'state_before' => $stateBefore,
                 'state_after' => $stateBefore,
@@ -95,6 +97,7 @@ class InsuranceOrchestrator
             $quoteLog = AgentExecutionLog::create([
                 'conversation_id' => $conversation->id,
                 'agent_name' => class_basename($agent),
+                'agent_prompt_id' => $this->resolveAgentPromptId($agent),
                 'step' => $step,
                 'state_before' => $stateBefore,
                 'state_after' => $stateAfter,
@@ -129,6 +132,7 @@ class InsuranceOrchestrator
             $checkoutLog = AgentExecutionLog::create([
                 'conversation_id' => $conversation->id,
                 'agent_name' => class_basename($checkoutAgent),
+                'agent_prompt_id' => $this->resolveAgentPromptId($checkoutAgent),
                 'step' => $checkoutStep,
                 'state_before' => $checkoutStateBefore,
                 'state_after' => $checkoutStateAfter,
@@ -153,6 +157,7 @@ class InsuranceOrchestrator
         $log = AgentExecutionLog::create([
             'conversation_id' => $conversation->id,
             'agent_name' => class_basename($agent),
+            'agent_prompt_id' => $this->resolveAgentPromptId($agent),
             'step' => $step,
             'state_before' => $stateBefore,
             'state_after' => $stateAfter,
@@ -211,6 +216,29 @@ class InsuranceOrchestrator
             $conversation->updateAiState(['customer_identified' => true]);
             $conversation->refresh();
         }
+    }
+
+    /**
+     * Mapea la clase del agente a la clave de su prompt activo y devuelve el id
+     * de la versión que estaba activa al momento de esta ejecución. Si no hay
+     * prompt en DB para esa clave (p.e. QuoteAgent que corre contra el .md), devuelve null.
+     */
+    private function resolveAgentPromptId(Agent $agent): ?int
+    {
+        $key = match (class_basename($agent)) {
+            'CustomerIdentifierAgent' => 'customer_identifier',
+            'VehicleIdentifierAgent' => 'vehicle_identifier',
+            'CoveragePreferenceAgent' => 'coverage_preference',
+            'QuoteAgent' => 'quote_reception',
+            'CheckoutAgent' => 'checkout_closer',
+            default => null,
+        };
+
+        if ($key === null) {
+            return null;
+        }
+
+        return AgentPrompt::activeFor($key)?->id;
     }
 
     /**

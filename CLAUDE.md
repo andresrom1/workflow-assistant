@@ -234,6 +234,12 @@ Sistema de dos agentes para responder consultas de coberturas con precision:
 - Si se usa Nginx: `client_max_body_size 50m;` en el bloque server
 - La validacion Laravel permite hasta 50MB (`max:51200` en `CoverageDocumentController@store`)
 
+## Modales y Confirmaciones
+
+- `window.confirm()` y `window.alert()` están **prohibidos**. Usar siempre modales inline.
+- Patrón estándar: `fixed inset-0 bg-black/50 z-50` con `<Transition name="fade">` y variables CSS del design system (`--bg-card`, `--border`, `--shadow-card`). Ver `resources/js/pages/Admin/Conversations/Index.vue` como referencia.
+- No existe un componente `Modal.vue` compartido — implementar directamente en el componente que lo necesita.
+
 ## Verification Scripts
 
 - Do not create verification scripts or tinker when tests cover that functionality and prove they work. Unit and feature tests are more important.

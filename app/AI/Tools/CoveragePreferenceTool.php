@@ -3,15 +3,18 @@
 namespace App\AI\Tools;
 
 use App\Adapters\AIProviders\WhatsAppAdapter;
+use App\AI\Concerns\HasMockReplay;
+use App\AI\Contracts\Mockable;
 use App\Models\Conversation;
 use App\Traits\ConditionalLogger;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
-class CoveragePreferenceTool implements Tool
+class CoveragePreferenceTool implements Mockable, Tool
 {
     use ConditionalLogger;
+    use HasMockReplay;
 
     public function __construct(
         private readonly WhatsAppAdapter $adapter,
@@ -46,6 +49,10 @@ class CoveragePreferenceTool implements Tool
 
     public function handle(Request $request): string
     {
+        if (($mock = $this->interceptIfReplay($request)) !== null) {
+            return $mock;
+        }
+
         $this->logToolCall($request->all());
 
         $result = $this->adapter->coveragePreference(
@@ -58,5 +65,16 @@ class CoveragePreferenceTool implements Tool
         }
 
         return json_encode($result);
+    }
+
+    public function mockResponse(Request $request): string
+    {
+        return json_encode([
+            'success' => true,
+            'mock' => true,
+            'coverage_code' => $request['coverage_code'] ?? 'C',
+            'patente' => $request['patente'] ?? 'ABC123',
+            'message' => 'Preferencia de cobertura registrada (mock).',
+        ]);
     }
 }

@@ -164,7 +164,7 @@
             v-if="session.status === 'submitted'"
             :action="`/admin/checkout-sessions/${session.id}/mark-processed`"
             method="POST"
-            @submit.prevent="confirmAndSubmit($event, '¿Confirmar que el pago fue procesado?')"
+            @submit.prevent="openConfirm($event, 'Marcar como procesado', 'Confirmá que el pago fue procesado y el seguro fue emitido.', 'Confirmar')"
           >
             <input type="hidden" name="_token" :value="csrfToken" />
             <button type="submit" class="btn btn-primary">
@@ -176,7 +176,7 @@
             v-if="session.status === 'processed' && !session.cc_cleared"
             :action="`/admin/checkout-sessions/${session.id}/clear-card-data`"
             method="POST"
-            @submit.prevent="confirmAndSubmit($event, '¿Eliminar los datos de tarjeta? Esta acción no se puede deshacer.')"
+            @submit.prevent="openConfirm($event, 'Eliminar datos de tarjeta', 'Los datos de tarjeta serán eliminados permanentemente. Esta acción no se puede deshacer.', 'Eliminar')"
           >
             <input type="hidden" name="_token" :value="csrfToken" />
             <button type="submit"
@@ -191,13 +191,43 @@
 
     </div>
   </div>
+
+  <!-- Modal de confirmación de acciones -->
+  <Transition name="fade">
+    <div v-if="confirmTarget" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-black/50" @click="confirmTarget = null" />
+      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
+           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">
+          {{ confirmTarget.title }}
+        </h3>
+        <p class="text-sm mb-5" style="color: var(--text-2);">
+          {{ confirmTarget.description }}
+        </p>
+        <div class="flex justify-end gap-2">
+          <button
+            @click="confirmTarget = null"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="submitConfirm"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);"
+          >
+            {{ confirmTarget.actionLabel }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
 </template>
 
 <script setup lang="ts">
-import { usePage } from '@inertiajs/vue3'
+import { ref } from 'vue'
 import BackLink from '@/components/UI/BackLink.vue'
-
-const $page = usePage()
 
 defineProps<{
   session: {
@@ -249,8 +279,22 @@ const formatDate = (iso: string | null) =>
 const formatPrice = (n: number) =>
   new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0 }).format(n)
 
-const confirmAndSubmit = (e: Event, msg: string) => {
-  if (confirm(msg)) (e.target as HTMLFormElement).submit()
+interface ConfirmTarget {
+  form: HTMLFormElement
+  title: string
+  description: string
+  actionLabel: string
+}
+
+const confirmTarget = ref<ConfirmTarget | null>(null)
+
+const openConfirm = (e: Event, title: string, description: string, actionLabel: string) => {
+  confirmTarget.value = { form: e.target as HTMLFormElement, title, description, actionLabel }
+}
+
+const submitConfirm = () => {
+  confirmTarget.value?.form.submit()
+  confirmTarget.value = null
 }
 
 const photoLabel = (key: string) => ({
@@ -259,3 +303,8 @@ const photoLabel = (key: string) => ({
   auxilio: 'Auxilio', parabrisas: 'Parabrisas',
 }[key] ?? key)
 </script>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>

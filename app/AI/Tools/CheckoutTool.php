@@ -3,15 +3,18 @@
 namespace App\AI\Tools;
 
 use App\Adapters\AIProviders\WhatsAppAdapter;
+use App\AI\Concerns\HasMockReplay;
+use App\AI\Contracts\Mockable;
 use App\Models\Conversation;
 use App\Traits\ConditionalLogger;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
-class CheckoutTool implements Tool
+class CheckoutTool implements Mockable, Tool
 {
     use ConditionalLogger;
+    use HasMockReplay;
 
     public function __construct(
         private readonly WhatsAppAdapter $adapter,
@@ -41,6 +44,10 @@ class CheckoutTool implements Tool
 
     public function handle(Request $request): string
     {
+        if (($mock = $this->interceptIfReplay($request)) !== null) {
+            return $mock;
+        }
+
         $this->logToolCall($request->all());
 
         $result = $this->adapter->checkout(
@@ -53,5 +60,17 @@ class CheckoutTool implements Tool
         }
 
         return json_encode($result);
+    }
+
+    public function mockResponse(Request $request): string
+    {
+        return json_encode([
+            'success' => true,
+            'mock' => true,
+            'quoteId' => $request['quoteId'] ?? 0,
+            'quote_alternative_id' => $request['quote_alternative_id'] ?? 0,
+            'checkout_url' => 'https://example.test/checkout/MOCK-TOKEN',
+            'message' => 'Link de checkout generado (mock).',
+        ]);
     }
 }

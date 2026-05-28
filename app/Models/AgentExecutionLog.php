@@ -6,6 +6,7 @@ use Database\Factories\AgentExecutionLogFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AgentExecutionLog extends Model
 {
@@ -15,6 +16,7 @@ class AgentExecutionLog extends Model
     protected $fillable = [
         'conversation_id',
         'agent_name',
+        'agent_prompt_id',
         'step',
         'state_before',
         'state_after',
@@ -55,5 +57,18 @@ class AgentExecutionLog extends Model
     public function outboundMessage(): BelongsTo
     {
         return $this->belongsTo(Message::class, 'outbound_message_id');
+    }
+
+    public function agentPrompt(): BelongsTo
+    {
+        return $this->belongsTo(AgentPrompt::class);
+    }
+
+    /**
+     * @return HasMany<AgentExecutionLogAnnotation, $this>
+     */
+    public function annotations(): HasMany
+    {
+        return $this->hasMany(AgentExecutionLogAnnotation::class);
     }
 }

@@ -15,6 +15,7 @@ class AgentPromptSeeder extends Seeder
         'quote_reception' => 'QuoteAgent.md',
         'checkout_closer' => 'CheckoutAgent.md',
         'coverage_check' => 'CoverageCheckAgent.md',
+        'conversation_analyzer' => 'ConversationAnalyzerAgent.md',
     ];
 
     public function run(): void
@@ -26,6 +27,7 @@ class AgentPromptSeeder extends Seeder
             'quote_reception' => 'Prompt inicial — mantiene al cliente comprometido mientras llegan las cotizaciones.',
             'checkout_closer' => 'Prompt inicial — presenta cotizaciones, maneja objeciones y cierra la venta.',
             'coverage_check' => 'Prompt inicial — fuente de verdad sobre inclusiones y exclusiones de cobertura.',
+            'conversation_analyzer' => 'Prompt inicial — auditor de conversaciones: detecta frustración, confusión, loops semánticos, pérdida de contexto, alucinación y respuestas incorrectas.',
         ];
 
         foreach ($agents as $key => $notes) {

@@ -2,6 +2,7 @@
 
 namespace App\AI\Tools;
 
+use App\AI\Concerns\HasRealReplay;
 use App\Models\AgentPrompt;
 use App\Models\QuoteAlternative;
 use App\Traits\ConditionalLogger;
@@ -14,6 +15,7 @@ use Laravel\Ai\Tools\Request;
 class CheckCoverageRuleTool implements Tool
 {
     use ConditionalLogger;
+    use HasRealReplay;
 
     public function description(): string
     {

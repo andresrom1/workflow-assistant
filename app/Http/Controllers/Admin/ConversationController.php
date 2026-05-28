@@ -3,12 +3,17 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\AnalyzeConversationSemanticsJob;
 use App\Models\AgentExecutionLog;
+use App\Models\AgentExecutionLogAnnotation;
+use App\Models\AgentPrompt;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Message;
 use App\Models\MessageAttachment;
+use App\Repositories\ConversationRepository;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -18,12 +23,33 @@ class ConversationController extends Controller
     /**
      * Lista todas las conversaciones ordenadas por actividad reciente.
      */
-    public function index(): Response
+    public function index(Request $request, ConversationRepository $repo): Response
     {
-        $conversations = Conversation::with('customer')
+        $allowedFlags = [
+            // Tier 1 — reglas determinísticas
+            'loops', 'stuck', 'tool_errors', 'abandoned', 'long',
+            // Tier 2 — análisis semántico con IA (gateado)
+            'user_frustrated', 'agent_confused', 'semantic_loop', 'context_loss', 'hallucination', 'incorrect_answer',
+        ];
+        $selectedFlags = array_values(array_intersect(
+            (array) $request->input('flags', []),
+            $allowedFlags,
+        ));
+
+        $query = Conversation::with('customer')
             ->withCount('messages')
-            ->orderByDesc('updated_at')
-            ->paginate(25);
+            ->orderByDesc('updated_at');
+
+        if ($selectedFlags !== []) {
+            $repo->applyFlags($query, $selectedFlags);
+        }
+
+        $conversations = $query->paginate(25)->withQueryString();
+
+        $flagCounts = [];
+        foreach ($allowedFlags as $flag) {
+            $flagCounts[$flag] = Conversation::query()->whereJsonContains("flags->{$flag}", true)->count();
+        }
 
         return Inertia::render('Admin/Conversations/Index', [
             'conversations' => $conversations->through(fn (Conversation $c): array => [
@@ -39,10 +65,15 @@ class ConversationController extends Controller
                 'channel' => $c->channel,
                 'status' => $c->status,
                 'ai_state' => $c->aiState(),
+                'flags' => is_array($c->flags) ? $c->flags : [],
                 'messages_count' => $c->messages_count,
                 'last_message_at' => $c->last_message_at->toIso8601String(),
                 'created_at' => $c->created_at->toIso8601String(),
             ]),
+            'filters' => [
+                'flags' => $selectedFlags,
+            ],
+            'flag_counts' => $flagCounts,
         ]);
     }
 
@@ -52,7 +83,7 @@ class ConversationController extends Controller
      * Retorna los mensajes y los logs de ejecución del orquestador
      * para evaluar la calidad de las respuestas de los agentes.
      */
-    public function show(Conversation $conversation): Response
+    public function show(Request $request, Conversation $conversation): Response
     {
         $conversation->load('customer');
 
@@ -82,13 +113,17 @@ class ConversationController extends Controller
             ->all();
 
         $logs = AgentExecutionLog::where('conversation_id', $conversation->id)
+            ->with(['annotations.user'])
             ->orderBy('created_at')
             ->get();
+
+        $currentUserId = $request->user()->id;
 
         $executions = $logs
             ->map(fn (AgentExecutionLog $log): array => [
                 'id' => $log->id,
                 'agent_name' => $log->agent_name,
+                'agent_prompt_id' => $log->agent_prompt_id,
                 'step' => $log->step,
                 'state_changes' => $log->state_changes,
                 'chained' => $log->chained,
@@ -101,6 +136,7 @@ class ConversationController extends Controller
                 'outbound_message_id' => $log->outbound_message_id,
                 'tool_calls' => $log->tool_calls ?? [],
                 'created_at' => $log->created_at->toIso8601String(),
+                'annotations' => self::formatAnnotations($log->annotations->all(), $currentUserId),
             ])
             ->all();
 
@@ -120,9 +156,14 @@ class ConversationController extends Controller
                 'channel' => $conversation->channel,
                 'status' => $conversation->status,
                 'ai_state' => $conversation->aiState(),
+                'flags' => is_array($conversation->flags) ? $conversation->flags : [],
+                'semantic_analysis' => is_array($conversation->semantic_analysis) ? $conversation->semantic_analysis : null,
+                'last_semantic_analysis_at' => $conversation->last_semantic_analysis_at?->toIso8601String(),
                 'created_at' => $conversation->created_at->toIso8601String(),
                 'last_message_at' => $conversation->last_message_at->toIso8601String(),
             ],
+            'semantic_analysis_enabled' => (bool) config('ai.semantic_analysis.enabled'),
+            'active_prompt_ids_by_agent' => self::activePromptIdsByAgent(),
             'messages' => $messages,
             'executions' => $executions,
             'stats' => [
@@ -132,6 +173,64 @@ class ConversationController extends Controller
                 'total_output_tokens' => $logs->sum('output_tokens') ?: null,
             ],
         ]);
+    }
+
+    /**
+     * Mapea el class_basename del agente (como se guarda en agent_execution_logs.agent_name)
+     * al id del AgentPrompt activo correspondiente. Fallback para logs antiguos sin FK.
+     *
+     * @return array<string, int>
+     */
+    private static function activePromptIdsByAgent(): array
+    {
+        $map = [
+            'CustomerIdentifierAgent' => 'customer_identifier',
+            'VehicleIdentifierAgent' => 'vehicle_identifier',
+            'CoveragePreferenceAgent' => 'coverage_preference',
+            'QuoteAgent' => 'quote_reception',
+            'CheckoutAgent' => 'checkout_closer',
+        ];
+
+        $result = [];
+        foreach ($map as $agentName => $key) {
+            $active = AgentPrompt::activeFor($key);
+            if ($active instanceof AgentPrompt) {
+                $result[$agentName] = $active->id;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  array<int, AgentExecutionLogAnnotation>  $annotations
+     * @return array<int, array{id: int, verdict: bool, note: string|null, user_id: int, user_name: string|null, is_mine: bool, updated_at: string}>
+     */
+    private static function formatAnnotations(array $annotations, int $currentUserId): array
+    {
+        return array_values(array_map(fn (AgentExecutionLogAnnotation $a): array => [
+            'id' => $a->id,
+            'verdict' => $a->verdict,
+            'note' => $a->note,
+            'user_id' => $a->user_id,
+            'user_name' => $a->user?->name,
+            'is_mine' => $a->user_id === $currentUserId,
+            'updated_at' => $a->updated_at->toIso8601String(),
+        ], $annotations));
+    }
+
+    /**
+     * Dispara el análisis semántico (Tier 2) manualmente bypassando throttle.
+     */
+    public function analyzeSemantics(Conversation $conversation): RedirectResponse
+    {
+        if (! (bool) config('ai.semantic_analysis.enabled')) {
+            return redirect()->back()->with('error', 'El análisis semántico está deshabilitado. Activá AI_SEMANTIC_ANALYSIS_ENABLED.');
+        }
+
+        AnalyzeConversationSemanticsJob::dispatch($conversation->id, true);
+
+        return redirect()->back()->with('success', 'Análisis semántico encolado. Refrescá en unos segundos.');
     }
 
     /**
@@ -147,31 +246,24 @@ class ConversationController extends Controller
         // external_conversation_id es el wa_id — clave usada por el AI SDK en agent_conversations.user_id
         $waId = $conversation->external_conversation_id;
 
-        // 1. Cascada dentro de la app — DB::table() para borrado real (bypasa SoftDeletes)
-        DB::table('messages')->where('conversation_id', $conversation->id)->delete();
-        DB::table('quotes')->where('conversation_id', $conversation->id)->delete();
-        DB::table('coverage_preferences')->where('conversation_id', $conversation->id)->delete();
-        DB::table('conversation_vehicle')->where('conversation_id', $conversation->id)->delete();
-
-        // 2. Memoria del AI SDK — keyed por external_conversation_id (= wa_id = agent_conversations.user_id)
-        $agentConvIds = DB::table('agent_conversations')
-            ->where('user_id', $waId)
-            ->pluck('id');
-
-        if ($agentConvIds->isNotEmpty()) {
-            DB::table('agent_conversation_messages')
-                ->whereIn('conversation_id', $agentConvIds)
-                ->delete();
-
+        DB::transaction(function () use ($conversation, $waId): void {
+            // Desvincular la memoria del AI SDK: user_id es nullable en agent_conversations.
+            // Ponerlo a null hace que latestConversationId() no los encuentre en el próximo flujo.
+            // Los registros se conservan íntegros para auditoría de prompts/tools.
             DB::table('agent_conversations')
-                ->whereIn('id', $agentConvIds)
-                ->delete();
-        }
+                ->where('user_id', $waId)
+                ->update(['user_id' => null]);
 
-        // 3. Conversación principal (force delete para limpiar el soft delete también)
-        $conversation->forceDelete();
+            // Archivar la conversación desvinculando su external_id.
+            // findOrCreateByExternalId(wa_id) no la encontrará → creará una conversación nueva.
+            // Todos los mensajes, cotizaciones y preferencias quedan intactos para auditoría.
+            $conversation->update([
+                'status' => 'archived',
+                'external_conversation_id' => "archived_{$conversation->id}",
+            ]);
+        });
 
         return redirect()->route('admin.conversations.index')
-            ->with('success', "Conversación de {$waId} reseteada. El próximo mensaje inicia el flujo desde cero.");
+            ->with('success', "Conversación de {$waId} archivada. Todo el contexto se conserva para auditoría. El próximo mensaje iniciará el flujo desde cero.");
     }
 }

@@ -65,7 +65,64 @@
         </div>
       </div>
 
-<!-- Editor -->
+<!-- Draft banner -->
+      <div class="rounded-[14px] overflow-hidden"
+        :style="draftBannerStyle">
+        <div class="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <div class="flex items-center gap-2.5">
+            <span class="text-sm font-semibold" :style="{ color: draftBannerTextColor }">
+              {{ draftBannerTitle }}
+            </span>
+            <span v-if="draft"
+              class="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+              :style="draft.is_mine
+                ? 'background: var(--accent-100); color: var(--dot-accent);'
+                : 'background: #fef3c7; color: #92400e;'">
+              {{ draft.is_mine ? 'Tuyo' : `de ${draft.owner?.name ?? 'otro admin'}` }}
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button v-if="!draft" @click="createDraft"
+              :disabled="draftLoading"
+              class="text-[11px] px-3 py-1.5 rounded-[7px] font-semibold transition-opacity"
+              :style="draftLoading
+                ? 'background: var(--border-sub); color: var(--text-3); cursor: not-allowed;'
+                : 'background: var(--accent-100); color: var(--dot-accent); border: 1px solid var(--border);'">
+              ✎ Empezar draft
+            </button>
+            <template v-else-if="draft.is_mine">
+              <button @click="saveDraft"
+                :disabled="!draftDirty || draftLoading"
+                class="text-[11px] px-3 py-1.5 rounded-[7px] font-semibold transition-opacity"
+                :style="(!draftDirty || draftLoading)
+                  ? 'background: var(--border-sub); color: var(--text-3); cursor: not-allowed;'
+                  : 'background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);'">
+                {{ draftLoading ? 'Guardando…' : draftDirty ? 'Guardar draft' : 'Guardado' }}
+              </button>
+              <button @click="confirmPromote = true"
+                :disabled="draftLoading"
+                class="text-[11px] px-3 py-1.5 rounded-[7px] font-semibold transition-opacity"
+                style="background: var(--badge-ok-bg); color: var(--badge-ok-txt); border: 1px solid transparent;">
+                ↑ Promover a activa
+              </button>
+              <button @click="confirmDiscard = true"
+                class="text-[11px] px-3 py-1.5 rounded-[7px] transition-colors"
+                style="color: var(--badge-danger-txt); border: 1px solid var(--border);">
+                Descartar
+              </button>
+            </template>
+            <template v-else>
+              <button @click="confirmTakeControl = true"
+                class="text-[11px] px-3 py-1.5 rounded-[7px] font-semibold"
+                style="background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;">
+                Tomar control
+              </button>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- Editor -->
       <div class="rounded-[14px] overflow-hidden"
         style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
 
@@ -116,9 +173,14 @@
             <textarea
               v-model="draft"
               spellcheck="false"
+              :readonly="editorReadonly"
               class="flex-1 w-full resize-none font-mono text-[13px] leading-relaxed p-5 outline-none"
-              style="background: #0d1117; color: #e6edf3; tab-size: 2;"
-              placeholder="Escribí aquí el prompt del agente..."
+              :style="editorReadonly
+                ? 'background: #0d1117; color: #9ca3af; tab-size: 2; cursor: not-allowed;'
+                : 'background: #0d1117; color: #e6edf3; tab-size: 2;'"
+              :placeholder="editorReadonly
+                ? 'Tomá el control del draft para poder editarlo.'
+                : 'Escribí aquí el prompt del agente...'"
             />
           </div>
 
@@ -238,6 +300,7 @@
                   Restaurar
                 </button>
 
+
                 <button
                   v-if="!v.is_active"
                   @click="loadIntoEditor(v)"
@@ -266,6 +329,144 @@
 
     </div>
   </div>
+
+  <!-- Modal confirmar restaurar versión -->
+  <Transition name="fade">
+    <div v-if="restoreTarget" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-black/50" @click="restoreTarget = null" />
+      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
+           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">
+          ¿Restaurar versión {{ restoreTarget.version }}?
+        </h3>
+        <p class="text-sm mb-2" style="color: var(--text-2);">
+          {{ restoreTarget.notes || '(sin descripción)' }}
+        </p>
+        <ul class="text-sm space-y-1.5 mb-5">
+          <li style="color: var(--badge-ok-txt);">✓ La versión seleccionada pasará a ser la activa</li>
+          <li style="color: var(--badge-danger-txt);">✗ Los cambios tendrán efecto inmediato en el LLM</li>
+        </ul>
+        <div class="flex justify-end gap-2">
+          <button
+            @click="restoreTarget = null"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="doRestoreVersion"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);"
+          >
+            Restaurar
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- Modal confirmar promover draft -->
+  <Transition name="fade">
+    <div v-if="confirmPromote && props.draft" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-black/50" @click="confirmPromote = false" />
+      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
+           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">
+          ¿Promover draft a activa?
+        </h3>
+        <ul class="text-sm space-y-1.5 mb-5">
+          <li style="color: var(--badge-ok-txt);">✓ El draft pasa a ser la versión activa y bumpea el número de versión</li>
+          <li style="color: var(--badge-danger-txt);">✗ La versión activa actual queda archivada</li>
+          <li style="color: var(--badge-danger-txt);">✗ El LLM empieza a usar el nuevo prompt de inmediato</li>
+        </ul>
+        <div class="flex justify-end gap-2">
+          <button
+            @click="confirmPromote = false"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="doPromoteDraft"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--badge-ok-bg); color: var(--badge-ok-txt);"
+          >
+            Promover
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- Modal confirmar descartar draft -->
+  <Transition name="fade">
+    <div v-if="confirmDiscard && props.draft" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-black/50" @click="confirmDiscard = false" />
+      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
+           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">
+          ¿Descartar este draft?
+        </h3>
+        <p class="text-sm mb-4" style="color: var(--text-2);">
+          Se pierde el contenido del draft sin promoverlo. La versión activa sigue intacta.
+        </p>
+        <div class="flex justify-end gap-2">
+          <button
+            @click="confirmDiscard = false"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="doDiscardDraft"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);"
+          >
+            Descartar
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- Modal confirmar tomar control del draft -->
+  <Transition name="fade">
+    <div v-if="confirmTakeControl && props.draft" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-black/50" @click="confirmTakeControl = false" />
+      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
+           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">
+          ¿Tomar control del draft?
+        </h3>
+        <p class="text-sm mb-2" style="color: var(--text-2);">
+          Actualmente pertenece a <strong>{{ props.draft?.owner?.name ?? 'otro admin' }}</strong>.
+        </p>
+        <ul class="text-sm space-y-1.5 mb-5">
+          <li style="color: var(--badge-pending-txt);">⚠ Pasás a ser el owner y podés editarlo, promoverlo o descartarlo</li>
+          <li style="color: var(--text-3);">· El contenido del draft se preserva</li>
+        </ul>
+        <div class="flex justify-end gap-2">
+          <button
+            @click="confirmTakeControl = false"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="doTakeControl"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;"
+          >
+            Tomar control
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
 </template>
 
 <script setup lang="ts">
@@ -280,9 +481,13 @@ interface VersionEntry {
   id: number
   version: number
   is_active: boolean
+  status: 'active' | 'draft' | 'archived'
   notes: string | null
   content: string
   created_at: string
+  owner: { id: number; name: string } | null
+  is_mine: boolean
+  parent_version_id: number | null
 }
 
 const props = defineProps<{
@@ -290,6 +495,7 @@ const props = defineProps<{
   agentLabel: string
   type?: 'agent' | 'shared'
   activeVersion: VersionEntry | null
+  draft: VersionEntry | null
   versions: VersionEntry[]
   composedPreview?: string
   inheritedBlocks?: string[]
@@ -301,8 +507,11 @@ const composedLines = computed(() => (props.composedPreview ?? '').split('\n').l
 
 // ─── Editor state ────────────────────────────────────────────────────────────
 
-const draft = ref(props.activeVersion?.content ?? '')
-const notes = ref('')
+// Si hay draft (mío o ajeno), el editor arranca mostrando el draft.
+// Si no hay draft, arranca con la versión activa.
+const initialContent = props.draft?.content ?? props.activeVersion?.content ?? ''
+const draft = ref(initialContent)
+const notes = ref(props.draft?.notes ?? '')
 const saving = ref(false)
 const viewMode = ref<'split' | 'editor' | 'preview'>('split')
 const expanded = reactive(new Set<number>())
@@ -315,6 +524,109 @@ const renderedMarkdown = computed(() => {
   }
   return marked.parse(draft.value) as string
 })
+
+// ─── Draft flow ──────────────────────────────────────────────────────────────
+
+const draftLoading = ref(false)
+const confirmPromote = ref(false)
+const confirmDiscard = ref(false)
+const confirmTakeControl = ref(false)
+
+const draftDirty = computed(() => {
+  if (!props.draft || !props.draft.is_mine) return false
+  return draft.value !== props.draft.content || notes.value !== (props.draft.notes ?? '')
+})
+
+// Editor solo es editable si: no hay draft, o el draft me pertenece.
+const editorReadonly = computed(() => {
+  return props.draft !== null && !props.draft.is_mine
+})
+
+const draftBannerStyle = computed(() => {
+  if (!props.draft) {
+    return 'background: var(--bg-card); border: 1px dashed var(--border); box-shadow: var(--shadow-card);'
+  }
+  if (props.draft.is_mine) {
+    return 'background: var(--accent-50, #eef0ff); border: 1px solid var(--border); box-shadow: var(--shadow-card);'
+  }
+  return 'background: #fffbeb; border: 1px solid #fcd34d; box-shadow: var(--shadow-card);'
+})
+
+const draftBannerTitle = computed(() => {
+  if (!props.draft) return 'Sin draft en curso'
+  if (props.draft.is_mine) return `Editando draft v${props.draft.version}`
+  return `Draft v${props.draft.version} en uso por otro admin`
+})
+
+const draftBannerTextColor = computed(() => {
+  if (!props.draft) return 'var(--text-2)'
+  if (props.draft.is_mine) return 'var(--text-1)'
+  return '#92400e'
+})
+
+const createDraft = () => {
+  if (draftLoading.value) return
+  draftLoading.value = true
+  router.post(`/admin/agent-prompts/${props.agentKey}/drafts`, {}, {
+    preserveScroll: true,
+    onFinish: () => { draftLoading.value = false },
+  })
+}
+
+const saveDraft = () => {
+  if (!props.draft || !props.draft.is_mine || draftLoading.value || !draftDirty.value) return
+  draftLoading.value = true
+  router.put(`/admin/agent-prompts/drafts/${props.draft.id}`, {
+    content: draft.value,
+    notes: notes.value || null,
+  }, {
+    preserveScroll: true,
+    onFinish: () => { draftLoading.value = false },
+  })
+}
+
+const doPromoteDraft = () => {
+  if (!props.draft) return
+  confirmPromote.value = false
+  draftLoading.value = true
+  // Asegurar que el contenido en pantalla esté persistido antes de promover.
+  const promote = () => router.post(`/admin/agent-prompts/drafts/${props.draft!.id}/promote`, {}, {
+    preserveScroll: true,
+    onFinish: () => { draftLoading.value = false },
+  })
+  if (draftDirty.value) {
+    router.put(`/admin/agent-prompts/drafts/${props.draft.id}`, {
+      content: draft.value,
+      notes: notes.value || null,
+    }, {
+      preserveScroll: true,
+      onSuccess: () => promote(),
+      onError: () => { draftLoading.value = false },
+    })
+  } else {
+    promote()
+  }
+}
+
+const doDiscardDraft = () => {
+  if (!props.draft) return
+  confirmDiscard.value = false
+  draftLoading.value = true
+  router.delete(`/admin/agent-prompts/drafts/${props.draft.id}`, {
+    preserveScroll: true,
+    onFinish: () => { draftLoading.value = false },
+  })
+}
+
+const doTakeControl = () => {
+  if (!props.draft) return
+  confirmTakeControl.value = false
+  draftLoading.value = true
+  router.post(`/admin/agent-prompts/drafts/${props.draft.id}/take-control`, {}, {
+    preserveScroll: true,
+    onFinish: () => { draftLoading.value = false },
+  })
+}
 
 // ─── Acciones ────────────────────────────────────────────────────────────────
 
@@ -332,12 +644,18 @@ const saveNewVersion = () => {
   })
 }
 
-const restoreVersion = (v: VersionEntry) => {
-  if (!confirm(`¿Restaurar versión ${v.version}? Será la versión activa inmediatamente.`)) return
+const restoreTarget = ref<VersionEntry | null>(null)
 
-  router.post(`/admin/agent-prompts/${v.id}/activate`, {}, {
+const restoreVersion = (v: VersionEntry) => {
+  restoreTarget.value = v
+}
+
+const doRestoreVersion = () => {
+  if (!restoreTarget.value) return
+  router.post(`/admin/agent-prompts/${restoreTarget.value.id}/activate`, {}, {
     preserveScroll: true,
   })
+  restoreTarget.value = null
 }
 
 const loadIntoEditor = (v: VersionEntry) => {
@@ -361,6 +679,9 @@ const formatDate = (iso: string) =>
 </script>
 
 <style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
 .accordion-enter-active, .accordion-leave-active {
   transition: max-height 0.2s ease, opacity 0.2s ease;
   overflow: hidden;

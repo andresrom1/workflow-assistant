@@ -5,6 +5,7 @@ namespace App\Repositories;
 use App\Models\Conversation;
 use App\Models\CoveragePreference;
 use App\Traits\ConditionalLogger;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 
 class ConversationRepository
@@ -22,7 +23,9 @@ class ConversationRepository
      */
     public function findByExtUserId(string $extUserId): ?Conversation
     {
-        return Conversation::where('ext_user_id', $extUserId)->first();
+        return Conversation::where('ext_user_id', $extUserId)
+            ->where('status', '!=', 'archived')
+            ->first();
     }
 
     /**
@@ -111,6 +114,22 @@ class ConversationRepository
         Conversation::where('ext_user_id', $openaiUserId)
             ->where('status', 'active')
             ->update(['last_message_at' => now()]);
+    }
+
+    /**
+     * Filtra una query de Conversation por flags de salud (loops, stuck, tool_errors, abandoned, long).
+     *
+     * @param  Builder<Conversation>  $query
+     * @param  array<int, string>  $flags
+     * @return Builder<Conversation>
+     */
+    public function applyFlags(Builder $query, array $flags): Builder
+    {
+        foreach ($flags as $flag) {
+            $query->whereJsonContains("flags->{$flag}", true);
+        }
+
+        return $query;
     }
 
     public function saveCoveragePreference(int $conversationId, int $vehicleId, string $preference): void

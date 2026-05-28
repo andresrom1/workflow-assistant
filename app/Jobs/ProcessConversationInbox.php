@@ -86,6 +86,17 @@ class ProcessConversationInbox implements ShouldQueue
                 $conversation->customer->update(['name' => $contactName]);
             }
         }
+
+        AnalyzeConversationHealthJob::dispatch($this->conversationId);
+
+        // Tier 2: análisis semántico con IA. Gated por feature flag + throttle por turns.
+        if ((bool) config('ai.semantic_analysis.enabled')) {
+            $every = max(1, (int) config('ai.semantic_analysis.trigger_every_n_turns', 3));
+            $total = (int) Message::where('conversation_id', $this->conversationId)->count();
+            if ($total > 0 && $total % $every === 0) {
+                AnalyzeConversationSemanticsJob::dispatch($this->conversationId);
+            }
+        }
     }
 
     public function failed(\Throwable $exception): void

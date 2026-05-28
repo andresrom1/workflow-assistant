@@ -2,6 +2,7 @@
 
 namespace App\AI\Tools;
 
+use App\AI\Concerns\HasRealReplay;
 use App\Models\CoverageChunk;
 use App\Models\CoverageDocument;
 use App\Traits\ConditionalLogger;
@@ -14,6 +15,7 @@ use Pgvector\Laravel\Distance;
 class SearchCompanyDocumentationTool implements Tool
 {
     use ConditionalLogger;
+    use HasRealReplay;
 
     public function description(): string
     {
