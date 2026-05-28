@@ -45,5 +45,9 @@ class Risk extends Model
         return $this->hasMany(Poliza::class);
     }
 
-    // sharedRisks() se agrega en la migración de shared_risks (task 6).
+    /** @return HasMany<SharedRisk, $this> */
+    public function sharedRisks(): HasMany
+    {
+        return $this->hasMany(SharedRisk::class);
+    }
 }
