@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -12,6 +13,7 @@ class Customer extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'pas_id',
         'dni',
         'email',
         'phone',
@@ -30,6 +32,17 @@ class Customer extends Model
     public function vehicles(): HasMany
     {
         return $this->hasMany(Vehicle::class);
+    }
+
+    /**
+     * PAS (Productor Asesor de Seguros) asignado al cliente.
+     *
+     * Es un User con role=pas; modelado como BelongsTo a users por simplicidad.
+     * El consumer debe usar el helper isPas() o el scope pas() para validar.
+     */
+    public function pas(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'pas_id');
     }
 
     public function conversations(): HasMany
