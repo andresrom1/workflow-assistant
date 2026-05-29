@@ -4,6 +4,7 @@ use App\Http\Controllers\Mobile\AuthController;
 use App\Http\Controllers\Mobile\EmergencyContactsController;
 use App\Http\Controllers\Mobile\EmergencyController;
 use App\Http\Controllers\Mobile\PolizasController;
+use App\Http\Controllers\Mobile\SharedRisksController;
 use App\Http\Controllers\Mobile\SiniestroController;
 use Illuminate\Support\Facades\Route;
 
@@ -56,4 +57,10 @@ Route::middleware('auth:mobile')->group(function () {
     Route::post('/emergencia/notificar', [EmergencyController::class, 'notify'])
         ->middleware('throttle:3,1');
     Route::delete('/emergencia/tracking/{token}', [EmergencyController::class, 'revokeTracking']);
+
+    // Cuenta Compartida (shared_risk) — spec v2 §4.6. Solo titular gestiona.
+    Route::get('/shared-risks/{polizaId}', [SharedRisksController::class, 'index'])->whereNumber('polizaId');
+    Route::post('/shared-risks/invitar', [SharedRisksController::class, 'invite']);
+    Route::delete('/shared-risks/{polizaId}/{conductorId}', [SharedRisksController::class, 'revoke'])
+        ->whereNumber('polizaId')->whereNumber('conductorId');
 });
