@@ -14,6 +14,7 @@ use App\Http\Controllers\CoverageDocumentController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QuoteController;
+use App\Http\Controllers\TrackingController;
 use Illuminate\Support\Facades\Route;
 
 // ─── Público ─────────────────────────────────────────────────────────────────
@@ -130,5 +131,10 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
     });
 });
+
+// Endpoint público para los contactos de emergencia (spec v2 §4.3).
+// Sin auth — el token es la autorización.
+Route::get('/track/{token}', [TrackingController::class, 'show'])
+    ->where('token', '[A-Za-z0-9]+');
 
 require __DIR__.'/auth.php';

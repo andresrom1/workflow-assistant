@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Mobile\AuthController;
 use App\Http\Controllers\Mobile\EmergencyContactsController;
+use App\Http\Controllers\Mobile\EmergencyController;
 use App\Http\Controllers\Mobile\PolizasController;
 use App\Http\Controllers\Mobile\SiniestroController;
 use Illuminate\Support\Facades\Route;
@@ -49,4 +50,10 @@ Route::middleware('auth:mobile')->group(function () {
     Route::post('/contactos-emergencia', [EmergencyContactsController::class, 'store']);
     Route::put('/contactos-emergencia/{id}', [EmergencyContactsController::class, 'update'])->whereNumber('id');
     Route::delete('/contactos-emergencia/{id}', [EmergencyContactsController::class, 'destroy'])->whereNumber('id');
+
+    // Necesito Ayuda — Estado 1/2 + revocación del tracking (Estado 4).
+    // Rate-limit corto: anti doble-envío por retry de red.
+    Route::post('/emergencia/notificar', [EmergencyController::class, 'notify'])
+        ->middleware('throttle:3,1');
+    Route::delete('/emergencia/tracking/{token}', [EmergencyController::class, 'revokeTracking']);
 });
