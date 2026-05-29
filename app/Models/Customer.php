@@ -45,6 +45,8 @@ class Customer extends Model
      *
      * Es un User con role=pas; modelado como BelongsTo a users por simplicidad.
      * El consumer debe usar el helper isPas() o el scope pas() para validar.
+     *
+     * @return BelongsTo<User, $this>
      */
     public function pas(): BelongsTo
     {

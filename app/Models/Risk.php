@@ -34,6 +34,7 @@ class Risk extends Model
         'metadata' => 'array',
     ];
 
+    /** @return BelongsTo<Customer, $this> */
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);

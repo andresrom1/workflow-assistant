@@ -43,6 +43,7 @@ class SharedRisk extends Model
         'revoked_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<Risk, $this> */
     public function risk(): BelongsTo
     {
         return $this->belongsTo(Risk::class);

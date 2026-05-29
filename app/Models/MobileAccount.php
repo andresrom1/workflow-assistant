@@ -68,4 +68,23 @@ class MobileAccount extends Authenticatable implements MustVerifyEmail
     {
         return $this->customer_id !== null;
     }
+
+    /**
+     * Resuelve el Customer titular asociado a esta cuenta para la fase mock.
+     *
+     * Prioridad: customer_id explícito (linkeado) → match por email contra
+     * `customers.email` → null si no hay match. Permite testear desde la app
+     * con cualquier seed sin necesidad de cerrar el flujo de DNI claim.
+     *
+     * Cuando integremos las APIs reales, esta lógica se reemplaza por
+     * `$account->customer` (estricto: requiere linking).
+     */
+    public function resolveCustomerForMock(): ?Customer
+    {
+        if ($this->customer) {
+            return $this->customer;
+        }
+
+        return Customer::where('email', $this->email)->first();
+    }
 }

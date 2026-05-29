@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Mobile\AuthController;
+use App\Http\Controllers\Mobile\PolizasController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -29,4 +30,10 @@ Route::prefix('auth')->group(function () {
         // Cierra la sesión del dispositivo actual.
         Route::post('/logout', [AuthController::class, 'logout']);
     });
+});
+
+Route::middleware('auth:mobile')->group(function () {
+    // Pólizas — bloque PAS + propias + riesgos compartidos (Home) y detalle.
+    Route::get('/polizas', [PolizasController::class, 'index']);
+    Route::get('/polizas/{id}', [PolizasController::class, 'show'])->whereNumber('id');
 });

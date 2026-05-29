@@ -49,6 +49,7 @@ class Poliza extends Model
         'metadata' => 'array',
     ];
 
+    /** @return BelongsTo<Risk, $this> */
     public function risk(): BelongsTo
     {
         return $this->belongsTo(Risk::class);
