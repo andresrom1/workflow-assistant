@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Mobile\AuthController;
+use App\Http\Controllers\Mobile\EmergencyContactsController;
 use App\Http\Controllers\Mobile\PolizasController;
 use App\Http\Controllers\Mobile\SiniestroController;
 use Illuminate\Support\Facades\Route;
@@ -42,4 +43,10 @@ Route::middleware('auth:mobile')->group(function () {
     // respaldo: el lock real de 48hs vive en el cliente.
     Route::post('/siniestro', [SiniestroController::class, 'notify'])
         ->middleware('throttle:5,1');
+
+    // Contactos de emergencia (spec v2 §4.3). Máx 3 por cuenta.
+    Route::get('/contactos-emergencia', [EmergencyContactsController::class, 'index']);
+    Route::post('/contactos-emergencia', [EmergencyContactsController::class, 'store']);
+    Route::put('/contactos-emergencia/{id}', [EmergencyContactsController::class, 'update'])->whereNumber('id');
+    Route::delete('/contactos-emergencia/{id}', [EmergencyContactsController::class, 'destroy'])->whereNumber('id');
 });
