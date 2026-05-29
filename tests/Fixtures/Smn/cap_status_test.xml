@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cap:alert xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
+	<cap:identifier>urn:oid:2.49.0.1.32.0.2026.05.29.99.99.99</cap:identifier><cap:sender>smn@smn.gov.ar</cap:sender><cap:sent>2026-05-29T14:07:00-03:00</cap:sent><cap:status>Test</cap:status><cap:msgType>Alert</cap:msgType><cap:scope>Public</cap:scope><cap:info>
+		<cap:category>Met</cap:category>
+		<cap:event>FIXTURE DE PRUEBA - DEBE SER DESCARTADO</cap:event><cap:urgency>Immediate</cap:urgency><cap:severity>Severe</cap:severity><cap:certainty>Observed</cap:certainty><cap:expires>2099-12-31T23:59:00-03:00</cap:expires><cap:senderName>FIXTURE</cap:senderName><cap:headline>FIXTURE</cap:headline><cap:description> --- </cap:description><cap:instruction> --- </cap:instruction><cap:web>https://example.invalid</cap:web><cap:area><cap:areaDesc>FIXTURE</cap:areaDesc><cap:polygon>-24.63,-59.11 -25.33,-59.23 -25.58,-58.73 -24.63,-59.11</cap:polygon>
+	</cap:area>
+	</cap:info>
+</cap:alert>

@@ -1,0 +1,9 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+		<?xml-stylesheet type="text/xsl"  href="alerta_cap_es.xsl"?>
+<cap:alert xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
+	<cap:identifier>urn:oid:2.49.0.1.32.0.2026.05.29.14.07.00</cap:identifier><cap:sender>smn@smn.gov.ar</cap:sender><cap:sent>2026-05-29T14:07:00-03:00</cap:sent><cap:status>Actual</cap:status><cap:msgType>Alert</cap:msgType><cap:scope>Public</cap:scope><cap:info>
+						<cap:category>Met</cap:category>
+						<cap:event>TORMENTAS FUERTES CON LLUVIAS INTENSAS, RAFAGAS Y OCASIONAL CAIDA DE GRANIZO - AVISO NARANJA</cap:event><cap:urgency>Immediate</cap:urgency><cap:severity>Severe</cap:severity><cap:certainty>Observed</cap:certainty><cap:expires>2026-05-29T16:07:00-03:00</cap:expires><cap:senderName>SERVICIO METEOROLOGICO NACIONAL - ARGENTINA</cap:senderName><cap:headline>AVISO NARANJA POR TORMENTAS FUERTES CON LLUVIAS INTENSAS, RAFAGAS Y OCASIONAL CAIDA DE GRANIZO</cap:headline><cap:description> --- </cap:description><cap:instruction> --- </cap:instruction><cap:web>https://ssl.smn.gob.ar/feeds/CAP/avisocortoplazo/2026_05_29_1407_cap_es.xml</cap:web><cap:area><cap:areaDesc>FORMOSA: PATINO - PILAGAS - PILCOMAYO - PIRANE. </cap:areaDesc><cap:polygon>-24.63,-59.11 -25.33,-59.23 -25.58,-58.73 -25.50,-58.22 -25.06,-57.96 -24.95,-58.23 -24.99,-58.32 -24.85,-58.44 -24.63,-59.11</cap:polygon>
+	   </cap:area>
+	</cap:info>
+</cap:alert>
