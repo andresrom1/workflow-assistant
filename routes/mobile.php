@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Mobile\AuthController;
 use App\Http\Controllers\Mobile\PolizasController;
+use App\Http\Controllers\Mobile\SiniestroController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -36,4 +37,9 @@ Route::middleware('auth:mobile')->group(function () {
     // Pólizas — bloque PAS + propias + riesgos compartidos (Home) y detalle.
     Route::get('/polizas', [PolizasController::class, 'index']);
     Route::get('/polizas/{id}', [PolizasController::class, 'show'])->whereNumber('id');
+
+    // Siniestro — aviso al PAS (spec v2 §4.2). Rate-limit liviano de
+    // respaldo: el lock real de 48hs vive en el cliente.
+    Route::post('/siniestro', [SiniestroController::class, 'notify'])
+        ->middleware('throttle:5,1');
 });
