@@ -46,18 +46,21 @@ class SmnTestPush extends Command
     private const POLIGONOS = [
         'carlos-paz' => [
             'nombre' => 'Villa Carlos Paz',
-            'area_desc' => 'CÓRDOBA: PUNILLA - VILLA CARLOS PAZ (POLÍGONO DE PRUEBA).',
+            // Formato real del SMN: "PROVINCIA: DEPARTAMENTO(S).".
+            'area_desc' => 'CÓRDOBA: PUNILLA.',
+            // Caja amplia sobre el Gran Carlos Paz (~15 km) para el E2E — sigue
+            // muy lejos de Villa María, así que el test "afuera" no se ve afectado.
             'polygon' => [
-                [-31.40, -64.52],
-                [-31.40, -64.47],
-                [-31.44, -64.47],
-                [-31.44, -64.52],
-                [-31.40, -64.52],
+                [-31.36, -64.58],
+                [-31.36, -64.42],
+                [-31.50, -64.42],
+                [-31.50, -64.58],
+                [-31.36, -64.58],
             ],
         ],
         'villa-maria' => [
             'nombre' => 'Villa María',
-            'area_desc' => 'CÓRDOBA: GENERAL SAN MARTÍN - VILLA MARÍA (POLÍGONO DE PRUEBA).',
+            'area_desc' => 'CÓRDOBA: GENERAL SAN MARTÍN.',
             'polygon' => [
                 [-32.39, -63.26],
                 [-32.39, -63.21],
@@ -93,12 +96,15 @@ class SmnTestPush extends Command
         $acp = [
             'id' => 'urn:oid:test.'.Str::uuid()->toString(),
             'msg_type' => 'Alert',
-            'event' => 'PRUEBA - TORMENTAS FUERTES EN '.strtoupper($config['nombre']),
+            // Mock fiel al shape real del SMN: el `event` incluye el nivel
+            // ("AVISO NARANJA") y la `instruction` viene como "---" (vacío),
+            // tal cual los CAP reales del SMN. No inventar localidades ni textos.
+            'event' => 'TORMENTAS FUERTES CON LLUVIAS INTENSAS, RÁFAGAS Y OCASIONAL CAÍDA DE GRANIZO - AVISO NARANJA',
             'severity' => $severity,
             'expires_at' => $now->copy()->addHour(),
             'area_desc' => $config['area_desc'],
             'polygon' => $config['polygon'],
-            'instruction' => 'Aviso de prueba generado por smn:test-push. Ignorar si no estás testeando.',
+            'instruction' => '---',
         ];
 
         $this->info('Publicando ACP de prueba al topic acp-ar:');
