@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $mobile_account_id
  * @property string $token
+ * @property string|null $update_secret
  * @property string|null $last_lat
  * @property string|null $last_lon
  * @property Carbon|null $last_updated_at
@@ -29,11 +30,22 @@ class EmergencyTrackingToken extends Model
     protected $fillable = [
         'mobile_account_id',
         'token',
+        'update_secret',
         'last_lat',
         'last_lon',
         'last_updated_at',
         'expires_at',
         'revoked_at',
+    ];
+
+    /**
+     * El secreto de escritura nunca debe serializarse: no va en el JSON
+     * público del tracking ni en ninguna respuesta hacia los contactos.
+     *
+     * @var list<string>
+     */
+    protected $hidden = [
+        'update_secret',
     ];
 
     protected $casts = [

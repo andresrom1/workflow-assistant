@@ -21,6 +21,15 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+// Actualización de posición del tracking (Estado 2). SIN auth:mobile — la
+// invoca el foreground service del device en un isolate sin Sanctum. La
+// autorización es el `update_secret` (decisión de seguridad C). Throttle
+// generoso: un device legítimo postea ~1 vez cada 2 min; el límite solo
+// frena ráfagas, sin estorbar reintentos legítimos en una emergencia.
+Route::patch('/emergencia/tracking/{token}/posicion', [EmergencyController::class, 'updatePosition'])
+    ->where('token', '[A-Za-z0-9]+')
+    ->middleware('throttle:30,1');
+
 Route::prefix('auth')->group(function () {
     // Intercambia el Firebase ID Token por un Sanctum token. Sin auth previa.
     Route::post('/session', [AuthController::class, 'session']);
