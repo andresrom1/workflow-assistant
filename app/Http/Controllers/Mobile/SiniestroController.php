@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Mobile;
 
 use App\Enums\PolizaEstado;
+use App\Enums\UserRole;
 use App\Exceptions\Api\ApiException;
 use App\Http\Controllers\Controller;
 use App\Models\MobileAccount;
@@ -16,8 +17,10 @@ use Illuminate\Http\Request;
  * Aviso de siniestro al PAS — spec v2 §4.2.
  *
  * El cliente confirma con un slider en la app; este endpoint:
- *  1) Resuelve qué PAS notificar (asesor dedicado del titular o, en su
- *     defecto, PAS del titular del vehículo compartido de mayor sum_asegurada).
+ *  1) Resuelve qué PAS notificar por prelación (spec v2 §4.2, criterio de
+ *     Fase 9): tu PAS → PAS del titular del vehículo compartido de mayor
+ *     sum_asegurada → PAS por default de MANGO. Mejor un PAS conocido, y si no
+ *     hay, cualquier PAS de MANGO antes que dejar a la persona sin a quién llamar.
  *  2) Dispatcha WhatsApp al PAS — en mock, no se dispatcha realmente;
  *     se devuelve el PAS resuelto para que la app sepa a quién avisó.
  *  3) Rate-limit liviano en la ruta (el lock real de 48hs vive en el cliente).
@@ -55,25 +58,48 @@ class SiniestroController extends Controller
 
     private function resolvePas(MobileAccount $account): ?User
     {
-        $customer = $account->resolveCustomerForMock();
+        // Tier 1: tu PAS — alguien que ya te conoce.
+        $customer = $account->resolveCustomer();
         if ($customer?->pas) {
             return $customer->pas;
         }
 
-        // Fallback: PAS del titular del vehículo compartido de mayor
-        // sum_asegurada (criterio determinístico, spec v2 §4.2).
+        // Tier 2: PAS del titular del vehículo compartido de mayor sum_asegurada
+        // (criterio determinístico). No conoce a la persona, pero conoce el auto.
+        // Mismo criterio de visibilidad que /polizas: `accessible()` (no revocado
+        // ni vencido), SIN exigir accepted_at — el modelo de Fase 9 no acepta.
         $email = $account->email;
         $candidate = Poliza::query()
             ->where('estado', PolizaEstado::Vigente)
             ->whereHas('risk.sharedRisks', function (Builder $q) use ($email): void {
-                $q->whereNotNull('accepted_at')
-                    ->whereNull('revoked_at')
+                // Mismas condiciones que SharedRisk::accessible(): no revocado ni
+                // vencido, sin exigir accepted_at (modelo sin aceptación, Fase 9).
+                $q->whereNull('revoked_at')
+                    ->where('expires_at', '>', now())
                     ->where('shared_with_email', $email);
             })
             ->orderByDesc('sum_asegurada')
             ->with('risk.customer.pas')
             ->first();
 
-        return $candidate?->risk?->customer?->pas;
+        if ($candidate?->risk?->customer?->pas) {
+            return $candidate->risk->customer->pas;
+        }
+
+        // Tier 3: PAS por default de MANGO. Mejor un PAS que un 0800 o nada.
+        return $this->defaultPas();
+    }
+
+    private function defaultPas(): ?User
+    {
+        $email = config('mango.default_pas_email');
+        if (! is_string($email) || $email === '') {
+            return null;
+        }
+
+        return User::query()
+            ->where('role', UserRole::Pas)
+            ->where('email', $email)
+            ->first();
     }
 }

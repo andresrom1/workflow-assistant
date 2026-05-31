@@ -102,6 +102,20 @@ it('invita por email y devuelve token + status pendiente', function (): void {
         ->assertJsonStructure(['id', 'invite_url', 'expires_at']);
 });
 
+it('guarda y devuelve el nombre del invitado', function (): void {
+    [, , $risk, $poliza] = setupTitular();
+
+    $this->postJson('/api/mobile/v1/shared-risks/invitar', [
+        'poliza_id' => $poliza->id,
+        'shared_with_email' => 'pareja@example.com',
+        'name' => 'Sofía',
+    ])
+        ->assertStatus(201)
+        ->assertJson(['name' => 'Sofía', 'shared_with_email' => 'pareja@example.com']);
+
+    expect(SharedRisk::where('risk_id', $risk->id)->first()->name)->toBe('Sofía');
+});
+
 it('es idempotente: invitar de nuevo al mismo email devuelve la existente', function (): void {
     [$account, , $risk, $poliza] = setupTitular();
 
@@ -163,6 +177,46 @@ it('DELETE devuelve 404 si la invitación no existe en esa póliza', function ()
     [, , , $poliza] = setupTitular();
 
     $this->deleteJson("/api/mobile/v1/shared-risks/{$poliza->id}/99999")
+        ->assertStatus(404)
+        ->assertJson(['code' => 'SHARED_RISK_NOT_FOUND']);
+});
+
+it('el invitado se auto-revoca de un vehículo compartido (Quitar vehículo)', function (): void {
+    [$titularAccount, , $risk] = setupTitular();
+
+    $sr = SharedRisk::create([
+        'risk_id' => $risk->id,
+        'shared_with_email' => 'invitado@example.com',
+        'invited_by_mobile_account_id' => $titularAccount->id,
+        'token' => Str::random(48),
+        'expires_at' => now()->addMonths(1),
+    ]);
+
+    // El invitado se autentica y se desacopla por risk_id.
+    $invitado = MobileAccount::factory()->create(['email' => 'invitado@example.com']);
+    Sanctum::actingAs($invitado, ['*'], 'mobile');
+
+    $this->deleteJson("/api/mobile/v1/shared-risks/mias/{$risk->id}")->assertStatus(204);
+
+    expect($sr->fresh()->revoked_at)->not->toBeNull();
+});
+
+it('auto-revocación devuelve 404 si no hay invitación para mi email', function (): void {
+    [$titularAccount, , $risk] = setupTitular();
+
+    SharedRisk::create([
+        'risk_id' => $risk->id,
+        'shared_with_email' => 'otro@example.com',
+        'invited_by_mobile_account_id' => $titularAccount->id,
+        'token' => Str::random(48),
+        'expires_at' => now()->addMonths(1),
+    ]);
+
+    // Autenticado con un email distinto al de la invitación.
+    $ajeno = MobileAccount::factory()->create(['email' => 'ajeno@example.com']);
+    Sanctum::actingAs($ajeno, ['*'], 'mobile');
+
+    $this->deleteJson("/api/mobile/v1/shared-risks/mias/{$risk->id}")
         ->assertStatus(404)
         ->assertJson(['code' => 'SHARED_RISK_NOT_FOUND']);
 });

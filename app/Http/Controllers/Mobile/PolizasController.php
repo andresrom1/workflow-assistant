@@ -33,7 +33,7 @@ class PolizasController extends Controller
     {
         /** @var MobileAccount $account */
         $account = $request->user();
-        $customer = $account->resolveCustomerForMock();
+        $customer = $account->resolveCustomer();
 
         $propias = $this->polizasPropias($customer);
         $compartidos = $this->riesgosCompartidos($account->email);
@@ -90,7 +90,7 @@ class PolizasController extends Controller
     /** @return array<int, array<string, mixed>> */
     private function riesgosCompartidos(string $email): array
     {
-        $shared = SharedRisk::active()
+        $shared = SharedRisk::accessible()
             ->forEmail($email)
             ->with(['risk.customer.pas', 'risk.polizas' => fn ($q) => $q->where('estado', PolizaEstado::Vigente)])
             ->get();
@@ -155,12 +155,12 @@ class PolizasController extends Controller
 
     private function canAccessRisk(MobileAccount $account, Risk $risk): bool
     {
-        $customer = $account->resolveCustomerForMock();
+        $customer = $account->resolveCustomer();
         if ($customer && $risk->customer_id === $customer->id) {
             return true;
         }
 
-        return SharedRisk::active()
+        return SharedRisk::accessible()
             ->forEmail($account->email)
             ->where('risk_id', $risk->id)
             ->exists();

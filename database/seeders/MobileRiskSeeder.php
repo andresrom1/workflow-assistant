@@ -136,6 +136,34 @@ class MobileRiskSeeder extends Seeder
                 'vigencia' => now()->addMonths(6)->toDateString(),
                 'emitida_en' => now()->subMonths(6)->toDateString(),
             ]);
+
+            // Lado titular: el dev ya compartió su Corolla con alguien, para ver
+            // "Personas con acceso" en dev sin invitar a mano. El MobileAccount
+            // del dev se reconcilia por email al loguearse (fallback OAuth).
+            if ($devEmail) {
+                $devMobile = MobileAccount::firstOrCreate(
+                    ['email' => $devEmail],
+                    [
+                        'firebase_uid' => 'seed-fake-dev-'.Str::random(12),
+                        'name' => 'Andrés Romero',
+                        'customer_id' => $devCustomer->id,
+                        'email_verified_at' => now(),
+                    ],
+                );
+
+                SharedRisk::firstOrCreate(
+                    [
+                        'risk_id' => $devRisk->id,
+                        'shared_with_email' => 'sofia.mango@example.com',
+                    ],
+                    [
+                        'name' => 'Sofía',
+                        'invited_by_mobile_account_id' => $devMobile->id,
+                        'token' => Str::random(48),
+                        'expires_at' => now()->addMonths(6),
+                    ],
+                );
+            }
         }
     }
 

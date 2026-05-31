@@ -114,7 +114,71 @@ it('cae al fallback (PAS del titular del shared_risk de mayor sum_asegurada)', f
         ->assertJson(['pas' => ['name' => 'Jorge Rivas']]); // titular del shared con mayor suma
 });
 
-it('devuelve 422 NO_PAS_ASSIGNED si no hay PAS resoluble', function (): void {
+it('tier 2 funciona con invitación pendiente (sin accepted_at)', function (): void {
+    $pasTomas = User::factory()->create([
+        'role' => UserRole::Pas,
+        'name' => 'Jorge Rivas',
+        'metadata' => ['phone' => '+5491187654321'],
+    ]);
+    $tomas = Customer::factory()->create(['pas_id' => $pasTomas->id, 'email' => 'tomas@example.com']);
+    $tomasAccount = MobileAccount::factory()->create([
+        'email' => 'tomas@example.com',
+        'customer_id' => $tomas->id,
+    ]);
+
+    $risk = Risk::create([
+        'customer_id' => $tomas->id,
+        'type' => RiskType::Vehicle,
+        'label' => 'Honda Civic 2022',
+        'metadata' => ['patente' => 'AG 112 PK'],
+    ]);
+    Poliza::create([
+        'risk_id' => $risk->id,
+        'estado' => PolizaEstado::Vigente,
+        'company' => 'X', 'coverage' => 'Y', 'sum_asegurada' => 14_000_000,
+        'vigencia' => now()->addMonths(6),
+    ]);
+    // Invitación pendiente: nunca se aceptó, pero es accesible (no revocada/vencida).
+    SharedRisk::create([
+        'risk_id' => $risk->id,
+        'shared_with_email' => 'andres@gmail.com',
+        'invited_by_mobile_account_id' => $tomasAccount->id,
+        'token' => Str::random(48),
+        'expires_at' => now()->addMonths(6),
+        'accepted_at' => null,
+    ]);
+
+    $andres = MobileAccount::factory()->create(['email' => 'andres@gmail.com', 'customer_id' => null]);
+    Sanctum::actingAs($andres, ['*'], 'mobile');
+
+    $this->postJson('/api/mobile/v1/siniestro')
+        ->assertOk()
+        ->assertJson(['pas' => ['name' => 'Jorge Rivas']]);
+});
+
+it('cae al PAS por default cuando no hay tier 1 ni 2', function (): void {
+    config(['mango.default_pas_email' => 'default@mango.com']);
+    User::factory()->create([
+        'role' => UserRole::Pas,
+        'name' => 'Andrés Romero',
+        'email' => 'default@mango.com',
+        'metadata' => ['phone' => '+5491100000000'],
+    ]);
+
+    $account = MobileAccount::factory()->create([
+        'email' => 'huerfano@example.com',
+        'customer_id' => null,
+    ]);
+    Sanctum::actingAs($account, ['*'], 'mobile');
+
+    $this->postJson('/api/mobile/v1/siniestro')
+        ->assertOk()
+        ->assertJson(['pas' => ['name' => 'Andrés Romero']]);
+});
+
+it('devuelve 422 NO_PAS_ASSIGNED si no hay PAS resoluble ni default', function (): void {
+    config(['mango.default_pas_email' => null]);
+
     $account = MobileAccount::factory()->create([
         'email' => 'nadie@example.com',
         'customer_id' => null,

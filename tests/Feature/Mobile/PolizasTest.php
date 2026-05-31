@@ -104,6 +104,25 @@ it('matchea Customer por email cuando no hay linking (mock laxo)', function (): 
         ->assertJsonCount(1, 'polizas_propias');
 });
 
+it('con linking estricto (flag off) NO matchea por email', function (): void {
+    config(['mango.mock_customer_matching' => false]);
+
+    $pas = makePas();
+    $customer = makeCustomer($pas, 'andres@gmail.com');
+    makeVehicleRiskWithPoliza($customer);
+
+    // Mismo email que el Customer, pero sin customer_id linkeado.
+    $account = MobileAccount::factory()->create([
+        'email' => 'andres@gmail.com',
+        'customer_id' => null,
+    ]);
+    Sanctum::actingAs($account, ['*'], 'mobile');
+
+    $this->getJson('/api/mobile/v1/polizas')
+        ->assertOk()
+        ->assertJsonCount(0, 'polizas_propias');
+});
+
 it('ordena pólizas propias por sum_asegurada descendente', function (): void {
     $pas = makePas();
     $customer = makeCustomer($pas);
@@ -155,6 +174,34 @@ it('muestra riesgos compartidos por email aunque no haya Customer propio (Patter
             ['titular' => 'Tomás Iglesias', 'pas' => ['name' => 'Lucía Fernández']],
         ],
     ]);
+});
+
+it('muestra un riesgo compartido pendiente (sin aceptar) — modelo sin aceptación', function (): void {
+    $pas = makePas();
+    $tomas = makeCustomer($pas);
+    $polizaTomas = makeVehicleRiskWithPoliza($tomas);
+    $tomasAccount = MobileAccount::factory()->create([
+        'email' => 'tomas@example.com',
+        'customer_id' => $tomas->id,
+    ]);
+
+    // Invitación pendiente: nunca se "aceptó", pero no está revocada ni vencida.
+    SharedRisk::create([
+        'risk_id' => $polizaTomas->risk_id,
+        'shared_with_email' => 'andres@gmail.com',
+        'invited_by_mobile_account_id' => $tomasAccount->id,
+        'token' => Str::random(48),
+        'expires_at' => now()->addMonths(6),
+        'accepted_at' => null,
+    ]);
+
+    $andres = MobileAccount::factory()->create(['email' => 'andres@gmail.com', 'customer_id' => null]);
+    Sanctum::actingAs($andres, ['*'], 'mobile');
+
+    $this->getJson('/api/mobile/v1/polizas')
+        ->assertOk()
+        ->assertJsonCount(1, 'riesgos_compartidos')
+        ->assertJson(['riesgos_compartidos' => [['titular' => 'Tomás Iglesias']]]);
 });
 
 it('no incluye riesgos compartidos revocados ni expirados sin aceptar', function (): void {

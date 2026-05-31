@@ -70,21 +70,30 @@ class MobileAccount extends Authenticatable implements MustVerifyEmail
     }
 
     /**
-     * Resuelve el Customer titular asociado a esta cuenta para la fase mock.
+     * Resuelve el Customer titular asociado a esta cuenta.
      *
-     * Prioridad: customer_id explícito (linkeado) → match por email contra
-     * `customers.email` → null si no hay match. Permite testear desde la app
-     * con cualquier seed sin necesidad de cerrar el flujo de DNI claim.
+     * Seam único de des-mockeo (ver ROADMAP Fase 10): los controllers SIEMPRE
+     * llaman a este método, nunca a la lógica de match directamente.
      *
-     * Cuando integremos las APIs reales, esta lógica se reemplaza por
-     * `$account->customer` (estricto: requiere linking).
+     * - **Real (linking estricto):** solo el `customer_id` linkeado por el claim
+     *   de DNI vale.
+     * - **Mock laxo** (`config('mango.mock_customer_matching')`): si no hay
+     *   linking, cae a match por email contra `customers.email`, para poder
+     *   testear desde la app con cualquier seed sin cerrar el flujo de DNI.
+     *
+     * Para pasar a real: `MANGO_MOCK_CUSTOMER_MATCHING=false`. Cero cambios de
+     * código en los call sites.
      */
-    public function resolveCustomerForMock(): ?Customer
+    public function resolveCustomer(): ?Customer
     {
         if ($this->customer) {
             return $this->customer;
         }
 
-        return Customer::where('email', $this->email)->first();
+        if (config('mango.mock_customer_matching')) {
+            return Customer::where('email', $this->email)->first();
+        }
+
+        return null;
     }
 }

@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $risk_id
  * @property string $shared_with_email
+ * @property string|null $name
  * @property int $invited_by_mobile_account_id
  * @property int|null $accepted_by_mobile_account_id
  * @property string $token
@@ -29,6 +30,7 @@ class SharedRisk extends Model
     protected $fillable = [
         'risk_id',
         'shared_with_email',
+        'name',
         'invited_by_mobile_account_id',
         'accepted_by_mobile_account_id',
         'token',
@@ -87,6 +89,21 @@ class SharedRisk extends Model
     public function scopeActive(Builder $query): void
     {
         $query->whereNotNull('accepted_at')->whereNull('revoked_at');
+    }
+
+    /**
+     * Invitaciones que OTORGAN acceso al invitado (Vehículo Compartido).
+     *
+     * Modelo sin aceptación (spec v2 §4.6 aterrizado en Fase 9): la llave es
+     * el email verificado por OAuth, así que el solo hecho de invitar habilita
+     * el acceso. No se exige `accepted_at` — basta con que la invitación no
+     * esté revocada ni vencida. El invitado se desacopla con auto-revocación.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeAccessible(Builder $query): void
+    {
+        $query->whereNull('revoked_at')->where('expires_at', '>', now());
     }
 
     /** @param  Builder<self>  $query */

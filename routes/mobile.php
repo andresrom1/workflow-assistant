@@ -73,6 +73,10 @@ Route::middleware('auth:mobile')->group(function () {
     Route::post('/shared-risks/invitar', [SharedRisksController::class, 'invite']);
     Route::delete('/shared-risks/{polizaId}/{conductorId}', [SharedRisksController::class, 'revoke'])
         ->whereNumber('polizaId')->whereNumber('conductorId');
+    // Auto-revocación del invitado ("Quitar vehículo") — por risk_id, autoriza
+    // el match de email del autenticado. No es titular, no maneja polizaId.
+    Route::delete('/shared-risks/mias/{riskId}', [SharedRisksController::class, 'revokeMine'])
+        ->whereNumber('riskId');
 
     // Referidos — STUB (feature 4.7 postergado). Permite render del perfil
     // sin 404; se reemplaza por lógica real al retomar el feature.

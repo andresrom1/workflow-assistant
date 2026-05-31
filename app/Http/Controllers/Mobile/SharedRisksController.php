@@ -80,6 +80,7 @@ class SharedRisksController extends Controller
         $invitation = SharedRisk::create([
             'risk_id' => $risk->id,
             'shared_with_email' => $data['shared_with_email'],
+            'name' => $data['name'] ?? null,
             'invited_by_mobile_account_id' => $account->id,
             'token' => Str::random(48),
             'expires_at' => now()->addDays(30),
@@ -113,6 +114,37 @@ class SharedRisksController extends Controller
     }
 
     /**
+     * Auto-revocación del invitado ("Quitar vehículo").
+     *
+     * El conductor adicional se desacopla él mismo de un Risk compartido. Se
+     * referencia por `risk_id` (el invitado no es titular de la póliza, así que
+     * no maneja `polizaId`). Autoriza el match de email: solo puede revocar la
+     * invitación dirigida a su propio email autenticado.
+     */
+    public function revokeMine(Request $request, int $riskId): JsonResponse
+    {
+        /** @var MobileAccount $account */
+        $account = $request->user();
+
+        $sr = SharedRisk::where('risk_id', $riskId)
+            ->where('shared_with_email', $account->email)
+            ->whereNull('revoked_at')
+            ->first();
+
+        if (! $sr) {
+            throw new ApiException(
+                'No encontramos un vehículo compartido con vos para quitar.',
+                'SHARED_RISK_NOT_FOUND',
+                404,
+            );
+        }
+
+        $sr->update(['revoked_at' => now()]);
+
+        return response()->json([], 204);
+    }
+
+    /**
      * Carga la Poliza por id, valida que su Risk pertenezca al Customer del
      * usuario (titular). Lanza 404 si la póliza no existe; 403 si no es
      * titular.
@@ -125,7 +157,7 @@ class SharedRisksController extends Controller
             throw new ApiException('No encontramos esa póliza.', 'POLIZA_NOT_FOUND', 404);
         }
 
-        $customer = $account->resolveCustomerForMock();
+        $customer = $account->resolveCustomer();
         if (! $customer || $poliza->risk->customer_id !== $customer->id) {
             throw new ApiException(
                 'Solo el titular puede gestionar conductores adicionales.',
@@ -143,6 +175,7 @@ class SharedRisksController extends Controller
         return [
             'id' => $sr->id,
             'shared_with_email' => $sr->shared_with_email,
+            'name' => $sr->name,
             'invite_url' => rtrim((string) config('app.url'), '/').'/shared-risk/invite/'.$sr->token,
             'expires_at' => $sr->expires_at->toIso8601String(),
             'accepted_at' => $sr->accepted_at?->toIso8601String(),
