@@ -4,13 +4,11 @@ namespace App\Http\Controllers\Mobile;
 
 use App\Exceptions\InvalidFirebaseTokenException;
 use App\Http\Controllers\Controller;
-use App\Models\Customer;
 use App\Models\MobileAccount;
 use App\Services\Firebase\FirebaseTokenVerifier;
 use App\Services\Firebase\VerifiedIdentity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class AuthController extends Controller
 {
@@ -67,56 +65,6 @@ class AuthController extends Controller
         return response()->json([
             'sanctum_token' => $token,
             'user' => $this->accountPayload($account),
-            'linked' => $account->isLinked(),
-        ]);
-    }
-
-    /**
-     * Vinculación de identidad: el usuario declara su DNI y matcheamos
-     * email (verificado por OAuth) + DNI contra un Customer existente.
-     */
-    public function link(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'dni' => ['required', 'string', 'max:20'],
-        ]);
-
-        /** @var MobileAccount $account */
-        $account = $request->user();
-
-        if ($account->isLinked()) {
-            return response()->json([
-                'message' => 'Tu cuenta ya está vinculada.',
-                'code' => 'already_linked',
-                'linked' => true,
-            ]);
-        }
-
-        $customer = Customer::query()
-            ->whereRaw('LOWER(email) = ?', [strtolower((string) $account->email)])
-            ->where('dni', $validated['dni'])
-            ->first();
-
-        // Sin match, o el customer ya está reclamado por otra MobileAccount.
-        // Misma respuesta neutral en los dos casos para no leakear info.
-        $alreadyClaimed = $customer
-            && MobileAccount::query()->where('customer_id', $customer->id)->exists();
-
-        if (! $customer || $alreadyClaimed) {
-            return response()->json([
-                'message' => 'No encontramos pólizas con estos datos.',
-                'code' => 'link_failed',
-            ], 422);
-        }
-
-        DB::transaction(function () use ($account, $customer): void {
-            $account->customer_id = $customer->id;
-            $account->save();
-        });
-
-        return response()->json([
-            'message' => 'Listo, tu cuenta quedó vinculada.',
-            'linked' => true,
         ]);
     }
 

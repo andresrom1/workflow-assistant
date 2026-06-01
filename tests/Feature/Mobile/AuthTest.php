@@ -1,12 +1,10 @@
 <?php
 
 use App\Exceptions\InvalidFirebaseTokenException;
-use App\Models\Customer;
 use App\Models\MobileAccount;
 use App\Services\Firebase\FirebaseTokenVerifier;
 use App\Services\Firebase\VerifiedIdentity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Laravel\Sanctum\Sanctum;
 
 uses(RefreshDatabase::class);
 
@@ -44,10 +42,10 @@ it('intercambia un firebase token por un sanctum token y crea la cuenta móvil',
     ]);
 
     $response->assertOk()
-        ->assertJsonStructure(['sanctum_token', 'user' => ['name', 'email', 'avatar_url'], 'linked'])
+        ->assertJsonStructure(['sanctum_token', 'user' => ['name', 'email', 'avatar_url']])
+        ->assertJsonMissingPath('linked')
         ->assertJson([
             'user' => ['name' => 'Tomás Iglesias', 'email' => 'tomas@gmail.com'],
-            'linked' => false,
         ]);
 
     $this->assertDatabaseHas('mobile_accounts', [
@@ -127,47 +125,7 @@ it('requiere firebase_token', function () {
         ->assertJsonValidationErrors('firebase_token');
 });
 
-it('vincula la cuenta cuando email + dni matchean un tomador', function () {
-    $customer = Customer::factory()->create([
-        'email' => 'tomas@gmail.com',
-        'dni' => '30123456',
-    ]);
-    $account = MobileAccount::factory()->create(['email' => 'tomas@gmail.com']);
-    Sanctum::actingAs($account, ['*'], 'mobile');
-
-    $this->postJson('/api/mobile/v1/auth/link', ['dni' => '30123456'])
-        ->assertOk()
-        ->assertJson(['linked' => true]);
-
-    expect($account->fresh()->customer_id)->toBe($customer->id);
-});
-
-it('falla la vinculación con dni incorrecto', function () {
-    Customer::factory()->create(['email' => 'tomas@gmail.com', 'dni' => '30123456']);
-    $account = MobileAccount::factory()->create(['email' => 'tomas@gmail.com']);
-    Sanctum::actingAs($account, ['*'], 'mobile');
-
-    $this->postJson('/api/mobile/v1/auth/link', ['dni' => '00000000'])
-        ->assertStatus(422)
-        ->assertJson(['code' => 'link_failed']);
-
-    expect($account->fresh()->customer_id)->toBeNull();
-});
-
-it('no permite vincular un tomador ya reclamado por otra cuenta', function () {
-    $customer = Customer::factory()->create(['email' => 'tomas@gmail.com', 'dni' => '30123456']);
-    MobileAccount::factory()->linked($customer->id)->create();
-
-    $account = MobileAccount::factory()->create(['email' => 'tomas@gmail.com']);
-    Sanctum::actingAs($account, ['*'], 'mobile');
-
-    $this->postJson('/api/mobile/v1/auth/link', ['dni' => '30123456'])
-        ->assertStatus(422)
-        ->assertJson(['code' => 'link_failed']);
-});
-
-it('link y logout requieren autenticación', function () {
-    $this->postJson('/api/mobile/v1/auth/link', ['dni' => '30123456'])->assertUnauthorized();
+it('logout requiere autenticación', function () {
     $this->postJson('/api/mobile/v1/auth/logout')->assertUnauthorized();
 });
 

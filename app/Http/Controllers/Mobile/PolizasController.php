@@ -17,9 +17,9 @@ use Illuminate\Http\Request;
 /**
  * Endpoints de pólizas para la Home y el detalle de cada card.
  *
- * Fase mock laxa (spec v2 §2 "Nota para la fase mock"): el linking por DNI
- * no es prerequisito, basta matchear por email para asignar Customer.
- * Los riesgos compartidos sí se buscan estrictamente por email (Pattern C).
+ * Identidad = email verificado por OAuth. El tomador propio se resuelve por
+ * email (resolveCustomer); los riesgos compartidos también se buscan por email.
+ * Una cuenta sin Customer (invitado / sin pólizas) recibe listas vacías, no error.
  */
 class PolizasController extends Controller
 {

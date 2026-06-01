@@ -15,9 +15,6 @@ use App\Services\Firebase\FirebaseTokenVerifier;
 use App\Services\Firebase\KreaitTokenVerifier;
 use App\Services\VehicleIdentificationService;
 use App\Services\WhatsApp\WhatsAppOutboundService;
-use Illuminate\Cache\RateLimiting\Limit;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -52,14 +49,6 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Rate limiter del endpoint /api/mobile/v1/auth/link.
-        // 5 intentos / 15 min por MobileAccount autenticada (o por IP si
-        // todavía no hay user, ej. requests sin token Sanctum válido).
-        // Frena brute-force de DNI sobre una cuenta Google comprometida.
-        RateLimiter::for('mobile-link', function (Request $request) {
-            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
-
-            return Limit::perMinutes(15, 5)->by((string) $key);
-        });
+        //
     }
 }

@@ -86,41 +86,19 @@ it('devuelve PAS + polizas propias + riesgos compartidos para una cuenta linkead
     ]);
 });
 
-it('matchea Customer por email cuando no hay linking (mock laxo)', function (): void {
+it('resuelve el tomador propio por email (identidad = email OAuth)', function (): void {
     $pas = makePas();
     $customer = makeCustomer($pas, 'andres@gmail.com');
     makeVehicleRiskWithPoliza($customer);
 
-    // Cuenta SIN customer_id, pero mismo email que el Customer.
-    $account = MobileAccount::factory()->create([
-        'email' => 'andres@gmail.com',
-        'customer_id' => null,
-    ]);
+    // La identidad es el email verificado por OAuth: matchea el Customer por email.
+    $account = MobileAccount::factory()->create(['email' => 'andres@gmail.com']);
 
     Sanctum::actingAs($account, ['*'], 'mobile');
 
     $this->getJson('/api/mobile/v1/polizas')
         ->assertOk()
         ->assertJsonCount(1, 'polizas_propias');
-});
-
-it('con linking estricto (flag off) NO matchea por email', function (): void {
-    config(['mango.mock_customer_matching' => false]);
-
-    $pas = makePas();
-    $customer = makeCustomer($pas, 'andres@gmail.com');
-    makeVehicleRiskWithPoliza($customer);
-
-    // Mismo email que el Customer, pero sin customer_id linkeado.
-    $account = MobileAccount::factory()->create([
-        'email' => 'andres@gmail.com',
-        'customer_id' => null,
-    ]);
-    Sanctum::actingAs($account, ['*'], 'mobile');
-
-    $this->getJson('/api/mobile/v1/polizas')
-        ->assertOk()
-        ->assertJsonCount(0, 'polizas_propias');
 });
 
 it('ordena pólizas propias por sum_asegurada descendente', function (): void {
