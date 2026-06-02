@@ -10,9 +10,7 @@ use App\Models\RiskSnapshot;
 use App\Models\Vehicle;
 use App\Repositories\QuoteRepository;
 use App\Repositories\RiskSnapshotRepository;
-use App\Services\Quote\QuoteResolutionStrategyInterface;
 use App\Services\Quote\Strategies\ApiQuoteResolution;
-use App\Services\Quote\Strategies\MobileAppQuoteResolution;
 use App\Traits\ConditionalLogger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -25,8 +23,6 @@ class QuoteService
         private readonly RiskSnapshotRepository $snapshotRepo,
         private readonly QuoteRepository $quoteRepo,
         private readonly ApiQuoteResolution $apiStrategy,
-        private readonly MobileAppQuoteResolution $mobileStrategy,
-        // private readonly CheckQuoteAcceptance $checkQuoteAcceptance, //Se elimina para ser despachado estaticamente.
     ) {}
 
     /**
@@ -58,46 +54,21 @@ class QuoteService
     }
 
     /**
-     * Resuelve la cotización utilizando la estrategia indicada o la de prioridad.
+     * Resuelve la cotización. Hoy hay una única estrategia (`api`);
+     * el seam queda listo para enchufar Visred detrás del mismo punto.
      */
-    // public function resolveQuote(Quote $quote, RiskSnapshot $snapshot, ?string $strategyName = null): void
-    // {
-    //     $strategy = $this->selectStrategy($quote, $snapshot, $strategyName);
-
-    //     Log::info("[QuoteService] Resolviendo Quote #{$quote->id} con estrategia: {$strategy->getName()}");
-
-    //     $strategy->resolve($quote, $snapshot);
-    // }
-    public function resolveQuote(Quote $quote, RiskSnapshot $snapshot, ?string $strategyName = null): bool
+    public function resolveQuote(Quote $quote, RiskSnapshot $snapshot): bool
     {
-        $strategy = $this->selectStrategy($quote, $snapshot, $strategyName);
-
-        Log::info("[QuoteService] Resolviendo Quote #{$quote->id} con estrategia: {$strategy->getName()}");
+        Log::info("[QuoteService] Resolviendo Quote #{$quote->id} con estrategia: {$this->apiStrategy->getName()}");
 
         try {
-            $strategy->resolve($quote, $snapshot);
+            $this->apiStrategy->resolve($quote, $snapshot);
 
             return true;
         } catch (\Throwable $e) {
             Log::error("[QuoteService] Error resolviendo Quote #{$quote->id}", [
-                'strategy' => $strategy->getName(),
                 'error' => $e->getMessage(),
             ]);
-
-            // Si la estrategia mobile falla, reintentar con la API como fallback.
-            if ($strategy->getName() !== 'api') {
-                Log::info("[QuoteService] Reintentando Quote #{$quote->id} con estrategia: api");
-
-                try {
-                    $this->apiStrategy->resolve($quote, $snapshot);
-
-                    return true;
-                } catch (\Throwable $fallbackError) {
-                    Log::error("[QuoteService] Fallback API también falló para Quote #{$quote->id}", [
-                        'error' => $fallbackError->getMessage(),
-                    ]);
-                }
-            }
 
             return false;
         }
@@ -109,27 +80,6 @@ class QuoteService
     public function updateSnapshotPreference(Quote $quote, string $preference): void
     {
         $this->snapshotRepo->updateCoveragePreference($quote->riskSnapshot, $preference);
-    }
-
-    /**
-     * Selecciona la mejor estrategia disponible o la solicitada.
-     */
-    private function selectStrategy(Quote $quote, RiskSnapshot $snapshot, ?string $preferred = null): QuoteResolutionStrategyInterface
-    {
-        if ($preferred === 'api') {
-            return $this->apiStrategy;
-        }
-
-        if ($preferred === 'mobile') {
-            return $this->mobileStrategy;
-        }
-
-        // Lógica de prioridad por defecto: Mobile primero si es posible
-        if ($this->mobileStrategy->canHandle($quote, $snapshot)) {
-            return $this->mobileStrategy;
-        }
-
-        return $this->apiStrategy;
     }
 
     public function getRaw(Quote $quote): array

@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\AI\WhatsAppWebhookController;
-use App\Http\Controllers\Api\QuoteWebhookController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\TestingController;
 use App\Http\Controllers\ToolsController;
@@ -43,9 +42,6 @@ Route::post('tools/show-data-form', [ToolsController::class, 'showDataForm']);
 Route::post('tools/show-vehicle-photos-form', [ToolsController::class, 'showVehiclePhotosForm']);
 Route::post('tools/show-payment-form', [ToolsController::class, 'showPaymentForm']);
 Route::post('tools/finalize-policy', [ToolsController::class, 'finalizePolicy']);
-
-// Webhooks para recibir actualizaciones de la app móvil
-Route::post('/webhooks/quote-update', [QuoteWebhookController::class, 'handle']);
 
 // Webhooks de WhatsApp Business Cloud API
 Route::prefix('webhooks/whatsapp')->group(function () {

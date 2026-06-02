@@ -35,11 +35,6 @@ return [
         ],
     ],
 
-    'mobile_app' => [
-        'endpoint' => env('MOBILE_APP_OPPORTUNITIES_ENDPOINT', 'https://api.example.com/v1/opportunities'),
-        'timeout_minutes' => (int) env('MOBILE_APP_TIMEOUT', 30),
-    ],
-
     'poliza_api' => [
         'base_url' => env('POLIZA_API_BASE_URL'),
         'key' => env('POLIZA_API_KEY'),

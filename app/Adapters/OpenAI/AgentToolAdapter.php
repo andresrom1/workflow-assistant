@@ -291,7 +291,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
         ]);
 
         $quote = Quote::where('id', $data['quoteId'])
-            ->whereIn('status', ['processed', 'offered_pas', 'checkout_pending'])
+            ->whereIn('status', ['processed', 'checkout_pending'])
             ->first();
 
         if (! $quote) {
@@ -388,7 +388,7 @@ class AgentToolAdapter implements AIProviderAdapterInterface
     }
 
     /**
-     * Intenta disparar la resolución Mobile para una quote pendiente.
+     * Intenta disparar la resolución de una quote pendiente.
      * Devuelve true si tuvo éxito, false si la quote ya no estaba pendiente o falló.
      */
     private function tryResolveQuoteById(?int $quoteId): bool
@@ -408,12 +408,12 @@ class AgentToolAdapter implements AIProviderAdapterInterface
                 return false;
             }
 
-            $this->quoteService->resolveQuote($quote, $quote->riskSnapshot, 'mobile');
+            $this->quoteService->resolveQuote($quote, $quote->riskSnapshot);
 
             return true;
 
         } catch (\Throwable $e) {
-            Log::error('Error en resolución Mobile', [
+            Log::error('Error en resolución de quote', [
                 'quote_id' => $quoteId,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),

@@ -182,15 +182,13 @@ defineProps<{
 
 const statusLabel = (s: string) => ({
   pending: 'Pendiente', processed: 'Procesado', failed: 'Fallido',
-  offered_pas: 'En PAS', checkout_submitted: 'Enviado',
+  checkout_submitted: 'Enviado',
 }[s] ?? s)
 
 const statusStyle = (s: string) => ({
   pending:            'background:var(--badge-pending-bg); color:var(--badge-pending-txt);',
   processed:          'background:var(--badge-ok-bg);      color:var(--badge-ok-txt);',
   failed:             'background:var(--badge-danger-bg);  color:var(--badge-danger-txt);',
-  offered_pas:        'background:var(--badge-accent-bg);  color:var(--badge-accent-txt);',
-  rejected_pas:       'background:var(--badge-orange-bg);  color:var(--badge-orange-txt);',
   checkout_pending:   'background:var(--badge-violet-bg);  color:var(--badge-violet-txt);',
   checkout_submitted: 'background:var(--badge-teal-bg);    color:var(--badge-teal-txt);',
 }[s] ?? 'background:var(--border-sub); color:var(--text-3);')
@@ -199,8 +197,6 @@ const dotStyle = (s: string) => ({
   pending:            'background:var(--dot-pending);',
   processed:          'background:var(--dot-ok);',
   failed:             'background:var(--dot-danger);',
-  offered_pas:        'background:var(--dot-accent);',
-  rejected_pas:       'background:var(--dot-orange);',
   checkout_pending:   'background:var(--dot-violet);',
   checkout_submitted: 'background:var(--dot-teal);',
 }[s] ?? 'background:var(--text-3);')

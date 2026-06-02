@@ -36,11 +36,6 @@
         <div class="mt-4 pt-4 grid grid-cols-1 md:grid-cols-2 gap-3"
           style="border-top: 1px solid var(--border-sub);">
           <EndpointRow
-            label="App Móvil PAS"
-            :url="getSetting('mobile_app.endpoint')"
-            :has-secret="!!getSetting('mobile_app.webhook_secret')"
-          />
-          <EndpointRow
             label="API de Emisión"
             :url="getSetting('poliza_api.base_url')"
             :has-secret="!!getSetting('poliza_api.key')"
@@ -315,7 +310,7 @@ const saveGroup = (groupKey: string) => {
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 const groupIcon = (key: string) => ({
-  pas: '📱', mobile_app: '🔗', checkout: '🛒', poliza_api: '📄',
+  pas: '📱', checkout: '🛒', poliza_api: '📄',
 }[key] ?? '⚙️')
 
 const latestUpdate = (items: SettingItem[]) => {

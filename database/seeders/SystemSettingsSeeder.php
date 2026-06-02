@@ -10,44 +10,15 @@ class SystemSettingsSeeder extends Seeder
     public function run(): void
     {
         $settings = [
-            // ─── Grupo: PAS (oportunidades móviles) ───────────────────────
+            // ─── Grupo: Cotización ─────────────────────────────────────────
             [
                 'key' => 'pas.opportunity_timeout_minutes',
                 'group' => 'pas',
                 'value' => '30',
                 'type' => 'integer',
-                'label' => 'Tiempo de aceptación (minutos)',
-                'description' => 'Cuántos minutos tiene un PAS para aceptar una oportunidad antes del fallback automático a API.',
+                'label' => 'Timeout de resolución (minutos)',
+                'description' => 'Minutos antes de que una cotización colgada en pending se resuelva automáticamente (vigilante de abandono).',
                 'is_secret' => false,
-            ],
-            [
-                'key' => 'pas.http_timeout_seconds',
-                'group' => 'pas',
-                'value' => '10',
-                'type' => 'integer',
-                'label' => 'Timeout HTTP al enviar oportunidad (segundos)',
-                'description' => 'Tiempo máximo de espera al llamar al endpoint de la app móvil del PAS.',
-                'is_secret' => false,
-            ],
-
-            // ─── Grupo: Mobile App ─────────────────────────────────────────
-            [
-                'key' => 'mobile_app.endpoint',
-                'group' => 'mobile_app',
-                'value' => env('MOBILE_APP_OPPORTUNITIES_ENDPOINT', ''),
-                'type' => 'string',
-                'label' => 'URL del endpoint de oportunidades',
-                'description' => 'Endpoint al que se envían las nuevas oportunidades de cotización para los PAS.',
-                'is_secret' => false,
-            ],
-            [
-                'key' => 'mobile_app.webhook_secret',
-                'group' => 'mobile_app',
-                'value' => '',
-                'type' => 'secret',
-                'label' => 'Webhook Secret',
-                'description' => 'Clave para validar la autenticidad de los webhooks entrantes desde la app.',
-                'is_secret' => true,
             ],
 
             // ─── Grupo: Checkout ───────────────────────────────────────────
