@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "s=$(git status --porcelain 2>/dev/null); if echo \"$s\" | grep -qE '(app/|database/|routes/|config/|docs/)' && ! echo \"$s\" | grep -q 'ROADMAP.md'; then echo '{\"systemMessage\":\"\\ud83d\\udccb ROADMAP: tocaste codigo/docs y ROADMAP.md no figura en los cambios. Actualiza el estado de la fase + linea en Bitacora + tabla de deuda (o confirma que no aplica).\"}'; fi; true",
+            "statusMessage": "Chequeando ROADMAP..."
+          }
+        ]
+      }
+    ]
+  }
+}
