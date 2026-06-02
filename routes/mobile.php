@@ -4,7 +4,6 @@ use App\Http\Controllers\Mobile\AuthController;
 use App\Http\Controllers\Mobile\EmergencyContactsController;
 use App\Http\Controllers\Mobile\EmergencyController;
 use App\Http\Controllers\Mobile\PolizasController;
-use App\Http\Controllers\Mobile\ReferidosController;
 use App\Http\Controllers\Mobile\SharedRisksController;
 use App\Http\Controllers\Mobile\SiniestroController;
 use Illuminate\Support\Facades\Route;
@@ -71,8 +70,4 @@ Route::middleware('auth:mobile')->group(function () {
     // el match de email del autenticado. No es titular, no maneja polizaId.
     Route::delete('/shared-risks/mias/{riskId}', [SharedRisksController::class, 'revokeMine'])
         ->whereNumber('riskId');
-
-    // Referidos — STUB (feature 4.7 postergado). Permite render del perfil
-    // sin 404; se reemplaza por lógica real al retomar el feature.
-    Route::get('/referidos/link', [ReferidosController::class, 'link']);
 });
