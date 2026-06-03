@@ -1,4 +1,4 @@
-# PAS Mobile — Guía de Estilo Frontend v2.2
+# PAS Mobile — Guía de Estilo Frontend v2.3
 
 **Stack:** Laravel 12 · Vue 3 · Inertia.js · Tailwind CSS v4  
 **Fuentes:** Inter (UI) · JetBrains Mono (datos)  
@@ -540,8 +540,6 @@ const statusClass = (s: string) => ({
   pending:            'bg-amber-50  dark:bg-amber-950/40  text-amber-700  dark:text-amber-400',
   processed:          'bg-green-50  dark:bg-green-950/40  text-green-700  dark:text-green-400',
   failed:             'bg-red-50    dark:bg-red-950/40    text-red-700    dark:text-red-400',
-  offered_pas:        'bg-blue-50   dark:bg-blue-950/40   text-blue-700   dark:text-blue-400',
-  rejected_pas:       'bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400',
   checkout_pending:   'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400',
   checkout_submitted: 'bg-teal-50   dark:bg-teal-950/40   text-teal-700   dark:text-teal-400',
   expired:            'bg-[var(--border-sub)] text-[var(--text-3)]',
