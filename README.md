@@ -52,7 +52,7 @@ Este proyecto es un asistente inteligente diseñado para automatizar y agilizar 
 - **`finalize-policy`**: Cierre del ciclo de venta con la generación y envío de la póliza digital al cliente.
 
 ### 6. Soporte Multi-canal Avanzado
-- **WhatsApp & Telegram**: Refinar la integración con n8n para una experiencia fluida en aplicaciones de mensajería, manteniendo la paridad de funciones con el chat web.
+- **WhatsApp**: Integrado vía Meta WhatsApp Cloud API nativa (webhook + pipeline de jobs), con paridad de funciones con el chat web. Telegram queda como canal futuro.
 
 ---
 
@@ -62,4 +62,4 @@ Este proyecto es un asistente inteligente diseñado para automatizar y agilizar 
 - **Base de Datos**: PostgreSQL / MySQL
 - **Tiempo Real**: Laravel Reverb
 - **Colas**: Redis / Database Queue
-- **Integraciones**: n8n (para canales de mensajería)
+- **Integraciones**: Meta WhatsApp Cloud API (canal de mensajería)

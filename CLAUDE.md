@@ -118,7 +118,6 @@ class MyTool implements Tool
 - `app/AI/Tools/` — tool classes (one per adapter operation)
 - `app/AI/InsuranceOrchestrator.php` — orchestrator
 - `app/Adapters/AIProviders/` — new adapters (WhatsAppAdapter, etc.)
-- `app/Adapters/n8n-whatsapp/` — deprecated, do not use
 
 ### WhatsApp webhook flow — pipeline de 3 etapas
 

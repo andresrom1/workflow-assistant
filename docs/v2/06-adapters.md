@@ -14,7 +14,6 @@ Todos implementan `App\Contracts\AIProviderAdapterInterface` (`handleToolCall(ar
 |---|---|---|
 | `OpenAI\AgentToolAdapter` | `openai_chatkit` | Entrada del chat web (ChatKit/OpenAI). Valida campos comunes, normaliza el payload, resuelve la conversación por `external_conversation_id` + `channel`, delega al handler de cada tool. Es la **única puerta de salida** de datos hacia el agente (mapeo explícito sin IDs de proveedor — ver ADR-001). |
 | `AIProviders\WhatsAppAdapter` | `workflow-assistant` (canal WhatsApp) | Variante para el flujo WhatsApp: los sub-agentes del orquestador llaman a sus métodos directamente (`identifyCustomer`, `identifyVehicle`, `coveragePreference`, `getQuote`, `checkout`). Resuelve la conversación forzando `channel='whatsapp'`. |
-| `n8n-whatsapp\AgentToolAdapter` | **deprecado** | No usar (`app/Adapters/n8n-whatsapp/`). Reemplazado por `AIProviders\WhatsAppAdapter`. |
 
 La instanciación se centraliza vía `App\Factories\ToolAdapterFactory` (detección de proveedor desde el request en `ToolsController`).
 
@@ -42,4 +41,3 @@ Selección por config (`MANGO_QUOTATION_PROVIDER=mock|visred`). El dominio nunca
 | `openai_chatkit` | `OpenAI\AgentToolAdapter` |
 | `workflow-assistant` (WhatsApp) | `AIProviders\WhatsAppAdapter` |
 | `workflow-assistant` (cotización Visred) | `VisredQuotationAdapter` / `MockQuotationAdapter` (**pendiente**) |
-| `pas_mobile` (legacy) | `n8n-whatsapp\AgentToolAdapter` (deprecado) |
