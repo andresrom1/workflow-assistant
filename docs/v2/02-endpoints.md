@@ -1,9 +1,9 @@
 # Endpoints — workflow-assistant (v2)
 
 > Cada endpoint indica **a quién sirve** (canal consumidor).
-> Canales: `openai_chatkit`, `pas_mobile` (legacy), `pas-web` (legacy), `mango-mobile`, `workflow-assistant`.
+> Canales: `openai_chatkit`, `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
 >
-> `pas_mobile` y `pas-web` salieron del proyecto: sus endpoints quedan marcados **legacy** (a reemplazar por el flujo Visred, que cotiza y emite sin intervención humana).
+> `pas_mobile` y `pas-web` fueron **extirpados** del proyecto: sus endpoints quedan marcados **legacy** (a reemplazar por el flujo Visred, que cotiza y emite sin intervención humana).
 
 ---
 
@@ -32,7 +32,7 @@ La UI de ChatKit (Next.js) invoca estas tools HTTP; el controller delega al `Age
 ### Webhooks
 | Método | Ruta | Acción | Canal |
 |---|---|---|---|
-| POST | `/api/webhooks/quote-update` | `QuoteWebhookController@handle` | **`pas_mobile` (legacy)** — la app PAS devolvía cotizaciones manuales. Lo reemplaza la resolución síncrona Visred. |
+| POST | `/api/webhooks/quote-update` | `QuoteWebhookController@handle` | **`pas_mobile` (legacy, extirpado)** — ruta y controller removidos en V2-6. La app PAS devolvía cotizaciones manuales; lo reemplaza la resolución síncrona Visred. |
 | GET | `/api/webhooks/whatsapp` | `WhatsAppWebhookController@verify` | `workflow-assistant` (verificación Meta) |
 | POST | `/api/webhooks/whatsapp` | `WhatsAppWebhookController@handleIncoming` | `workflow-assistant` (entrada WhatsApp Cloud API) |
 
@@ -126,5 +126,5 @@ Login, forgot/reset password, verificación de email, logout (`Auth/*Controller`
 | `openai_chatkit` | `web-chat/v1/tools/*`, `POST /v1/quotes`, tools stub |
 | `mango-mobile` | todo `/api/mobile/v1/*`, `GET /track/{token}` |
 | `workflow-assistant` | checkout web, panel admin, auth, webhooks WhatsApp, dev |
-| `pas_mobile` (legacy) | `POST /api/webhooks/quote-update` → reemplazar por Visred |
-| `pas-web` (legacy) | sin endpoints propios vivos en este backend |
+| `pas_mobile` (legacy, extirpado) | webhook `quote-update` removido (V2-6); reemplazado por Visred |
+| `pas-web` (legacy, extirpado) | nunca tuvo endpoints propios vivos en este backend |

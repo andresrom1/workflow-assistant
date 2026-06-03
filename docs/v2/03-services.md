@@ -2,7 +2,7 @@
 
 > Lógica de negocio **agnóstica del canal** (capa Adapter → **Service** → Repo).
 > Cada service indica a qué canal(es) sirve en última instancia.
-> Canales: `openai_chatkit`, `pas_mobile` (legacy), `pas-web` (legacy), `mango-mobile`, `workflow-assistant`.
+> Canales: `openai_chatkit`, `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
 
 ---
 
@@ -23,7 +23,7 @@ Sirven a `openai_chatkit` **y** `workflow-assistant` (canal WhatsApp). Invocados
 |---|---|---|
 | `QuotingEngine` | `workflow-assistant` | "Cerebro" que genera alternativas. **Hoy mock** (`runMockSimulation`, `sleep(30)`). Punto de inserción del **Adapter Visred** (ver doc v2 quote-timeout / consolidado). No escribe en BD. |
 | `Quote\Strategies\ApiQuoteResolution` | `workflow-assistant` | Resolución síncrona vía `QuotingEngine` (futuro: Visred). |
-| `Quote\Strategies\MobileAppQuoteResolution` | **`pas_mobile` (legacy)** | Enviaba la oportunidad a la app PAS (`Http::post` al endpoint configurado) y esperaba webhook. A retirar con Visred. |
+| `Quote\Strategies\MobileAppQuoteResolution` | **`pas_mobile` (legacy, extirpado)** | Enviaba la oportunidad a la app PAS (`Http::post` al endpoint configurado) y esperaba webhook. Clase eliminada en V2-6; `QuoteService` colapsado a estrategia única `api`. |
 | `Quote\QuoteResolutionStrategyInterface` | — | Contrato del patrón Strategy. |
 | `PolizaEmisionService` | `workflow-assistant` | **Skeleton** de emisión contra API externa (futuro: emisión Visred). Construye payload quote+snapshot+checkout. |
 
@@ -89,4 +89,4 @@ Canal: `workflow-assistant`.
 | `openai_chatkit` + `workflow-assistant` | Customer/Vehicle/CoveragePreference/Plate Identification, `QuoteService` |
 | `workflow-assistant` | `QuotingEngine`, `ApiQuoteResolution`, `PolizaEmisionService`, WhatsApp/Media/Message, `ChunkAndEmbedService`, `SettingsService`, `PromptReevaluationService` |
 | `mango-mobile` | `Firebase\*`, `Smn\*` |
-| `pas_mobile` (legacy) | `MobileAppQuoteResolution` |
+| `pas_mobile` (legacy, extirpado) | `MobileAppQuoteResolution` |

@@ -12,12 +12,12 @@
 
 Cambios estructurales respecto de v1:
 
-1. **`pas_mobile` y `pas-web` salieron del proyecto.** Lo que dependía de ellos queda marcado *legacy* en cada doc.
+1. **`pas_mobile` y `pas-web` fueron extirpados del proyecto.** Quedan documentados como *legacy, extirpado* en cada doc (sin huella en código de `workflow-assistant`); lo que dependía de ellos queda marcado en cada doc.
 2. **Visred API** entra en juego: cotiza y emite pólizas **sin intervención humana**, reemplazando el rol que cumplían `pas_mobile`/`pas-web` (cotización manual del PAS + fallback).
 3. **`mango-mobile`** (app Flutter) entra: cartera, siniestro, contactos de emergencia, tracking en vivo y Cuenta Compartida.
 
 Canales consumidores que se usan como etiqueta en toda la doc:
-`openai_chatkit` · `mango-mobile` · `workflow-assistant` · `pas_mobile` *(legacy)* · `pas-web` *(legacy)*.
+`openai_chatkit` · `mango-mobile` · `workflow-assistant` · `pas_mobile` *(legacy, extirpado)* · `pas-web` *(legacy, extirpado)*.
 
 ---
 

@@ -4,7 +4,7 @@
 > **Generado a partir del schema vivo** (`database-schema`). Refleja el estado tras la salida de `pas_mobile`/`pas-web` y la entrada de `mango-mobile` + Visred API.
 >
 > **Convención de canal:** cada grupo indica qué sub-proyecto escribe/lee esas tablas.
-> Canales posibles: `openai_chatkit`, `pas_mobile` (legacy), `pas-web` (legacy), `mango-mobile`, `workflow-assistant`.
+> Canales posibles: `openai_chatkit`, `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
 
 ---
 
@@ -80,7 +80,7 @@ Canal: `workflow-assistant` (auditoría). **Único lugar** con datos de proveedo
 Canal: `openai_chatkit`, `workflow-assistant`. Preferencia (`preference`) por combinación conversación+vehículo. `metadata` (json), SoftDeletes.
 
 ### `mobile_sync_logs`
-Canal: `pas_mobile` (**legacy**). Log de sincronización de oportunidades con la app PAS. Reemplazado por el flujo Visred.
+Canal: `pas_mobile` (**legacy, extirpado**). Log de sincronización de oportunidades con la app PAS — tabla `mobile_sync_logs` dropeada en V2-6. Reemplazado por el flujo Visred.
 
 ---
 

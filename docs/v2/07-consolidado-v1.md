@@ -2,7 +2,7 @@
 
 > Reúne en un solo lugar los documentos de `docs/v1/`. Refleja el diseño **anterior a v2**
 > (cotización con prioridad PAS vía app móvil + fallback API). Varias piezas marcadas aquí
-> como **PAS/app móvil** corresponden a `pas_mobile`/`pas-web`, hoy **fuera del proyecto** y
+> como **PAS/app móvil** corresponden a `pas_mobile`/`pas-web`, hoy **extirpados del proyecto** y
 > en vías de ser reemplazadas por el flujo **Visred** (cotiza y emite sin intervención humana).
 >
 > Documentos originales consolidados:
@@ -108,7 +108,7 @@ Requisitos de implementación: servicio inyectable (no `if(mock)`), envío **asy
 | Tema | v1 | v2 |
 |---|---|---|
 | Resolución de quote | Prioridad app PAS (`pas_mobile`) + fallback API | **Visred** (cotiza + emite, sin humano) detrás de `QuotationPort` |
-| Apps cliente | `pas_mobile`, `pas-web` | **`mango-mobile`** (cartera, emergencias, cuenta compartida) |
+| Apps cliente | `pas_mobile`, `pas-web` (legacy, extirpados) | **`mango-mobile`** (cartera, emergencias, cuenta compartida) |
 | Webhook `quote-update` | Entrada de cotizaciones manuales del PAS | **Legacy** — reemplazado por resolución síncrona Visred |
 | WhatsApp dispatch | Deuda (sin API) | Integración WhatsApp Cloud API presente; re-verificar los 3 avisos |
 | RAG coberturas | — | pgvector + agente experto (`SearchCompanyDocumentationTool`) |

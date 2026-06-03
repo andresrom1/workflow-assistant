@@ -1,7 +1,7 @@
 # Controllers — workflow-assistant (v2)
 
 > Cada controller indica **a quién sirve** (canal consumidor).
-> Canales: `openai_chatkit`, `pas_mobile` (legacy), `pas-web` (legacy), `mango-mobile`, `workflow-assistant`.
+> Canales: `openai_chatkit`, `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
 
 ---
 
@@ -12,7 +12,7 @@
 | `ToolsController` | `openai_chatkit` | Recibe las tool-calls HTTP de ChatKit y delega al `AgentToolAdapter` (detecta proveedor vía `ToolAdapterFactory`). Métodos: identifyCustomer/Vehicle, coveragePreference, getQuote, checkout + stubs. |
 | `QuoteController` | `openai_chatkit` (store) / `workflow-assistant` (index, show, showRaw) | `store`: alta de quote desde la API. index/show: vistas admin. `showRaw`: auditoría del payload de proveedor. |
 | `ChatController` | `workflow-assistant` | Chat interno de pruebas del panel. |
-| `Api\QuoteWebhookController` | **`pas_mobile` (legacy)** | Recibía cotizaciones manuales de la app PAS (`/webhooks/quote-update`). A reemplazar por la resolución Visred. |
+| `Api\QuoteWebhookController` | **`pas_mobile` (legacy, extirpado)** | Recibía cotizaciones manuales de la app PAS (`/webhooks/quote-update`). Controller y ruta eliminados en V2-6; lo reemplaza la resolución Visred. |
 | `AI\WhatsAppWebhookController` | `workflow-assistant` | Verificación + ingesta de la WhatsApp Cloud API (Meta). Despacha el pipeline de 3 etapas. |
 
 ---
@@ -70,4 +70,4 @@ Canal: `mango-mobile`. Namespace `App\Http\Controllers\Mobile\*` (guard `auth:mo
 | `openai_chatkit` | `ToolsController`, `QuoteController@store` |
 | `mango-mobile` | `Mobile\*`, `TrackingController` |
 | `workflow-assistant` | `CheckoutController`, `CoverageDocumentController`, `CustomerController`, `ProfileController`, `ChatController`, `Admin\*`, `Auth\*`, `TestingController`, `AI\WhatsAppWebhookController`, `QuoteController` (admin) |
-| `pas_mobile` (legacy) | `Api\QuoteWebhookController` |
+| `pas_mobile` (legacy, extirpado) | `Api\QuoteWebhookController` |

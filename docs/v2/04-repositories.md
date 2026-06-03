@@ -2,7 +2,7 @@
 
 > Capa de **acceso a datos**, agnóstica del canal (Adapter → Service → **Repo**).
 > Reciben/retornan modelos de dominio. Cada repo indica a qué canal sirve.
-> Canales: `openai_chatkit`, `pas_mobile` (legacy), `pas-web` (legacy), `mango-mobile`, `workflow-assistant`.
+> Canales: `openai_chatkit`, `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
 
 ---
 
@@ -38,6 +38,6 @@ Canal: `workflow-assistant`.
 | `openai_chatkit` + `workflow-assistant` | `CustomerRepository`, `VehicleRepository`, `RiskSnapshotRepository`, `QuoteRepository`, `CoverageRepository`, `ConversationRepository` |
 | `workflow-assistant` | `AnalyticsRepository` |
 | `mango-mobile` | — (los controllers mobile usan modelos Eloquent directos: `MobileAccount`, `Risk`, `Poliza`, `EmergencyContact`, `SharedRisk`, `EmergencyTrackingToken`) |
-| `pas_mobile` / `pas-web` (legacy) | — |
+| `pas_mobile` / `pas-web` (legacy, extirpado) | — |
 
 > **Nota:** El lado `mango-mobile` no introdujo repositories dedicados; sus controllers operan sobre los modelos Eloquent directamente (patrón aceptado en este monorepo para CRUD simple de cartera/emergencias).
