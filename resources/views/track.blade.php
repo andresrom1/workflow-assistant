@@ -140,6 +140,35 @@
             return h === 1 ? 'hace 1 hora' : `hace ${h} horas`;
         }
 
+        // Animación del marcador: en vez de saltar, se desliza linealmente desde
+        // la posición actual hasta la nueva durante ~9,5s (un poco menos que el
+        // intervalo de polling), para que el movimiento se vea fluido.
+        let animFrom = null, animTo = null, animStart = 0;
+        const ANIM_MS = 9500;
+
+        function glideMarkerTo(lat, lon) {
+            const target = L.latLng(lat, lon);
+            if (!map) { initMap(lat, lon); return; }
+            animFrom = marker.getLatLng();
+            animTo = target;
+            animStart = performance.now();
+            requestAnimationFrame(stepMarker);
+        }
+
+        function stepMarker(now) {
+            if (!animFrom || !animTo) return;
+            const t = Math.min(1, (now - animStart) / ANIM_MS);
+            const lat = animFrom.lat + (animTo.lat - animFrom.lat) * t;
+            const lon = animFrom.lng + (animTo.lng - animFrom.lng) * t;
+            marker.setLatLng([lat, lon]);
+            if (t < 1) {
+                requestAnimationFrame(stepMarker);
+            } else {
+                map.panTo(animTo, { animate: true, duration: 0.5 });
+                animFrom = animTo = null;
+            }
+        }
+
         function update(data) {
             if (!data.active || data.last_lat == null || data.last_lon == null) {
                 showGone();
@@ -147,12 +176,7 @@
             }
             const lat = parseFloat(data.last_lat);
             const lon = parseFloat(data.last_lon);
-            if (!map) {
-                initMap(lat, lon);
-            } else {
-                marker.setLatLng([lat, lon]);
-                map.panTo([lat, lon]);
-            }
+            glideMarkerTo(lat, lon);
             setStatus('Actualizado ' + relativeTime(data.last_updated_at || data.lastUpdatedAt));
         }
 
@@ -181,8 +205,9 @@
             setStatus('Esperando ubicación…');
         }
 
-        // Polling cada 20s (el device postea cada 2 min; sobra para ver el movimiento).
-        setInterval(poll, 20000);
+        // Polling cada 10s, alineado al ritmo del replay del backend (una posición
+        // nueva cada ~10s). El marcador se desliza entre cada update.
+        setInterval(poll, 10000);
     </script>
 </body>
 </html>
