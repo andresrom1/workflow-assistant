@@ -7,6 +7,22 @@ use Illuminate\Support\Facades\Cache;
 
 uses(RefreshDatabase::class);
 
+// HISTORIA — por qué este test tuvo (y ya NO tiene) un backup/restore de disco.
+//
+// `AgentPromptController::promoteDraft()`/`::store()` solían llamar a un
+// `writePromptFile()` que hacía `file_put_contents(resource_path('prompts/agents/*.md'))`,
+// es decir, escribían un archivo VERSIONADO desde un request HTTP. Como el test
+// "promotes a draft to active" ejercita el controller real promoviendo un draft stub
+// de `checkout_closer`, pisaba `CheckoutAgent.md` con basura ("promoted draft content
+// sufficiently long...") y el stub se llegó a commitear (b2e70e9), dejando rojo el
+// CheckoutAgentPromptTest "desde siempre". El prompt real (203 líneas) se recuperó de 1504224.
+//
+// La mitigación interina fue respaldar el .md en beforeEach y restaurarlo en afterEach.
+// La solución de fondo (2026-06-03) fue eliminar `writePromptFile()`: la DB
+// (`agent_prompts`, cacheada) es la única fuente de verdad y el .md es solo seed/fallback.
+// Ya no se escribe ningún archivo en runtime, así que el backup/restore desapareció.
+// NO reintroducir escrituras a `resource_path()` desde un controller.
+
 beforeEach(function () {
     $this->admin = User::factory()->admin()->create();
     $this->other = User::factory()->admin()->create();

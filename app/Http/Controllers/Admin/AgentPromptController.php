@@ -157,8 +157,6 @@ class AgentPromptController extends Controller
 
         $agentPrompt->promote();
 
-        $this->writePromptFile($agentPrompt->agent_key, $agentPrompt->content);
-
         return redirect()
             ->route('admin.agent-prompts.show', $agentPrompt->agent_key)
             ->with('success', "Draft promovido a v{$agentPrompt->version} activa.");
@@ -213,8 +211,6 @@ class AgentPromptController extends Controller
         ]);
 
         $newPrompt->activate();
-
-        $this->writePromptFile($agentKey, $validated['content']);
 
         return redirect()
             ->route('admin.agent-prompts.show', $agentKey)
@@ -319,25 +315,6 @@ class AgentPromptController extends Controller
     private function labelFor(string $key): string
     {
         return self::AGENT_LABELS[$key] ?? self::SHARED_LABELS[$key];
-    }
-
-    private function writePromptFile(string $agentKey, string $content): void
-    {
-        if (isset(self::AGENT_FILE_MAP[$agentKey])) {
-            $path = resource_path('prompts/agents/'.self::AGENT_FILE_MAP[$agentKey]);
-        } elseif (isset(self::SHARED_FILE_MAP[$agentKey])) {
-            $dir = resource_path('prompts/shared');
-
-            if (! is_dir($dir)) {
-                mkdir($dir, 0o755, true);
-            }
-
-            $path = $dir.'/'.self::SHARED_FILE_MAP[$agentKey];
-        } else {
-            return;
-        }
-
-        file_put_contents($path, $content);
     }
 
     private function extractPreview(string $content): string
