@@ -10,17 +10,6 @@ class SystemSettingsSeeder extends Seeder
     public function run(): void
     {
         $settings = [
-            // ─── Grupo: Cotización ─────────────────────────────────────────
-            [
-                'key' => 'pas.opportunity_timeout_minutes',
-                'group' => 'pas',
-                'value' => '30',
-                'type' => 'integer',
-                'label' => 'Timeout de resolución (minutos)',
-                'description' => 'Minutos antes de que una cotización colgada en pending se resuelva automáticamente (vigilante de abandono).',
-                'is_secret' => false,
-            ],
-
             // ─── Grupo: Checkout ───────────────────────────────────────────
             [
                 'key' => 'checkout.required_photos',

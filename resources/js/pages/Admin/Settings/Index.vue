@@ -239,12 +239,6 @@ const getSetting = (key: string): string => allSettings[key] ?? ''
 // Stat cards computadas
 const stats = computed(() => [
   {
-    key: 'timeout',
-    value: (getSetting('pas.opportunity_timeout_minutes') || '—') + ' min',
-    label: 'Timeout PAS',
-    ok: true,
-  },
-  {
     key: 'photos',
     value: (getSetting('checkout.required_photos') || '—') + ' fotos',
     label: 'Fotos requeridas',

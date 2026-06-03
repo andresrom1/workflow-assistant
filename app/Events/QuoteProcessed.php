@@ -28,13 +28,10 @@ class QuoteProcessed implements ShouldBroadcast
      */
     public function broadcastOn(): array
     {
-        // Canal Seguro: private-chat.{thread_id}
-        // Usamos loadMissing para asegurar que tenemos la relación
-        Log::info(__METHOD__.__LINE__." [Event] Valor de Quote: {$this->quote}");
         $this->quote->loadMissing('conversation');
         $channelName = 'chat.'.$this->quote->session_uuid;
 
-        Log::info(__METHOD__.__LINE__." [Event] Broadcasting QuoteProcessed en canal: {$channelName}");
+        Log::info("[QuoteProcessed] Broadcasting en canal: {$channelName}", ['quote_id' => $this->quote->id]);
 
         return [
             new Channel($channelName), // Canal público

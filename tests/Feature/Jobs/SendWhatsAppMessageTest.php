@@ -53,7 +53,7 @@ it('sends text and persists message with eligible flag', function () {
     $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendMessage')
         ->once()
-        ->with($this->waId, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent', true)
+        ->with($this->waId, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent', true, config('ai.default'))
         ->andReturn(['messages' => [['id' => 'wamid.out001']]]);
 
     $decider = $this->mock(MessageModalityDecider::class);
@@ -89,7 +89,7 @@ it('generates TTS, stores in R2, uploads to Meta and sends audio message', funct
 
     $waService->shouldReceive('sendAudioMessage')
         ->once()
-        ->with($this->waId, 'meta_media_id_abc', $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent', $this->text)
+        ->with($this->waId, 'meta_media_id_abc', $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent', $this->text, config('ai.default'))
         ->andReturn($outboundMessage);
 
     $tts = $this->mock(TextToSpeechService::class);

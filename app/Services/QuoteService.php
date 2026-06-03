@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Jobs\CheckQuoteAcceptance;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Quote;
@@ -31,24 +30,13 @@ class QuoteService
      */
     public function createPendingQuote(Conversation $conversation, Customer $customer, Vehicle $vehicle, string $sessionUuid, ?string $coveragePreference = null): Quote
     {
-        $transaction = DB::transaction(function () use ($conversation, $customer, $vehicle, $sessionUuid, $coveragePreference): array {
+        $quote = DB::transaction(function () use ($conversation, $customer, $vehicle, $sessionUuid, $coveragePreference): Quote {
             $snapshot = $this->snapshotRepo->createFromEntities($customer, $vehicle, $coveragePreference);
-            $quote = $this->quoteRepo->createPending($snapshot, $conversation, $sessionUuid);
 
-            return ['quote' => $quote, 'snapshot' => $snapshot];
+            return $this->quoteRepo->createPending($snapshot, $conversation, $sessionUuid);
         });
 
-        $quote = $transaction['quote'];
-        $snapshot = $transaction['snapshot'];
-
         $this->logQuotes("[QuoteService🫰] Created pending Quote ID: {$quote->id}");
-
-        // Programar el Job de Fallback (Vigilante) desde ahora.
-        // Valor configurable desde /admin/settings
-        $timeout = (int) app(SettingsService::class)->get('pas.opportunity_timeout_minutes', 30);
-
-        CheckQuoteAcceptance::dispatch($quote, $snapshot) // Se elimina del constructor. Se despacha estaticamente
-            ->delay(now()->addMinutes($timeout));
 
         return $quote;
     }

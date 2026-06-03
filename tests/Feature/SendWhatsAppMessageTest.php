@@ -22,7 +22,7 @@ it('calls outbound service with correct parameters', function () {
     $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendMessage')
         ->once()
-        ->with($this->waId, 'Hola, te ayudo con tu cotización', $this->phoneNumberId, $conversation->id, null, false)
+        ->with($this->waId, 'Hola, te ayudo con tu cotización', $this->phoneNumberId, $conversation->id, null, false, config('ai.default'))
         ->andReturn(['messages' => [['id' => 'wamid.out001']]]);
 
     // Decider returns TEXT (no inbound audio in this conversation)

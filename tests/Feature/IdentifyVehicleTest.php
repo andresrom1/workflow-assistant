@@ -4,13 +4,14 @@ use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
     $this->threadId = 'thread_abc123xyz';
     $this->openaiUserId = '01e40f5f-b311-4365-8587-c14f1543aa51';
-    $this->sessionUuid = 'test-session-uuid-vehicle';
+    $this->sessionUuid = Str::uuid()->toString();
 
     $customer = Customer::factory()->create();
 

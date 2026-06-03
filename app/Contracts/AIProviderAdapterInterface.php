@@ -23,7 +23,7 @@ interface AIProviderAdapterInterface
     public function identifyVehicle(array $data, Conversation $conversation): array;
 
     /**
-     * Persiste la preferencia de cobertura del cliente y dispara la resolución Mobile.
+     * Persiste la preferencia de cobertura del cliente y dispara la resolución vía API.
      */
     public function coveragePreference(array $data, Conversation $conversation): array;
 

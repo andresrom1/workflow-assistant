@@ -44,7 +44,7 @@ class SettingsController extends Controller
         $items = SystemSetting::where('group', $group)->get()->keyBy('key');
         abort_if($items->isEmpty(), 404);
 
-        // El frontend envía { "pas.opportunity_timeout_minutes": "30", ... }
+        // El frontend envía { "checkout.required_photos": "7", ... }
         $incoming = $request->input('settings', []);
 
         foreach ($incoming as $key => $value) {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Mobile;
 use App\Exceptions\Api\ApiException;
 use App\Http\Controllers\Controller;
 use App\Models\EmergencyTrackingToken;
+use App\Models\EmergencyTrackPosition;
 use App\Models\MobileAccount;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -67,19 +68,26 @@ class EmergencyController extends Controller
     }
 
     /**
-     * PATCH .../emergencia/tracking/{token}/posicion — el device actualiza su
-     * última posición cada ~2 min mientras el Estado 2 está activo.
+     * PATCH .../emergencia/tracking/{token}/posicion — el device sube un batch
+     * de posiciones (muestreadas cada ~10s) mientras el Estado 2 está activo.
      *
      * SIN auth:mobile: lo invoca el foreground service en un isolate que no
      * tiene el Sanctum token. La autorización es el `update_secret` (decisión
      * de seguridad C): solo el device que generó el tracking lo conoce.
+     *
+     * Mejora de cadencia (§4.3): en vez de una sola posición cada 2 min, llega
+     * un array con `sampled_at` (epoch ms del device). Se persiste cada punto
+     * en el buffer con un `effective_at` anclado al `now()` del server (ver
+     * abajo), y `/track` lo reproduce con offset → mapa suave + atraso ~constante.
      */
     public function updatePosition(Request $request, string $token): JsonResponse
     {
         $data = $request->validate([
             'update_secret' => ['required', 'string'],
-            'lat' => ['required', 'numeric', 'between:-90,90'],
-            'lon' => ['required', 'numeric', 'between:-180,180'],
+            'positions' => ['required', 'array', 'min:1', 'max:20'],
+            'positions.*.lat' => ['required', 'numeric', 'between:-90,90'],
+            'positions.*.lon' => ['required', 'numeric', 'between:-180,180'],
+            'positions.*.sampled_at' => ['required', 'numeric'], // epoch ms (reloj del device)
         ]);
 
         $row = EmergencyTrackingToken::where('token', $token)->first();
@@ -97,11 +105,39 @@ class EmergencyController extends Controller
             throw new ApiException('El tracking ya no está activo.', 'TRACKING_INACTIVE', 410);
         }
 
-        $row->update([
-            'last_lat' => $data['lat'],
-            'last_lon' => $data['lon'],
-            'last_updated_at' => now(),
-        ]);
+        /** @var list<array{lat: float|int|string, lon: float|int|string, sampled_at: float|int|string}> $positions */
+        $positions = $data['positions'];
+
+        // Anclamos la muestra MÁS NUEVA del batch al now() del server y espaciamos
+        // las demás por su delta intra-batch. Así el replay no depende del reloj
+        // absoluto del device (clock-skew), solo de su timing relativo.
+        $now = now();
+        $sampledAts = array_map(static fn (array $p): float => (float) $p['sampled_at'], $positions);
+        $sampledMax = max($sampledAts);
+
+        $newest = null;
+        foreach ($positions as $p) {
+            $deltaSeconds = (int) round(($sampledMax - (float) $p['sampled_at']) / 1000);
+            EmergencyTrackPosition::create([
+                'emergency_tracking_token_id' => $row->id,
+                'lat' => $p['lat'],
+                'lon' => $p['lon'],
+                'effective_at' => $now->copy()->subSeconds(max(0, $deltaSeconds)),
+            ]);
+            if ($newest === null || (float) $p['sampled_at'] >= (float) $newest['sampled_at']) {
+                $newest = $p;
+            }
+        }
+
+        // Mantenemos last_* como la posición más nueva (fallback para /track
+        // antes de que el buffer tenga puntos "due", y compat).
+        if ($newest !== null) {
+            $row->update([
+                'last_lat' => $newest['lat'],
+                'last_lon' => $newest['lon'],
+                'last_updated_at' => $now,
+            ]);
+        }
 
         return response()->json([
             'ok' => true,

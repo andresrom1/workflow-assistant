@@ -22,7 +22,7 @@ it('processes single message and dispatches outbound', function () {
     $orchestrator->shouldReceive('handle')
         ->once()
         ->with('Hola quiero asegurar un auto', Mockery::type(Conversation::class))
-        ->andReturn(['text' => 'Perfecto, ¿qué vehículo querés asegurar?', 'agent' => 'CustomerIdentifierAgent']);
+        ->andReturn(['text' => 'Perfecto, ¿qué vehículo querés asegurar?', 'agent' => 'CustomerIdentifierAgent', 'execution_log_ids' => []]);
 
     $conversation = Conversation::factory()->create([
         'external_conversation_id' => $this->waId,
@@ -53,7 +53,7 @@ it('concatenates multiple messages with newline', function () {
     $orchestrator->shouldReceive('handle')
         ->once()
         ->with("Hola quiero asegurar un auto\nEs un Renault Sandero", Mockery::type(Conversation::class))
-        ->andReturn(['text' => 'Anotado el Renault Sandero. ¿Qué cobertura preferís?', 'agent' => 'VehicleIdentifierAgent']);
+        ->andReturn(['text' => 'Anotado el Renault Sandero. ¿Qué cobertura preferís?', 'agent' => 'VehicleIdentifierAgent', 'execution_log_ids' => []]);
 
     $conversation = Conversation::factory()->create([
         'external_conversation_id' => $this->waId,
@@ -110,7 +110,7 @@ it('marks messages processed before calling ai', function () {
         ->andReturnUsing(function () use ($message, &$processedAtDuringAiCall) {
             $processedAtDuringAiCall = $message->fresh()->processed_at;
 
-            return ['text' => 'Respuesta', 'agent' => 'CustomerIdentifierAgent'];
+            return ['text' => 'Respuesta', 'agent' => 'CustomerIdentifierAgent', 'execution_log_ids' => []];
         });
 
     ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);

@@ -160,7 +160,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
     }
 
     /**
-     * Persiste la preferencia de cobertura del cliente y dispara la resolución Mobile.
+     * Persiste la preferencia de cobertura del cliente y dispara la resolución vía API.
      *
      * @param  array  $data  Datos normalizados del payload
      * @param  Conversation  $conversation  La conversación activa para obtener el cliente
@@ -225,7 +225,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         $resolved = $this->tryResolveQuoteById($quoteId);
 
         $message = $resolved
-            ? "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}. Oferta enviada a los productores."
+            ? "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}. Cotización procesada; preparando las alternativas para presentártelas."
             : "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}. La oferta será procesada en breve.";
 
         return $this->formatSuccess($message, ['vehicle_id' => $vehicle->id]);

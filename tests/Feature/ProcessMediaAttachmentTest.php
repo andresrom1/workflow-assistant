@@ -245,7 +245,7 @@ it('inbox processes audio message once transcription has populated content', fun
     $orchestrator->shouldReceive('handle')
         ->once()
         ->with('Hola quiero asegurar un auto', Mockery::type(Conversation::class))
-        ->andReturn(['text' => 'Bienvenido', 'agent' => 'CustomerIdentifierAgent']);
+        ->andReturn(['text' => 'Bienvenido', 'agent' => 'CustomerIdentifierAgent', 'execution_log_ids' => []]);
 
     $conversation = Conversation::factory()->create([
         'external_conversation_id' => $this->waId,

@@ -31,7 +31,7 @@ Cambios clave de v1:
 - **Orquestador (`AgentToolAdapter`)** — punto de entrada del chat. Detecta eventos y dispara acciones:
   - `identify_vehicle` → crea la quote `pending` (arranca el timer de fallback cuanto antes).
   - `coverage_preference` → actualiza el snapshot y pide la resolución activa (prioridad mobile).
-- **Cerebro (`QuoteService`)** — ciclo de vida y reglas globales: `createPendingQuote` (snapshot + programa `CheckQuoteAcceptance`), `resolveQuote` (elige estrategia), `updateSnapshotPreference`.
+- **Cerebro (`QuoteService`)** — ciclo de vida y reglas globales: `createPendingQuote` (snapshot ~~+ programa `CheckQuoteAcceptance`~~ **[legacy, extirpado 2026-06-03]**), `resolveQuote` (elige estrategia), `updateSnapshotPreference`.
 - **Ejecutores (`Strategies`)**:
   - `MobileAppQuoteResolution` → enviaba la oportunidad a la **app PAS** (`offered_pas`), resolución **diferida** por webhook. **(legacy `pas_mobile`)**.
   - `ApiQuoteResolution` → consulta motores externos, persiste resultados, resolución **síncrona**.
@@ -40,10 +40,12 @@ Cambios clave de v1:
 `pending` → `offered_pas` → (`rejected_pas` por timeout) → `processed` | `failed`.
 
 ### Flujo (resumen)
-1. `identify_vehicle`: crea quote `pending` + agenda `CheckQuoteAcceptance` (delay 30m).
+1. `identify_vehicle`: crea quote `pending` ~~+ agenda `CheckQuoteAcceptance` (delay 30m)~~ **[legacy, extirpado]**.
 2. `coverage_preference`: actualiza snapshot + `resolveQuote(mobile)` → envía lead completo al PAS → `offered_pas`.
 3a. **PAS responde** vía webhook `POST /api/webhooks/quote-update` → persiste alternativas → `processed`.
 3b. **Timeout (30m)**: `CheckQuoteAcceptance` → `rejected_pas` → fallback `ApiQuoteResolution` → `processed`.
+
+> **Nota (2026-06-03):** todo el flujo PAS de arriba (`offered_pas`/`rejected_pas`, webhook de aceptación y el watchdog `CheckQuoteAcceptance`) fue extirpado en V2-6. Hoy `coverage_preference` resuelve **sincrónicamente** vía `ApiQuoteResolution`; no hay fallback programado. Esta sección queda como snapshot histórico de v1.
 
 ---
 

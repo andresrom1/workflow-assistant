@@ -90,6 +90,7 @@ class ConversationController extends Controller
         $messages = Message::where('conversation_id', $conversation->id)
             ->with('attachment')
             ->orderBy('created_at')
+            ->orderBy('id')
             ->get()
             ->map(function (Message $m): array {
                 $att = $m->attachment instanceof MessageAttachment ? $m->attachment : null;
