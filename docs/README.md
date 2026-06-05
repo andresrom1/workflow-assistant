@@ -33,6 +33,7 @@ Canales consumidores que se usan como etiqueta en toda la doc:
 | 06 | [06-adapters.md](v2/06-adapters.md) | Adapters de proveedor de IA + el Adapter Visred pendiente. |
 | 07 | [07-consolidado-v1.md](v2/07-consolidado-v1.md) | Consolidación de toda la doc v1 + tabla "qué cambió de v1 a v2". |
 | 08 | [08-visred-quote-adapter.md](v2/08-visred-quote-adapter.md) | Diseño del patrón Adapter para enchufar la cotización contra Visred (lado Visred verificado contra el schema; lado workflow-assistant pendiente). |
+| 09 | [09-queues-architecture.md](v2/09-queues-architecture.md) | Arquitectura de queues: conexiones, colas, workers, el invariante `retry_after > timeout`, inventario de jobs y el pipeline de inbox WhatsApp. |
 
 **Orden de lectura sugerido para la cirugía:** 01 (datos) → 05/03/04 (capas) → 02 (superficie HTTP) → 06 + 08 (el seam de Visred, donde más va a doler el cambio) → 07 (historia y deltas).
 

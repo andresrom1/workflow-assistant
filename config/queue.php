@@ -67,6 +67,19 @@ return [
             'after_commit' => false,
         ],
 
+        // Conexión dedicada para jobs largos y poco frecuentes (extracción de PDF +
+        // chunking/embeddings de documentación de coberturas). El job declara timeout=300;
+        // retry_after debe superarlo para que no sea reclamado mientras corre. Vive en su
+        // propia cola/worker para no bloquear el hot-path de respuestas WhatsApp.
+        'database_long' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'documents',
+            'retry_after' => 360,
+            'after_commit' => false,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),
