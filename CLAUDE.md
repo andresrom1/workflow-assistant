@@ -171,6 +171,18 @@ CustomerRepository / VehicleRepository / QuoteRepository ...
 - `app/Services/` — lógica de negocio (agnóstica)
 - `app/Repositories/` — acceso a datos (agnóstico)
 
+### Principio de desacople (REGLA GENERAL — no es opcional)
+
+Al agregar una responsabilidad nueva, **NO la cuelgues de un componente existente de otra capa "porque está cerca en el flujo". Creá un componente nuevo que dependa solo del modelo de dominio.** Esta regla es general; los ejemplos de abajo son instancias, no el límite.
+
+1. **Agnóstico de canal.** Una preocupación **estable** (dominio, integración con un proveedor externo, traducción a un catálogo de un tercero) **no debe depender** de la capa **conversacional/de canal**: el orquestador de WhatsApp, los agentes (`*Agent`), las tools (`*Tool`), ni `conversations.metadata.ai_state`. Es la misma regla que "los Services/Repositories no saben que se los llama desde WhatsApp", elevada a principio: vale para adapters de proveedor, resolvers, y cualquier servicio de dominio.
+
+2. **Comunicación vía el modelo de dominio, no metiéndose entre componentes.** Si A produce hechos de dominio y B los consume, la dependencia es **`A → dominio ← B`**, nunca `A → B`. No agregar una arista directa entre componentes de capas/propósitos distintos.
+
+3. **Una responsabilidad por componente.** Un componente construido para un propósito (p. ej. NLU de la intención del cliente) **no absorbe** otro propósito (p. ej. traducir el vehículo al catálogo de un proveedor). Responsabilidad nueva = componente nuevo. Antes de extender/editar algo existente, preguntá: *¿esta responsabilidad pertenece a esta capa?* Si no, es un componente nuevo.
+
+**Instancia concreta (ejemplo, no la regla):** `VehicleIdentifierAgent` / `IdentifyVehicleTool` / `VehicleIdentificationService` son **solo NLU de intención del cliente en el chat** — intocables. La resolución/traducción contra el catálogo de un proveedor (p. ej. desambiguar "Active" → "Active VTI" → `version_id` de Visred) es un **componente separado y agnóstico de canal**: lee del modelo de dominio, **nunca** de esas clases ni del orquestador; devuelve un resultado (`resuelto | ambiguo | no-encontrado`) y **no le habla al cliente** — llevar una ambigüedad a la conversación lo decide la capa de canal, no el componente de traducción.
+
 ## Checkout — Fotos de inspección en mobile (arquitectura de memoria)
 
 El formulario de checkout captura 7 fotos desde la cámara del celular. Los navegadores móviles (iOS Safari, Android Chrome) tienen un límite estricto de RAM (~100-200MB). Si se excede, el OS mata el tab y el formulario se resetea perdiendo todo el estado.

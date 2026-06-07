@@ -7,13 +7,20 @@ namespace App\Providers;
 use App\Adapters\AIProviders\WhatsAppAdapter;
 use App\Adapters\OpenAI\AgentToolAdapter;
 use App\AI\InsuranceOrchestrator;
+use App\Contracts\Quotability;
+use App\Contracts\QuotationProvider;
+use App\Contracts\WhatsAppDispatcher;
 use App\Repositories\ConversationRepository;
 use App\Repositories\CustomerRepository;
 use App\Repositories\VehicleRepository;
 use App\Services\CustomerIdentificationService;
 use App\Services\Firebase\FirebaseTokenVerifier;
 use App\Services\Firebase\KreaitTokenVerifier;
+use App\Services\QuotingEngine;
 use App\Services\VehicleIdentificationService;
+use App\Services\Visred\VisredQuotabilityResolver;
+use App\Services\WhatsApp\CloudApiWhatsAppDispatcher;
+use App\Services\WhatsApp\LogWhatsAppDispatcher;
 use App\Services\WhatsApp\WhatsAppOutboundService;
 use Illuminate\Support\ServiceProvider;
 
@@ -39,8 +46,24 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(AgentToolAdapter::class);
         $this->app->singleton(WhatsAppAdapter::class);
 
+        // Cotización: puerto agnóstico de proveedor. Fase 1 = bind al mock
+        // (QuotingEngine). El switch por config (mock|visred) llega en Fase 4.
+        $this->app->singleton(QuotationProvider::class, QuotingEngine::class);
+
+        // Quotability: ¿algún proveedor cotiza este auto? Corre en identify-vehicle
+        // (resolución de catálogo + desambiguación). Independiente del seam de
+        // cotización: se resuelve contra Visred aunque el motor siga en mock.
+        $this->app->singleton(Quotability::class, VisredQuotabilityResolver::class);
+
         // WhatsApp
         $this->app->singleton(WhatsAppOutboundService::class);
+
+        // Dispatch de avisos por WhatsApp (templates). Seam por config: "cloud"
+        // envía de verdad (vía Job), "log" es no-op para local/testing.
+        $this->app->singleton(WhatsAppDispatcher::class, fn ($app) => config('whatsapp.dispatch_driver') === 'cloud'
+            ? $app->make(CloudApiWhatsAppDispatcher::class)
+            : $app->make(LogWhatsAppDispatcher::class));
+
         $this->app->singleton(InsuranceOrchestrator::class);
 
         // Verificación de Firebase ID Token (Admin SDK kreait). Se mockea en tests.

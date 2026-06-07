@@ -1,0 +1,8 @@
+{
+    "success": false,
+    "error": {
+        "message": "Conflicto con el estado actual del recurso.",
+        "code": "conflict",
+        "field_errors": null
+    }
+}

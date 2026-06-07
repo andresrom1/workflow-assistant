@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers\Mobile;
 
+use App\Contracts\WhatsAppDispatcher;
 use App\Exceptions\Api\ApiException;
 use App\Http\Controllers\Controller;
+use App\Models\EmergencyContact;
 use App\Models\EmergencyTrackingToken;
 use App\Models\EmergencyTrackPosition;
 use App\Models\MobileAccount;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
@@ -28,6 +31,8 @@ use Illuminate\Support\Str;
  */
 class EmergencyController extends Controller
 {
+    public function __construct(private readonly WhatsAppDispatcher $dispatcher) {}
+
     public function notify(Request $request): JsonResponse
     {
         /** @var MobileAccount $account */
@@ -39,8 +44,15 @@ class EmergencyController extends Controller
             'lon' => ['required', 'numeric', 'between:-180,180'],
         ]);
 
+        $userName = $account->name ?? 'Usuario MANGO';
+
         if ($data['estado'] === 1) {
-            // TODO real: dispatchar WhatsApp con ubicación estática.
+            // Estado 1: ubicación estática (Google Maps) a todos los contactos.
+            $mapsUrl = 'https://www.google.com/maps?q='.$data['lat'].','.$data['lon'];
+            foreach ($this->contactsOf($account) as $contact) {
+                $this->dispatcher->emergencyContactNotice($contact, $userName, $mapsUrl, 1);
+            }
+
             return response()->json([
                 'ok' => true,
                 'estado' => 1,
@@ -49,16 +61,19 @@ class EmergencyController extends Controller
 
         // Estado 2: crear token activo, devolver tracking_url + update_secret.
         $token = $this->createTrackingToken($account, (float) $data['lat'], (float) $data['lon']);
+        $trackingUrl = $this->trackingUrl($token->token);
 
-        // TODO real: dispatchar WhatsApp con tracking_url a los contactos.
-        // Deuda agendada (ver ROADMAP §Deuda): depende de la WhatsApp Business
-        // API, todavía no integrada en el monorepo (misma deuda que /siniestro).
+        // Avisar a los contactos con el tracking_url PÚBLICO. Nunca el
+        // update_secret: es la llave de escritura, solo vive en el device.
+        foreach ($this->contactsOf($account) as $contact) {
+            $this->dispatcher->emergencyContactNotice($contact, $userName, $trackingUrl, 2);
+        }
 
         return response()->json([
             'ok' => true,
             'estado' => 2,
             'token' => $token->token,
-            'tracking_url' => $this->trackingUrl($token->token),
+            'tracking_url' => $trackingUrl,
             // El secreto de escritura viaja SOLO en esta respuesta hacia el
             // device. No va en la URL ni se comparte con contactos: es la
             // única llave para postear posición (PATCH .../posicion).
@@ -162,6 +177,16 @@ class EmergencyController extends Controller
         $row->update(['revoked_at' => now()]);
 
         return response()->json([], 204);
+    }
+
+    /**
+     * Contactos de emergencia de la cuenta (máx 3).
+     *
+     * @return Collection<int, EmergencyContact>
+     */
+    private function contactsOf(MobileAccount $account): Collection
+    {
+        return EmergencyContact::where('mobile_account_id', $account->id)->get();
     }
 
     private function createTrackingToken(MobileAccount $account, float $lat, float $lon): EmergencyTrackingToken

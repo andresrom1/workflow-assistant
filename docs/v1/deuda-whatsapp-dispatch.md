@@ -1,8 +1,14 @@
 # Deuda — Dispatch de WhatsApp desde workflow-assistant
 
-> **Estado:** ⏸️ Bloqueado por la integración de la **WhatsApp Business Cloud API**,
-> todavía no presente en el monorepo. Hoy los endpoints resuelven el destinatario
-> y devuelven la data, pero **no envían ningún WhatsApp**. Esta es la deuda.
+> **Estado (2026-06-05):** ✅ **Código completo (V2-7) + envío real verificado end-to-end.**
+> Los 3 puntos de dispatch están cableados a un puerto `WhatsAppDispatcher` (seam por config)
+> + Job async + `sendTemplate()`. Con `WHATSAPP_DISPATCH_DRIVER=cloud` se confirmó el flujo
+> completo en vivo (template `mango_emergencia_estoy_bien` → Meta → webhooks `sent`/`delivered`).
+> Falta solo dejarlo encendido en el deploy de prod (la env var vive en `.env`, no se commitea).
+> El detalle de abajo queda como referencia histórica.
+>
+> **Racional del seam (por qué aplica solo a templates y no a las respuestas conversacionales):**
+> ver `docs/v2/06-adapters.md` → "Por qué el seam vive acá y NO en `WhatsAppOutboundService`".
 
 Este documento es el contrato de lo que falta para que MANGO avise por WhatsApp
 en los tres momentos donde el producto lo promete. Cuando se integre la API, este
@@ -82,9 +88,14 @@ Skills del repo relevantes para implementarlo: `whatsapp-laravel`,
 
 ## Definición de "deuda saldada"
 
-- [ ] Canal de WhatsApp Business aprobado + credenciales en `.env`.
-- [ ] `WhatsAppDispatcher` + Job async + 3 templates aprobados.
-- [ ] Los 3 TODO reemplazados por la llamada al dispatcher.
-- [ ] Tests: el dispatcher se invoca con el destinatario/contenido correcto
-      (fake del canal, sin pegar a Meta) en los 3 casos.
-- [ ] El `tracking_url` llega al contacto; el `update_secret` nunca.
+- [ ] Canal de WhatsApp Business aprobado + credenciales en `.env`. _(MANGO — externo)_
+- [x] `WhatsAppDispatcher` + Job async (`SendWhatsAppTemplate`). Templates: **referenciados por config**, falta aprobarlos en Meta _(MANGO)_.
+- [x] Los 3 TODO reemplazados por la llamada al dispatcher.
+- [x] Tests: el dispatcher se invoca con el destinatario/contenido correcto (spy del puerto, sin pegar a Meta) en los 3 casos — `tests/Feature/Mobile/EmergencyDispatchTest.php`.
+- [x] El `tracking_url` llega al contacto; el `update_secret` nunca (test explícito).
+
+### Cómo encenderlo en producción (cuando MANGO apruebe los templates)
+
+1. Crear y aprobar en Meta los 3 templates (`es_AR`) con sus variables `{{1}}`/`{{2}}` (ver `config/whatsapp.php`).
+2. Setear en `.env`: `WHATSAPP_DISPATCH_DRIVER=cloud` + `WHATSAPP_TEMPLATE_EMERGENCIA_BIEN`, `WHATSAPP_TEMPLATE_EMERGENCIA_AYUDA`, `WHATSAPP_TEMPLATE_SINIESTRO_PAS` con los nombres reales.
+3. Verificar `WHATSAPP_ACCESS_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` (ya usados por el resto del canal).

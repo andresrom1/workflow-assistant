@@ -1,0 +1,15 @@
+{
+    "success": false,
+    "error": {
+        "message": "Error de validación.",
+        "code": "validation_error",
+        "field_errors": {
+            "product_id": [
+                "Requerido."
+            ],
+            "vehicle": [
+                "El año es inválido."
+            ]
+        }
+    }
+}

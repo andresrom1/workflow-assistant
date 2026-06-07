@@ -166,7 +166,7 @@ El **seam** es el puerto. El punto de invocación del flujo (⚠️ el del punto
 
 ```php
 // config/mango.php  (propuesto — mismo patrón que mock_customer_matching)
-'quotation_provider' => env('MANGO_QUOTATION_PROVIDER', 'mock'), // 'mock' | 'visred'
+'quotation_provider' => env('QUOTATION_PROVIDER', 'mock'), // 'mock' | 'visred'
 ```
 
 Flip a real = cambiar la env, cero código en el dominio.

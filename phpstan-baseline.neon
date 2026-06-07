@@ -31,25 +31,7 @@ parameters:
 			path: app/Adapters/AIProviders/WhatsAppAdapter.php
 
 		-
-			message: '#^Parameter \#1 \$customer of method App\\Services\\VehicleIdentificationService\:\:findOrCreate\(\) expects App\\Models\\Customer, Illuminate\\Database\\Eloquent\\Model given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Adapters/AIProviders/WhatsAppAdapter.php
-
-		-
 			message: '#^Parameter \#1 \$quote of method App\\Services\\QuoteService\:\:updateSnapshotPreference\(\) expects App\\Models\\Quote, Illuminate\\Database\\Eloquent\\Model given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Adapters/AIProviders/WhatsAppAdapter.php
-
-		-
-			message: '#^Parameter \#2 \$customer of method App\\Services\\QuoteService\:\:createPendingQuote\(\) expects App\\Models\\Customer, Illuminate\\Database\\Eloquent\\Model given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Adapters/AIProviders/WhatsAppAdapter.php
-
-		-
-			message: '#^Parameter \#2 \$newOwner of method App\\Services\\VehicleIdentificationService\:\:updateVehicle\(\) expects App\\Models\\Customer, Illuminate\\Database\\Eloquent\\Model given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Adapters/AIProviders/WhatsAppAdapter.php

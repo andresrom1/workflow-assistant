@@ -58,6 +58,46 @@ class WhatsAppOutboundService
     }
 
     /**
+     * Envía un message template aprobado por Meta.
+     *
+     * Para avisos iniciados por el negocio fuera de la ventana de 24h (los
+     * contactos de emergencia y el PAS no escribieron antes). El template debe
+     * existir y estar aprobado en Meta con el mismo nombre/idioma.
+     *
+     * @param  string  $to  Número en formato E.164 SIN el "+" (ej: "5491112345678")
+     * @param  string  $templateName  Nombre del template aprobado
+     * @param  string  $language  Locale exacto del template (ej: "es_AR")
+     * @param  list<string>  $bodyParams  Variables posicionales del body ({{1}}, {{2}}, …)
+     * @param  string  $phoneNumberId  ID del número emisor (no el E.164)
+     * @return array<string, mixed>
+     */
+    public function sendTemplate(string $to, string $templateName, string $language, array $bodyParams, string $phoneNumberId): array
+    {
+        $components = [];
+        if ($bodyParams !== []) {
+            $components[] = [
+                'type' => 'body',
+                'parameters' => array_map(
+                    static fn (string $text): array => ['type' => 'text', 'text' => $text],
+                    $bodyParams,
+                ),
+            ];
+        }
+
+        return $this->post($phoneNumberId, [
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $to,
+            'type' => 'template',
+            'template' => [
+                'name' => $templateName,
+                'language' => ['code' => $language],
+                'components' => $components,
+            ],
+        ]);
+    }
+
+    /**
      * Sends a typing indicator to the recipient.
      *
      * Uses the WhatsApp Cloud API typing indicator feature.

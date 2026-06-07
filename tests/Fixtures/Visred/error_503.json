@@ -1,0 +1,8 @@
+{
+    "success": false,
+    "error": {
+        "message": "El servicio de la compañía no está disponible.",
+        "code": "external_service_unavailable",
+        "field_errors": null
+    }
+}

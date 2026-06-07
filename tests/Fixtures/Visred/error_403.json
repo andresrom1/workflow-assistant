@@ -1,0 +1,8 @@
+{
+    "success": false,
+    "error": {
+        "message": "No tiene permiso para realizar esta acción.",
+        "code": "permission_denied",
+        "field_errors": null
+    }
+}

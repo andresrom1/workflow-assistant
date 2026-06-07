@@ -1,0 +1,8 @@
+{
+    "success": false,
+    "error": {
+        "message": "No encontrado.",
+        "code": "not_found",
+        "field_errors": null
+    }
+}

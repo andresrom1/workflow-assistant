@@ -55,7 +55,7 @@ Principios: garantía de SLA (el cliente siempre recibe cotización aunque la ap
 
 Configuración única en `.env`: `MOBILE_APP_RESOLUTION_TIMEOUT=30` → mapeada en `config/services.php`, consumida por el timer y por el payload enviado a la app (`expires_at`).
 
-> **Evolución v2:** la fuente de verdad del timeout sigue siendo el Core, pero el destino de la resolución deja de ser la app PAS y pasa a **Visred** (cotización y emisión automáticas). Ver `docs/v2/08-visred-quote-adapter.md` para el patrón Adapter contra Visred (puerto `QuotationPort`, `VisredClient`, flip por `MANGO_QUOTATION_PROVIDER`).
+> **Evolución v2:** la fuente de verdad del timeout sigue siendo el Core, pero el destino de la resolución deja de ser la app PAS y pasa a **Visred** (cotización y emisión automáticas). Ver `docs/v2/08-visred-quote-adapter.md` para el patrón Adapter contra Visred (puerto `QuotationPort`, `VisredClient`, flip por `QUOTATION_PROVIDER`).
 
 ---
 

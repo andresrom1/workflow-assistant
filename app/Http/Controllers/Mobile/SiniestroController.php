@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Mobile;
 
+use App\Contracts\WhatsAppDispatcher;
 use App\Enums\PolizaEstado;
 use App\Enums\UserRole;
 use App\Exceptions\Api\ApiException;
@@ -27,6 +28,8 @@ use Illuminate\Http\Request;
  */
 class SiniestroController extends Controller
 {
+    public function __construct(private readonly WhatsAppDispatcher $dispatcher) {}
+
     /**
      * POST /siniestro
      */
@@ -44,8 +47,12 @@ class SiniestroController extends Controller
             );
         }
 
-        // TODO: cuando lleguen las APIs reales, dispatchar WhatsApp acá.
-        // En la fase mock solo devolvemos el PAS resuelto.
+        // Avisar al PAS que su cliente reportó un siniestro, con el contacto
+        // para llamarlo. Sin ubicación (el siniestro no la lleva).
+        $customerName = $account->name ?? 'Cliente MANGO';
+        $phone = data_get($account->resolveCustomer(), 'phone');
+        $customerContact = is_string($phone) ? $phone : $account->email;
+        $this->dispatcher->siniestroNoticeToPas($pas, $customerName, $customerContact);
 
         return response()->json([
             'pas' => [

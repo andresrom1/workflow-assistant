@@ -3,13 +3,19 @@
 namespace App\Adapters\AIProviders;
 
 use App\Contracts\AIProviderAdapterInterface;
+use App\Contracts\Quotability;
 use App\Models\Conversation;
+use App\Models\Customer;
 use App\Models\Quote;
 use App\Models\QuoteAlternative;
+use App\Models\RiskProviderRef;
+use App\Models\Vehicle;
 use App\Repositories\ConversationRepository;
 use App\Services\CoveragePreferenceService;
 use App\Services\CustomerIdentificationService;
 use App\Services\PlateNormalizerService;
+use App\Services\Quotability\QuotabilityResult;
+use App\Services\Quotability\QuotabilityStatus;
 use App\Services\QuoteService;
 use App\Services\VehicleIdentificationService;
 use App\Traits\ConditionalLogger;
@@ -31,6 +37,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         private readonly QuoteService $quoteService,
         private readonly CoveragePreferenceService $coverageService,
         private readonly PlateNormalizerService $plate,
+        private readonly Quotability $quotability,
     ) {}
 
     /**
@@ -120,7 +127,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
     {
         $customer = $conversation->customer;
 
-        if (! $customer) {
+        if (! $customer instanceof Customer) {
             return $this->formatError(
                 'No se ha identificado un cliente para asignar el vehículo.',
                 'missing_customer'
@@ -145,17 +152,62 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             $this->logAdapter('WhatsApp: vehículo actualizado/transferido.', ['patente' => $vehicle->patente]);
         }
 
-        $quote = $this->quoteService->createPendingQuote(
-            $conversation,
-            $customer,
-            $vehicle,
-            $data['sessionUuid']
+        // Gate de quotability (agnóstico): ¿algún proveedor cotiza este auto? El
+        // canal SOLO ve el tri-estado — el token/proveedor quedan en el resolver.
+        $quotability = $this->quotability->check($vehicle);
+
+        return match ($quotability->status) {
+            QuotabilityStatus::Quotable => $this->onQuotable($conversation, $customer, $vehicle, $data['sessionUuid'], $quotability),
+            QuotabilityStatus::NeedsFact => $this->onNeedsFact($vehicle, $quotability),
+            QuotabilityStatus::NotQuotable => $this->onNotQuotable($vehicle),
+        };
+    }
+
+    /**
+     * Quotable: crea la cotización pendiente, persiste el token opaco del
+     * proveedor (genérico, en risk_provider_refs) y promete la oferta.
+     */
+    private function onQuotable(Conversation $conversation, Customer $customer, Vehicle $vehicle, string $sessionUuid, QuotabilityResult $result): array
+    {
+        $quote = $this->quoteService->createPendingQuote($conversation, $customer, $vehicle, $sessionUuid);
+
+        RiskProviderRef::updateOrCreate(
+            ['risk_snapshot_id' => $quote->risk_snapshot_id, 'provider' => $result->provider],
+            ['external_vehicle_ref' => $result->externalRef],
         );
 
         return $this->formatSuccess(
             "Vehículo registrado correctamente. Cotización #{$quote->id} iniciada. "
             .'Indagá al cliente sobre la cobertura deseada para proceder con la oferta.',
             ['quote_id' => $quote->id]
+        );
+    }
+
+    /**
+     * NeedsFact: ambigüedad reencuadrada como hecho de dominio faltante. No
+     * promete cotización; el agente debe preguntar el dato (p.ej. transmisión).
+     */
+    private function onNeedsFact(Vehicle $vehicle, QuotabilityResult $result): array
+    {
+        $options = $result->options !== [] ? ' ('.implode(' / ', $result->options).')' : '';
+
+        return $this->formatSuccess(
+            "Vehículo registrado. Para cotizar necesito un dato más: ¿{$result->missingFact}?{$options} "
+            .'Preguntáselo al cliente antes de avanzar a la cobertura.',
+            ['needs_fact' => $result->missingFact]
+        );
+    }
+
+    /**
+     * NotQuotable: rama honesta. No mentimos identidad ("te tengo el auto"),
+     * pero no prometemos una cotización que no va a llegar.
+     */
+    private function onNotQuotable(Vehicle $vehicle): array
+    {
+        return $this->formatSuccess(
+            "Tengo registrado tu {$vehicle->marca} {$vehicle->modelo} {$vehicle->year}, pero no puedo "
+            .'cotizarlo automáticamente en este momento. Ofrecé derivar la consulta a un asesor.',
+            ['quotable' => false]
         );
     }
 

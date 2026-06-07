@@ -2,20 +2,20 @@
 
 namespace App\Services\Quote\Strategies;
 
+use App\Contracts\QuotationProvider;
 use App\Events\QuoteProcessed;
 use App\Jobs\NotifyClientQuoteReady;
 use App\Models\Quote;
 use App\Models\RiskSnapshot;
 use App\Repositories\QuoteRepository;
 use App\Services\Quote\QuoteResolutionStrategyInterface;
-use App\Services\QuotingEngine;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class ApiQuoteResolution implements QuoteResolutionStrategyInterface
 {
     public function __construct(
-        private readonly QuotingEngine $engine,
+        private readonly QuotationProvider $engine,
         private readonly QuoteRepository $quoteRepo
     ) {}
 
@@ -27,7 +27,7 @@ class ApiQuoteResolution implements QuoteResolutionStrategyInterface
             // 1. Marcar el método de resolución
             $quote->update(['resolution_method' => 'api']);
 
-            // 2. Generar alternativas (usa el QuotingEngine existente)
+            // 2. Generar alternativas (vía el puerto: mock o Visred según config)
             $result = $this->engine->generateAlternatives($snapshot);
 
             // 3. Guardar resultados

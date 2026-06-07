@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class RiskSnapshot extends Model
 {
-    use SoftDeletes;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'vehicle_id',
@@ -45,5 +46,14 @@ class RiskSnapshot extends Model
     public function quotes(): HasMany
     {
         return $this->hasMany(Quote::class);
+    }
+
+    /**
+     * Referencias opacas al catálogo de proveedores (token por `provider`).
+     * Relación genérica: el dominio no conoce a Visred (ADR-001 / docs/v2/10 §8).
+     */
+    public function providerRefs(): HasMany
+    {
+        return $this->hasMany(RiskProviderRef::class);
     }
 }

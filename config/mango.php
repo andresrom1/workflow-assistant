@@ -11,8 +11,12 @@ return [
     | compartido (mayor sum_asegurada) → este default. Mejor un PAS de MANGO
     | que un 0800. En dev suele ser el email del PAS/cliente de pruebas.
     |
+    | Si no se define `MANGO_DEFAULT_PAS_EMAIL`, cae al PAS de dev
+    | (`MANGO_DEV_PAS_EMAIL`). Así el aviso de siniestro nunca queda sin destino:
+    | el PAS por default es siempre el de pruebas (Andrés en dev).
+    |
     */
-    'default_pas_email' => env('MANGO_DEFAULT_PAS_EMAIL'),
+    'default_pas_email' => env('MANGO_DEFAULT_PAS_EMAIL', env('MANGO_DEV_PAS_EMAIL')),
 
     /*
     |--------------------------------------------------------------------------

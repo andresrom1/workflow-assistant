@@ -2,11 +2,12 @@
 
 namespace App\Services;
 
+use App\Contracts\QuotationProvider;
 use App\Models\RiskSnapshot;
 use App\Traits\ConditionalLogger;
 use Illuminate\Support\Facades\Log;
 
-class QuotingEngine
+class QuotingEngine implements QuotationProvider
 {
     use ConditionalLogger;
 
@@ -14,7 +15,12 @@ class QuotingEngine
      * El Cerebro: Recibe un riesgo y devuelve opciones.
      * NO escribe en base de datos. Solo calcula/obtiene.
      *
-     * @return array Estructura normalizada lista para que el Job la persista.
+     * @return array{
+     *     task_id: string,
+     *     status: string,
+     *     raw: array<string, mixed>,
+     *     parsed_alternatives: list<array<string, mixed>>
+     * }
      */
     public function generateAlternatives(RiskSnapshot $snapshot): array
     {
@@ -34,6 +40,13 @@ class QuotingEngine
      * Simulación determinística de mercado.
      * Catálogo por compañía — nombres de producto reales de cada manual.
      * Los company slugs (Str::slug del nombre) deben coincidir con coverage_documents.company_slug.
+     *
+     * @return array{
+     *     task_id: string,
+     *     status: string,
+     *     raw: array<string, mixed>,
+     *     parsed_alternatives: list<array<string, mixed>>
+     * }
      */
     private function runMockSimulation(RiskSnapshot $snapshot): array
     {
