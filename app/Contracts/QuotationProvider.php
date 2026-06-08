@@ -8,9 +8,9 @@ use App\Models\RiskSnapshot;
  * Puerto de cotización — agnóstico de proveedor.
  *
  * El dominio (ApiQuoteResolution) depende de esta interface, NO de un proveedor
- * concreto. Implementaciones: QuotingEngine (mock, lo de hoy) y, más adelante,
- * VisredQuotationProvider (real). Se eligen por config (ver config/visred.php,
- * Fase 4). El contrato de retorno es la shape neutra de MANGO que consume
+ * concreto. Implementación de producción: VisredQuotationProvider (real siempre,
+ * bind directo en AppServiceProvider). En tests: StubQuotationProvider. El
+ * contrato de retorno es la shape neutra de MANGO que consume
  * QuoteRepository::saveResults() — nunca un DTO de Visred.
  *
  * Ver docs/v2/10-modelo-dominio-cotizacion-emision.md.

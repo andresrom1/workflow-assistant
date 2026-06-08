@@ -16,9 +16,9 @@ use App\Repositories\VehicleRepository;
 use App\Services\CustomerIdentificationService;
 use App\Services\Firebase\FirebaseTokenVerifier;
 use App\Services\Firebase\KreaitTokenVerifier;
-use App\Services\QuotingEngine;
 use App\Services\VehicleIdentificationService;
 use App\Services\Visred\VisredQuotabilityResolver;
+use App\Services\Visred\VisredQuotationProvider;
 use App\Services\WhatsApp\CloudApiWhatsAppDispatcher;
 use App\Services\WhatsApp\LogWhatsAppDispatcher;
 use App\Services\WhatsApp\WhatsAppOutboundService;
@@ -46,9 +46,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(AgentToolAdapter::class);
         $this->app->singleton(WhatsAppAdapter::class);
 
-        // Cotización: puerto agnóstico de proveedor. Fase 1 = bind al mock
-        // (QuotingEngine). El switch por config (mock|visred) llega en Fase 4.
-        $this->app->singleton(QuotationProvider::class, QuotingEngine::class);
+        // Cotización: puerto agnóstico → VisredQuotationProvider (real siempre,
+        // mismo criterio que Quotability). El mock (QuotingEngine) se eliminó en
+        // Fase 4: Visred es EL proveedor, bind directo (sin selector por config).
+        // En tests, TestCase bindea StubQuotationProvider para no pegar a la red.
+        $this->app->singleton(QuotationProvider::class, VisredQuotationProvider::class);
 
         // Quotability: ¿algún proveedor cotiza este auto? Corre en identify-vehicle
         // (resolución de catálogo + desambiguación). Independiente del seam de

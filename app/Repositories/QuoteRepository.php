@@ -34,7 +34,7 @@ class QuoteRepository
      * Guarda los resultados del motor de cotización de forma atómica.
      * Maneja la limpieza de alternativas previas (idempotencia) y la actualización de estado.
      *
-     * @param  array  $engineResult  El resultado raw del QuotingEngine
+     * @param  array  $engineResult  El resultado raw del QuotationProvider
      */
     public function saveResults(Quote $quote, array $engineResult): void
     {

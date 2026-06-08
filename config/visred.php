@@ -3,20 +3,6 @@
 return [
     /*
     |--------------------------------------------------------------------------
-    | Seam de proveedor — cotización / emisión
-    |--------------------------------------------------------------------------
-    |
-    | "mock" usa el motor determinístico de hoy (QuotingEngine / skeleton de
-    | emisión); "visred" cotiza/emite contra la API real vía VisredClient. Mismo
-    | criterio de seam-único que WHATSAPP_DISPATCH_DRIVER: se elige por env y el
-    | bind condicional vive en AppServiceProvider (el switch llega en Fase 4).
-    |
-    */
-    'quotation_provider' => env('QUOTATION_PROVIDER', 'mock'),
-    'emission_provider' => env('EMISSION_PROVIDER', 'mock'),
-
-    /*
-    |--------------------------------------------------------------------------
     | Conexión a Visred
     |--------------------------------------------------------------------------
     |

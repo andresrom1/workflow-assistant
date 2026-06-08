@@ -17,8 +17,8 @@ Este proyecto es un asistente inteligente diseñado para automatizar y agilizar 
 - **Normalización de Patentes**: Servicio especializado para estandarizar diferentes formatos de matrículas.
 - **Transferencia de Propiedad**: Lógica para manejar vehículos que cambian de dueño dentro del sistema.
 
-### 4. Motor de Cotización (Quoting Engine)
-- **Resolución de Cotización**: Al capturar la preferencia de cobertura, el sistema resuelve la cotización vía la estrategia `ApiQuoteResolution` (motor `QuotingEngine`) y notifica al cliente cuando las alternativas están listas (`NotifyClientQuoteReady`).
+### 4. Motor de Cotización
+- **Resolución de Cotización**: Al capturar la preferencia de cobertura, el sistema resuelve la cotización vía la estrategia `ApiQuoteResolution`, que delega en el puerto `QuotationProvider` (implementación real: `VisredQuotationProvider`), y notifica al cliente cuando las alternativas están listas (`NotifyClientQuoteReady`).
 - **Snapshots de Riesgo**: Captura del estado del riesgo en el momento de la cotización para auditoría y consistencia.
 - **Alternativas de Cobertura**: Generación automática de múltiples opciones de cobertura (Responsabilidad Civil, Terceros, Todo Riesgo, etc.).
 

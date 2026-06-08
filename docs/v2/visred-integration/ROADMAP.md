@@ -30,7 +30,7 @@
 | — | Smoke-test auth real | ✅ | Login contra sandbox → 200 con access+refresh (2026-06-07). |
 | 2 | `VisredClient` (HTTP + JWT) | ✅ | login/refresh cacheado (Cache server-side), refresh-on-401 (reintenta 1 vez; si falla → re-login), Bearer + Accept, `VisredApiException` (status/code/field_errors), `X-Mock-Scenario` solo sandbox, `config/visred.php`. Tests `Http::fake` (14) + smoke-test live. PHPStan 0 · suite 288/288 (2026-06-07). |
 | 3 | `VisredQuotationProvider` + polling | ✅ | Lee el token de `risk_provider_refs`; `RiskSnapshot`→request; `cotizar/`→TaskList; polling acotado (`Sleep`, tolerante a parcial/budget); aplanado company→covers→`parsed_alternatives`; `cover`→`normalized_grade` (solo en el adapter). Firma intacta. Tests herméticos (5). **`quotation_result_id` por-alternativa diferido a Fase 5** (cada alt lo lleva en `external_quote_id`; `saveResults` intacto). |
-| 4 | Config seam + E2E cotización | ⬜ **próxima** | `QUOTATION_PROVIDER=visred`; bind condicional `QuotationProvider`; cotización end-to-end real contra sandbox. |
+| 4 | Bind directo Visred + E2E cotización | ✅ | Mock (`QuotingEngine`) **eliminado**; `QuotationProvider`→`VisredQuotationProvider` bind directo (real-always, sin selector); `flatten`/`mapCover` reconciliados al shape real (`result.company_id`+`quotation_results[]`), nombre de compañía vía `/discovery/companies/` (en vivo, sin cache); filtro de coberturas placeholder/inactivas. Smoke E2E real OK (13 compañías, 13.8s). Suite 304/304, PHPStan 0. |
 | 5 | `EmissionProvider` + emisión real | ⬜ | find-or-create `Risk` + referencia mínima; inspección; documentos on-demand. **Gap `person_holder`.** Acá se persiste el `quotation_result_id` por-alternativa (lo necesita emitir la elegida). |
 | 6 | `VehicleCatalogResolver` (gate de quotability) | ✅ | Implementado **aplanado**: puerto agnóstico `Quotability` (la única abstracción que ve el canal), `VisredQuotabilityResolver` (árbol de 5 GETs + desambiguación Tier 1 léxico / Tier 2 `DisambiguationAgent` LLM, beam por groups), tri-estado `QuotabilityResult` (Quotable/NeedsFact/NotQuotable). Refina `Vehicle.version` + token → `risk_provider_refs`. Tests herméticos (6 resolver + 3 gate). |
 
@@ -48,7 +48,7 @@ Aceptadas en sus valores recomendados vía "dale"; **revisitar al llegar a Fase 
 ---
 
 ## Riesgos abiertos
-- **Budget de polling vs timeout del job de IA** (120s vs 180s) — puede forzar async (diferido).
+- ~~**Budget de polling vs timeout del job de IA** (120s vs 180s) — puede forzar async.~~ **Resuelto (2026-06-07):** smoke real midió **13.8s** para que **13 compañías** llegaran a terminal (7 SUCCESS), holgado bajo el budget de 120s y el timeout de 180s. No fuerza async. Muestra única (auto año 1997); revisar con un smoke periódico si cambian los tiempos del proveedor.
 - **`polizas` rica vs referencia mínima** — cambio de modelo compartido con mango-mobile.
 - **`version_id`** — token opaco del catálogo, resuelto por el `VehicleCatalogResolver` en identify-vehicle y guardado en backing store A (NO en columna de dominio). Diseño cerrado, ver [`RESOLVER-DESIGN.md`](RESOLVER-DESIGN.md) §7–§10.
 - **Catálogo Visred = dato vivo** — `version_id` opacos pueden rotar; consulta en vivo + cache TTL, sin bakear valores como fixtures. Drift se cubre con smoke/contract test contra sandbox.
@@ -58,6 +58,15 @@ Aceptadas en sus valores recomendados vía "dale"; **revisitar al llegar a Fase 
 
 ## Bitácora
 
+- **2026-06-07** — **Fase 4 implementada (bind directo a Visred + E2E real). ✅** Suite **304/304**, PHPStan **0**, Pint.
+  - **Mock eliminado (reversión de decisión).** Se borró `app/Services/QuotingEngine.php` (700 líneas, catálogo hardcodeado). Esto **revierte** "el mock no se borra" de [`PLAN.md`](PLAN.md): el mock era andamiaje hasta tener la API; ya está la API → mantenerlo era un punto débil de cara a producción (decisión del usuario). `QuotationProvider`→`VisredQuotationProvider` **bind directo** en `AppServiceProvider` (real-always, mismo criterio que `Quotability`; **sin** selector por config). En tests, `TestCase` bindea `StubQuotationProvider` (espejo de `StubQuotability`).
+  - **Sin selector de config.** Se eliminaron `quotation_provider` y `emission_provider` de `config/visred.php` + `.env.example` (config muerta: nadie las leía). Visred es **EL** proveedor, implícito. **Futuro:** el día que entre un 2º proveedor → una sola clave `INSURANCE_PROVIDER` (array), gobernando cotización **y** emisión juntas (no se pueden mezclar). YAGNI hasta entonces.
+  - **Shape real confirmado contra el sandbox** (smoke live): `GET /v1/tasks/{id}/` → `result.company_id` (slug) + `result.quotation_results[]` (NO `company`/`covers` como se había asumido). `flatten`/`mapCover` reescritos. El **nombre de compañía** se resuelve por `company_id` vía `GET /v1/discovery/companies/` (`rus`→"Rio Uruguay") — **consultado en vivo en cada cotización, sin cache** (el listado cambia poco y una llamada extra es despreciable vs cotizar+polling; sin el refresco "al pedo" de un TTL fijo). La traducción id→nombre vive solo en el adapter.
+  - **Filtro de coberturas:** Visred devuelve filas placeholder (`cover.id`/`name` vacíos) e ítems discontinuados (`active=false`). `mapCover` descarta lo no presentable: solo `cover.name` presente **y** `active===true`.
+  - **Limitación conocida:** `normalized_grade` es léxico (sobre `cover.id`+`name`); códigos de compañía como `Sigma`/`C1-80`/`B80` caen a `basic` por default. Best-effort en Fase 4; mejora (mapa por `cover.id`) es su propio tema.
+  - **Pendiente río abajo (no Fase 4):** `company_id` de Visred (`rus`) ≠ slug de `coverage_documents` (`rio-uruguay`) → el RAG de coberturas no encontraría docs. Revisar al tocar el coverage-check.
+  - **Smoke E2E real** (tinker, sin secretos): catálogo→version_id→cotizar→polling de 13 compañías a terminal en **13.8s** (7 SUCCESS), `company_id=triunfo` resuelto a "Triunfo", 4 presentables. Confirma el chain live extremo a extremo.
+  - **Tests:** fixtures de los 5 tests herméticos reabiertos al shape real (+ `companiesResponse()`); +1 test de filtro placeholder/inactivas; +1 E2E hermético (`ApiQuoteResolution`→`saveResults`→alternativas + `quote_provider_refs`). `quotation_result_id` por-alternativa sigue **diferido a Fase 5** (cada alt en `external_quote_id`).
 - **2026-06-07** — **Fases 3 + 6 implementadas (resolver de quotability + adapter de cotización Visred). ✅** Suite **302/302**, PHPStan **0**, Pint. Diseño **aplanado** respecto del handoff (a pedido del usuario: "exceso de ingeniería, más llano"):
   - **El canal NO conoce el catálogo.** `identify_vehicle` depende de un puerto agnóstico **`Quotability::check(Vehicle): QuotabilityResult`** y solo lee el tri-estado. Se descartó el puerto separado `VehicleCatalogResolver` + VOs (`VehicleQuery`/`CandidateVersion`): catálogo + desambiguación viven **adentro** de `VisredQuotabilityResolver` (un solo proveedor, YAGNI; el Tier 2 `DisambiguationAgent` queda extraíble si entra un 2º).
   - **Tri-estado** `QuotabilityResult`: `Quotable(resolvedVersion, provider, externalRef)` / `NeedsFact(missingFact, options)` / `NotQuotable`. El `provider`/`externalRef` (token) es opaco: el adapter lo usa SOLO para persistir; **nunca** entra a `ai_state` ni a un mensaje (test lo verifica).
@@ -96,11 +105,11 @@ Aceptadas en sus valores recomendados vía "dale"; **revisitar al llegar a Fase 
 
 ## Próximo paso
 
-**Fase 4 — Config seam + E2E de cotización contra el sandbox.**
-- Bind condicional de `QuotationProvider` en `AppServiceProvider` por `config('visred.quotation_provider')` (`mock`→`QuotingEngine` / `visred`→`VisredQuotationProvider`), espejando el patrón de `WhatsAppDispatcher`. Flip por env `QUOTATION_PROVIDER=visred`.
-- E2E real: alta de vehículo (gate de quotability resuelve contra el catálogo live) → cotización Visred real → alternativas persistidas. Verificar el budget de polling vs timeout del job de IA (120s vs 180s).
-- Confirmar contra el sandbox la **shape real** del resultado de `tasks/{id}/` (el aplanado `company→covers` está asumido en `VisredQuotationProvider::flatten/mapCover` — ver comentarios) y de los niveles del catálogo.
+**Fase 5 — `EmissionProvider` + emisión real.**
+- Puerto `EmissionProvider` + `VisredEmissionProvider` (bind directo, real-always, mismo criterio que cotización/quotability). `PolizaEmisionService` (hoy skeleton) orquesta: find-or-create `Risk` + referencia mínima (`presale_id`/`policy_number`/`company_id`/`product_id`); inspección before/after con fotos R2; documentos on-demand.
+- **Acá se persiste el `quotation_result_id` por-alternativa** (lo necesita emitir la elegida). En cotización cada alt ya lo lleva en `external_quote_id`.
+- **Gap abierto:** `person_holder` (birthdate/sex_id/tax_condition_id/person_type_id/document_type_id) que el checkout no captura hoy. Decisión §9.5 (capturar en checkout vs defaults).
 
-Después: **Fase 5** (emisión, gap `person_holder`; ahí se persiste el `quotation_result_id` por-alternativa). El seam de cotización **ya** está listo para flipear; el resolver de quotability **ya** corre real en identify-vehicle.
+Cotización **ya corre real** (bind directo a Visred, mock eliminado); el resolver de quotability **ya** corre real en identify-vehicle.
 
 Ver [`RESOLVER-DESIGN.md`](RESOLVER-DESIGN.md) §7–§10, [`../08-visred-quote-adapter.md`](../08-visred-quote-adapter.md) §§2/3/4/5.

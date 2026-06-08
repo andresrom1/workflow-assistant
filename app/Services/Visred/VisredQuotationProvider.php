@@ -15,7 +15,9 @@ use RuntimeException;
  * Lee el `version_id` ya resuelto de `risk_provider_refs` (lo dejó el gate de
  * quotability en identify-vehicle), traduce el `RiskSnapshot` → request de Visred,
  * dispara `cotizar/` (async → TaskList) y hace polling acotado de las tasks. Aplana
- * company→covers a la shape neutra de MANGO que consume QuoteRepository::saveResults.
+ * `result.quotation_results[]` a la shape neutra de MANGO que consume
+ * QuoteRepository::saveResults; el nombre de compañía se resuelve desde `company_id`
+ * vía /discovery/companies/.
  *
  * El dominio nunca importa esta clase (se elige por config en Fase 4). El mapeo
  * cover→normalized_grade vive SOLO acá. Ver docs/v2/08 §§2/3/4.
@@ -23,6 +25,8 @@ use RuntimeException;
 class VisredQuotationProvider implements QuotationProvider
 {
     private const COTIZAR_PATH = '/v1/patrimoniales/vehicles/cotizar/';
+
+    private const COMPANIES_PATH = '/v1/discovery/companies/';
 
     public function __construct(private readonly VisredClient $client) {}
 
@@ -42,10 +46,13 @@ class VisredQuotationProvider implements QuotationProvider
         $taskIds = $this->taskIds($taskList);
 
         $taskResults = $this->poll($taskIds);
+        // Solo resolvemos nombres de compañía si hubo resultados (evita la llamada
+        // a /discovery/companies/ cuando se agotó el budget o todo falló).
+        $companies = $taskResults === [] ? [] : $this->companyNames();
 
         $alternatives = [];
         foreach ($taskResults as $result) {
-            foreach ($this->flatten($result) as $alternative) {
+            foreach ($this->flatten($result, $companies) as $alternative) {
                 $alternatives[] = $alternative;
             }
         }
@@ -164,25 +171,62 @@ class VisredQuotationProvider implements QuotationProvider
     }
 
     /**
+     * Mapa company_id → nombre legible desde /discovery/companies/.
+     *
+     * Se consulta en vivo en cada cotización (sin cache): el listado cambia muy
+     * poco y una llamada extra es despreciable frente a cotizar/ + polling, sin
+     * el refresco "al pedo" de un TTL fijo. Si el volumen lo pidiera, una
+     * estrategia de refresco (cache/cron) entraría ACÁ. La traducción id→nombre
+     * vive solo en el adapter (regla de desacople: el dominio no ve company_id).
+     *
+     * @return array<string, string>
+     */
+    private function companyNames(): array
+    {
+        $companies = $this->client->get(self::COMPANIES_PATH);
+
+        $map = [];
+        foreach ($companies as $company) {
+            if (! is_array($company)) {
+                continue;
+            }
+            $id = $company['company_id'] ?? null;
+            $name = $company['company_name'] ?? null;
+            if (is_scalar($id) && (string) $id !== '' && is_scalar($name) && (string) $name !== '') {
+                $map[(string) $id] = (string) $name;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
      * Aplana el resultado de una task (una company) a alternativas neutras MANGO.
+     * Visred devuelve `result.company_id` (slug) + `result.quotation_results[]`
+     * (una entrada por cobertura). Filtra placeholders/inactivas (ver mapCover).
      *
      * @param  array<string, mixed>  $taskResult
+     * @param  array<string, string>  $companies  company_id → nombre legible
      * @return list<array<string, mixed>>
      */
-    private function flatten(array $taskResult): array
+    private function flatten(array $taskResult, array $companies): array
     {
-        $company = is_array($taskResult['company'] ?? null) ? $taskResult['company'] : [];
-        $companyName = is_scalar($company['name'] ?? null) ? (string) $company['name'] : 'Aseguradora';
+        $companyId = is_scalar($taskResult['company_id'] ?? null) ? (string) $taskResult['company_id'] : '';
+        $companyName = $companies[$companyId] ?? ($companyId !== '' ? $companyId : 'Aseguradora');
 
-        $covers = $taskResult['covers'] ?? null;
-        if (! is_array($covers)) {
+        $results = $taskResult['quotation_results'] ?? null;
+        if (! is_array($results)) {
             return [];
         }
 
         $alternatives = [];
-        foreach ($covers as $cover) {
-            if (is_array($cover)) {
-                $alternatives[] = $this->mapCover($cover, $companyName);
+        foreach ($results as $result) {
+            if (! is_array($result)) {
+                continue;
+            }
+            $alternative = $this->mapCover($result, $companyName);
+            if ($alternative !== null) {
+                $alternatives[] = $alternative;
             }
         }
 
@@ -190,15 +234,24 @@ class VisredQuotationProvider implements QuotationProvider
     }
 
     /**
-     * APIBaseQuotationResultDTO → alternativa de dominio. Ver mapping docs/v2/08 §4.
+     * APIBaseQuotationResultDTO → alternativa de dominio, o `null` si no es
+     * presentable. Visred devuelve filas placeholder (`cover.id`/`name` vacíos) e
+     * ítems discontinuados (`active=false`): se descartan. Ver mapping docs/v2/08 §4.
      *
      * @param  array<string, mixed>  $coverResult
-     * @return array<string, mixed>
+     * @return array<string, mixed>|null
      */
-    private function mapCover(array $coverResult, string $companyName): array
+    private function mapCover(array $coverResult, string $companyName): ?array
     {
         $cover = is_array($coverResult['cover'] ?? null) ? $coverResult['cover'] : [];
-        $coverName = is_scalar($cover['name'] ?? null) ? (string) $cover['name'] : 'Cobertura';
+        $coverName = is_scalar($cover['name'] ?? null) ? (string) $cover['name'] : '';
+        $isActive = ($cover['active'] ?? false) === true;
+
+        // Solo coberturas presentables (con nombre) y vigentes (active).
+        if ($coverName === '' || ! $isActive) {
+            return null;
+        }
+
         $coverId = is_scalar($cover['id'] ?? null) ? (string) $cover['id'] : '';
         $insuredAmount = (int) ($coverResult['insured_amount'] ?? 0);
 

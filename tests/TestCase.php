@@ -3,8 +3,10 @@
 namespace Tests;
 
 use App\Contracts\Quotability;
+use App\Contracts\QuotationProvider;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Tests\Support\StubQuotability;
+use Tests\Support\StubQuotationProvider;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -16,5 +18,9 @@ abstract class TestCase extends BaseTestCase
         // Los tests de quotability sobreescriben este bind con el resolver real
         // (VisredQuotabilityResolver) + Http::fake + DisambiguationAgent::fake.
         $this->app->bind(Quotability::class, StubQuotability::class);
+
+        // Cotización: por defecto un stub determinístico (sin red). Los tests del
+        // path real bindean VisredQuotationProvider con Http::fake.
+        $this->app->bind(QuotationProvider::class, StubQuotationProvider::class);
     }
 }
