@@ -108,7 +108,11 @@ Aceptadas en sus valores recomendados vía "dale"; **revisitar al llegar a Fase 
 **Fase 5 — `EmissionProvider` + emisión real.**
 - Puerto `EmissionProvider` + `VisredEmissionProvider` (bind directo, real-always, mismo criterio que cotización/quotability). `PolizaEmisionService` (hoy skeleton) orquesta: find-or-create `Risk` + referencia mínima (`presale_id`/`policy_number`/`company_id`/`product_id`); inspección before/after con fotos R2; documentos on-demand.
 - **Acá se persiste el `quotation_result_id` por-alternativa** (lo necesita emitir la elegida). En cotización cada alt ya lo lleva en `external_quote_id`.
-- **Gap abierto:** `person_holder` (birthdate/sex_id/tax_condition_id/person_type_id/document_type_id) que el checkout no captura hoy. Decisión §9.5 (capturar en checkout vs defaults).
+- **Gap abierto — `person_holder` vs checkout actual** (decisión §9.5). El checkout (`resources/js/pages/Checkout/Show.vue`) captura: step1 `nombre, dni, email, telefono, domicilio_*`; step2 `cc_*` (pago); step3 `vehiculo_uso/nro_chasis/nro_motor`. Mapeo contra lo que pide Visred:
+  - **Cubierto:** `document_number` ← `dni`; `name` ← `nombre`.
+  - **FALTAN, no defaulteables (hay que capturar):** `birthdate`, `sex_id`, `tax_condition_id` (condición IVA/AFIP).
+  - **Defaulteables para auto/consumidor (confirmar con Visred):** `person_type_id` → persona física; `document_type_id` → DNI.
+  - **Deuda anotada en código:** comentario `DEUDA (Visred emisión, Fase 5)` arriba del `form` en `Checkout/Show.vue`. Hasta capturar los 3 faltantes, la emisión real queda bloqueada.
 
 Cotización **ya corre real** (bind directo a Visred, mock eliminado); el resolver de quotability **ya** corre real en identify-vehicle.
 

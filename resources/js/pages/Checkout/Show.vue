@@ -441,6 +441,19 @@ const stepCircleClass = (s: number) => {
 }
 
 // ─── Form data ─────────────────────────────────────────────────────────────────
+// ─── DEUDA (Visred emisión, Fase 5) ──────────────────────────────────────────
+// La emisión Visred (PreSaleVehicleRequest.person_holder) pide datos del titular
+// que este checkout NO captura hoy. Mapeo contra lo que sí tenemos:
+//   document_number ← dni ✓   |   name ← nombre ✓
+//   FALTAN y hay que capturar (no defaulteables):
+//     - birthdate        (fecha de nacimiento del titular)
+//     - sex_id           (sexo)
+//     - tax_condition_id (condición frente al IVA / AFIP)
+//   Defaulteables para el flujo de auto/consumidor (confirmar con Visred):
+//     - person_type_id   → persona física
+//     - document_type_id → DNI
+// Decisión §9.5 del modelo de dominio: capturar acá vs defaults. Hasta resolverlo,
+// la emisión real queda bloqueada. Ver docs/v2/visred-integration/ROADMAP.md (Fase 5).
 const form = reactive({
   nombre: '', dni: '', email: '', telefono: '',
   domicilio_calle: '', domicilio_numero: '', domicilio_cp: '',
