@@ -7,6 +7,8 @@ namespace App\Providers;
 use App\Adapters\AIProviders\WhatsAppAdapter;
 use App\Adapters\OpenAI\AgentToolAdapter;
 use App\AI\InsuranceOrchestrator;
+use App\Contracts\DiscountPolicy;
+use App\Contracts\EmissionProvider;
 use App\Contracts\Quotability;
 use App\Contracts\QuotationProvider;
 use App\Contracts\WhatsAppDispatcher;
@@ -16,7 +18,9 @@ use App\Repositories\VehicleRepository;
 use App\Services\CustomerIdentificationService;
 use App\Services\Firebase\FirebaseTokenVerifier;
 use App\Services\Firebase\KreaitTokenVerifier;
+use App\Services\MaxDiscountPolicy;
 use App\Services\VehicleIdentificationService;
+use App\Services\Visred\VisredEmissionProvider;
 use App\Services\Visred\VisredQuotabilityResolver;
 use App\Services\Visred\VisredQuotationProvider;
 use App\Services\WhatsApp\CloudApiWhatsAppDispatcher;
@@ -51,6 +55,15 @@ class AppServiceProvider extends ServiceProvider
         // Fase 4: Visred es EL proveedor, bind directo (sin selector por config).
         // En tests, TestCase bindea StubQuotationProvider para no pegar a la red.
         $this->app->singleton(QuotationProvider::class, VisredQuotationProvider::class);
+
+        // Política de descuento (Strategy agnóstica y pura): elige el máximo ≤ tope.
+        // El tope por-compañía (no expuesto por Visred, ver D8) lo resuelve el adapter
+        // de cotización desde `visred.max_discount_percent` y se lo pasa. Swappable.
+        $this->app->singleton(DiscountPolicy::class, MaxDiscountPolicy::class);
+
+        // Emisión: mismo criterio que cotización. Puerto agnóstico → VisredEmissionProvider
+        // (real siempre, bind directo). En tests, TestCase bindea StubEmissionProvider.
+        $this->app->singleton(EmissionProvider::class, VisredEmissionProvider::class);
 
         // Quotability: ¿algún proveedor cotiza este auto? Corre en identify-vehicle
         // (resolución de catálogo + desambiguación). Independiente del seam de

@@ -26,9 +26,13 @@ class Poliza extends Model
 
     protected $fillable = [
         'risk_id',
+        'quote_id',
         'estado',
         'numero',
+        'presale_id',
         'company',
+        'company_id',
+        'product_id',
         'coverage',
         'coverage_detail',
         'sum_asegurada',
@@ -36,6 +40,7 @@ class Poliza extends Model
         'cuota_due',
         'vigencia',
         'emitida_en',
+        'last_synced_at',
         'metadata',
     ];
 
@@ -46,6 +51,7 @@ class Poliza extends Model
         'cuota_due' => 'date',
         'vigencia' => 'date',
         'emitida_en' => 'date',
+        'last_synced_at' => 'datetime',
         'metadata' => 'array',
     ];
 
@@ -53,6 +59,12 @@ class Poliza extends Model
     public function risk(): BelongsTo
     {
         return $this->belongsTo(Risk::class);
+    }
+
+    /** @return BelongsTo<Quote, $this> */
+    public function quote(): BelongsTo
+    {
+        return $this->belongsTo(Quote::class);
     }
 
     /** @param  Builder<self>  $query */

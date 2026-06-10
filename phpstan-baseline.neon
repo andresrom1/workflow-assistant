@@ -25,19 +25,7 @@ parameters:
 			path: app/Adapters/AIProviders/WhatsAppAdapter.php
 
 		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{quote_id\: int, quote_alternative_id\: int, aseguradora\: string, titulo\: string\|null, descripcion\: string\|null, normalized_grade\: string, precio\: numeric\-string, moneda\: string, marketing_title\: string\|null, sum_insured_text\: string\|null, features_tags\: array\|null, full_details\: array\|null\}, Closure\(App\\Models\\QuoteAlternative\)\: array\{quote_id\: int, quote_alternative_id\: int, aseguradora\: string, titulo\: string\|null, descripcion\: string\|null, normalized_grade\: string, precio\: numeric\-string, moneda\: string, marketing_title\: string\|null, sum_insured_text\: string\|null, features_tags\: array\|null, full_details\: array\|null\} given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Adapters/AIProviders/WhatsAppAdapter.php
-
-		-
 			message: '#^Parameter \#1 \$quote of method App\\Services\\QuoteService\:\:updateSnapshotPreference\(\) expects App\\Models\\Quote, Illuminate\\Database\\Eloquent\\Model given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Adapters/AIProviders/WhatsAppAdapter.php
-
-		-
-			message: '#^Parameter \#2 \$snapshot of method App\\Services\\QuoteService\:\:resolveQuote\(\) expects App\\Models\\RiskSnapshot, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Adapters/AIProviders/WhatsAppAdapter.php
@@ -73,19 +61,7 @@ parameters:
 			path: app/Adapters/OpenAI/AgentToolAdapter.php
 
 		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{quote_id\: int, quote_alternative_id\: int, aseguradora\: string, titulo\: string\|null, descripcion\: string\|null, normalized_grade\: string, precio\: numeric\-string, moneda\: string, marketing_title\: string\|null, sum_insured_text\: string\|null, features_tags\: array\|null, full_details\: array\|null\}, Closure\(App\\Models\\QuoteAlternative\)\: array\{quote_id\: int, quote_alternative_id\: int, aseguradora\: string, titulo\: string\|null, descripcion\: string\|null, normalized_grade\: string, precio\: numeric\-string, moneda\: string, marketing_title\: string\|null, sum_insured_text\: string\|null, features_tags\: array\|null, full_details\: array\|null\} given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Adapters/OpenAI/AgentToolAdapter.php
-
-		-
 			message: '#^Parameter \#1 \$quote of method App\\Services\\QuoteService\:\:updateSnapshotPreference\(\) expects App\\Models\\Quote, Illuminate\\Database\\Eloquent\\Model given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Adapters/OpenAI/AgentToolAdapter.php
-
-		-
-			message: '#^Parameter \#2 \$snapshot of method App\\Services\\QuoteService\:\:resolveQuote\(\) expects App\\Models\\RiskSnapshot, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Adapters/OpenAI/AgentToolAdapter.php
@@ -181,91 +157,7 @@ parameters:
 			path: app/Http/Controllers/Admin/SettingsController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$aseguradora\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$combustible\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$descripcion\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$email\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$features_tags\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$marca\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$marketing_title\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$modelo\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$moneda\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$normalized_grade\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$precio\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$titulo\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$version\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$year\.$#'
 			identifier: property.notFound
 			count: 1
 			path: app/Http/Controllers/CheckoutController.php
@@ -343,45 +235,9 @@ parameters:
 			path: app/Http/Controllers/CustomerController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$aseguradora\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$codigo_postal\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$combustible\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$customer\.$#'
 			identifier: property.notFound
 			count: 9
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$descripcion\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$dni\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$edad_conductor\.$#'
-			identifier: property.notFound
-			count: 1
 			path: app/Http/Controllers/QuoteController.php
 
 		-
@@ -391,80 +247,8 @@ parameters:
 			path: app/Http/Controllers/QuoteController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$features_tags\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$marca\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$modelo\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$normalized_grade\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$precio\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$titulo\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$uso\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$vehicle_id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$version\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$year\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/QuoteController.php
-
-		-
 			message: '#^Call to an undefined method App\\Services\\QuoteService\:\:create\(\)\.$#'
 			identifier: method.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
 			count: 1
 			path: app/Http/Controllers/QuoteController.php
 
@@ -619,12 +403,6 @@ parameters:
 			path: app/Services/Message/ContentClassifier.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$aseguradora\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Services/PolizaEmisionService.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$channel\.$#'
 			identifier: property.notFound
 			count: 1
@@ -645,11 +423,5 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$raw_response\.$#'
 			identifier: property.notFound
-			count: 1
-			path: app/Services/QuoteService.php
-
-		-
-			message: '#^Parameter \#1 \$snapshot of method App\\Repositories\\RiskSnapshotRepository\:\:updateCoveragePreference\(\) expects App\\Models\\RiskSnapshot, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
-			identifier: argument.type
 			count: 1
 			path: app/Services/QuoteService.php

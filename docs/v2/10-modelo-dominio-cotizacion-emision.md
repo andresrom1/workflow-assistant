@@ -114,8 +114,8 @@ risk_snapshot        Risk                       referencia de póliza           
 
 > La tabla `polizas` actual tiene columnas **NOT NULL ricas** (`estado`, `company`, `coverage`, `sum_asegurada`, `vigencia`) pensadas para una cartera autocontenida (seed/mock) que **lee mango-mobile**. "Referencia mínima" choca con eso. Confirmar en §9.
 
-**Resolución propuesta:** **repurposear `polizas` como tabla de referencia** — relajar a `nullable` las columnas de tarifa/estado y agregar `presale_id`/`product_id`/`company_id`/`last_synced_at`. mango-mobile **sigue leyendo `polizas`**, pero los campos de display los compone el endpoint de cartera del backend desde el fetch on-demand cacheado. Menos disruptivo que una tabla nueva. **Coordinar la migración con mango-mobile** (es modelo compartido).
-*Alternativas: (b2) nueva tabla liviana `policy_refs` + rediseño de cartera; (b3) traer-una-vez al emitir para llenar las columnas (≈ proyección — descartada por la decisión de §4/§1).*
+**Resolución — ✅ IMPLEMENTADA (2026-06-08, WS-C):** **repurposear `polizas` como tabla de referencia** — relajadas a `nullable` las columnas de tarifa/estado (`estado`/`company`/`coverage`/`sum_asegurada`/`vigencia`) y agregadas `quote_id`/`presale_id`/`product_id`/`company_id`/`last_synced_at` (migración `visred-integration/.../2026_06_09_001617_repurpose_polizas_as_policy_reference.php`). mango-mobile **sigue leyendo `polizas`**, pero los campos de display los compone el endpoint de cartera del backend desde el fetch on-demand cacheado. La materialización vive en `PolicyReferenceService` (dominio cartera, agnóstico). **Pendiente operativo: avisar a mango-mobile** que la migración corrió (es modelo compartido).
+*Alternativas descartadas: (b2) nueva tabla liviana `policy_refs` + rediseño de cartera; (b3) traer-una-vez al emitir para llenar las columnas (≈ proyección — descartada por la decisión de §4/§1).*
 
 ---
 
@@ -160,9 +160,9 @@ Un auto asegurado dos años seguidos (aunque cambie de compañía) es **un** `Ri
 ## 9. Decisiones abiertas para revisión
 
 1. **(a) `Risk` sin versionado de estado** (§4) — confirma que descartamos la tabla de versiones a favor de "identidad + estado actual" + cadena de `risk_snapshots` como historia comercial.
-2. **(b) Repurposear `polizas`** a tabla de referencia (relajar NOT NULL + agregar `presale_id`/…), coordinado con mango-mobile (§5) — vs. tabla nueva.
+2. **(b) Repurposear `polizas`** a tabla de referencia — **✅ IMPLEMENTADO (2026-06-08, WS-C)** (relajado NOT NULL + agregados `quote_id`/`presale_id`/`company_id`/`product_id`/`last_synced_at`; `PolicyReferenceService` materializa). Resta **avisar a mango-mobile** (modelo compartido).
 3. **TTL de cache de cartera** (§5) — ~2h propuesto; confirmar valor y eventos de invalidación con mango-mobile.
-4. **Dedup del `Risk`** (§7) — patente como llave; ¿exigimos chasis cuando esté?
+4. **Dedup del `Risk`** (§7) — **✅ IMPLEMENTADO (2026-06-08, WS-C)** por (`customer_id`, `type=vehicle`, patente vía `Risk.metadata->patente`) en `PolicyReferenceService`. Abierto aún: exigir `chasis` como identidad más fuerte cuando esté disponible.
 5. **`person_holder`** (§8) — capturar en checkout vs defaults.
 6. **Backing store del `VehicleCatalogResolver`** (§8, nuevo) — **A** `risk_provider_refs(risk_snapshot_id, provider, external_vehicle_ref)` (guarda *la decisión* por cotización) vs **B** `provider_vehicle_versions(provider, marca, modelo, version, year → ref)` (cachea *el catálogo* por clave natural). No son excluyentes: A = la decisión, B = el cache. Lean actual del usuario: **C+A** (sin cerrar). Detalle en `visred-integration/RESOLVER-DESIGN.md`.
 

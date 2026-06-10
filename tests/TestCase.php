@@ -2,9 +2,11 @@
 
 namespace Tests;
 
+use App\Contracts\EmissionProvider;
 use App\Contracts\Quotability;
 use App\Contracts\QuotationProvider;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Tests\Support\StubEmissionProvider;
 use Tests\Support\StubQuotability;
 use Tests\Support\StubQuotationProvider;
 
@@ -22,5 +24,8 @@ abstract class TestCase extends BaseTestCase
         // Cotización: por defecto un stub determinístico (sin red). Los tests del
         // path real bindean VisredQuotationProvider con Http::fake.
         $this->app->bind(QuotationProvider::class, StubQuotationProvider::class);
+
+        // Emisión: ídem. Los tests del path real usan VisredEmissionProvider con Http::fake.
+        $this->app->bind(EmissionProvider::class, StubEmissionProvider::class);
     }
 }

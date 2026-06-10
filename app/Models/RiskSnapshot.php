@@ -33,6 +33,7 @@ class RiskSnapshot extends Model
     ];
 
     // Relaciones "blandas" (pueden ser null si se borra el original)
+    /** @return BelongsTo<Vehicle, $this> */
     public function vehicle(): BelongsTo
     {
         return $this->belongsTo(Vehicle::class)->withDefault();

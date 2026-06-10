@@ -79,14 +79,45 @@
         <h2 class="text-base font-bold text-gray-800">Datos del tomador</h2>
 
         <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
-          <Field label="Nombre completo *" :error="errors.nombre">
-            <input v-model="form.nombre" type="text" name="nombre" placeholder="Juan Alberto Pérez" class="field"
-              :class="{ 'field-error': errors.nombre }" autocomplete="name" />
-          </Field>
+          <div class="grid grid-cols-2 gap-3 items-start">
+            <Field label="Nombre *" :error="errors.first_name">
+              <input v-model="form.first_name" type="text" name="first_name" placeholder="Juan Alberto" class="field"
+                :class="{ 'field-error': errors.first_name }" autocomplete="given-name" />
+            </Field>
+            <Field label="Apellido *" :error="errors.last_name">
+              <input v-model="form.last_name" type="text" name="last_name" placeholder="Pérez" class="field"
+                :class="{ 'field-error': errors.last_name }" autocomplete="family-name" />
+            </Field>
+          </div>
 
           <Field label="DNI *" :error="errors.dni">
             <input v-model="form.dni" type="text" name="dni" placeholder="30000000" inputmode="numeric" class="field"
               :class="{ 'field-error': errors.dni }" />
+          </Field>
+
+          <div class="grid grid-cols-2 gap-3 items-start">
+            <Field label="Fecha de nacimiento *" :error="errors.birthdate">
+              <input v-model="form.birthdate" type="date" name="birthdate" class="field"
+                :class="{ 'field-error': errors.birthdate }" autocomplete="bday" />
+            </Field>
+            <Field label="Sexo *" :error="errors.sex_id">
+              <select v-model="form.sex_id" name="sex_id" class="field" :class="{ 'field-error': errors.sex_id }">
+                <option value="" disabled>Seleccioná</option>
+                <option value="M">Masculino</option>
+                <option value="F">Femenino</option>
+              </select>
+            </Field>
+          </div>
+
+          <Field label="Condición fiscal *" :error="errors.tax_condition_id">
+            <select v-model="form.tax_condition_id" name="tax_condition_id" class="field"
+              :class="{ 'field-error': errors.tax_condition_id }">
+              <option value="" disabled>Seleccioná la condición frente al IVA</option>
+              <option v-for="tc in taxConditions" :key="tc.ref" :value="tc.ref">{{ tc.label }}</option>
+            </select>
+            <p v-if="!taxConditions.length" class="text-xs text-amber-600 mt-1">
+              No se pudieron cargar las condiciones fiscales. Reintentá más tarde.
+            </p>
           </Field>
 
           <Field label="Email *" :error="errors.email">
@@ -94,9 +125,16 @@
               :class="{ 'field-error': errors.email }" autocomplete="email" />
           </Field>
 
-          <Field label="Teléfono *" :error="errors.telefono">
-            <input v-model="form.telefono" type="tel" name="telefono" placeholder="+54 9 11 1234-5678" class="field"
-              :class="{ 'field-error': errors.telefono }" autocomplete="tel" />
+          <Field label="Teléfono *" :error="errors.phone_prefix || errors.phone_number">
+            <div class="grid grid-cols-[90px_1fr] gap-3">
+              <input v-model="form.phone_prefix" type="tel" name="phone_prefix" placeholder="11" maxlength="3"
+                inputmode="numeric" class="field" :class="{ 'field-error': errors.phone_prefix }"
+                @input="form.phone_prefix = form.phone_prefix.replace(/\D/g, '').slice(0, 3)" />
+              <input v-model="form.phone_number" type="tel" name="phone_number" placeholder="1234567" maxlength="9"
+                inputmode="numeric" class="field" :class="{ 'field-error': errors.phone_number }" autocomplete="tel-national"
+                @input="form.phone_number = form.phone_number.replace(/\D/g, '').slice(0, 9)" />
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Característica (sin 0) y número (sin 15).</p>
           </Field>
         </div>
 
@@ -242,6 +280,16 @@
               style="text-transform: uppercase"
               @input="form.vehiculo_nro_motor = form.vehiculo_nro_motor.toUpperCase()" />
           </Field>
+
+          <label class="flex items-center justify-between gap-3 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
+            :class="form.has_gnc ? 'border-blue-500 bg-blue-50' : 'border-gray-300'">
+            <span class="flex items-center gap-2">
+              <span class="text-xl">⛽</span>
+              <span class="text-sm font-medium">¿Tiene equipo de GNC?</span>
+            </span>
+            <input type="checkbox" v-model="form.has_gnc" name="has_gnc" class="w-5 h-5 accent-blue-600" />
+          </label>
+          <p class="text-xs text-gray-400 -mt-2">Si tiene gas, te pediremos fotos del tubo y la oblea en el paso de inspección.</p>
         </div>
 
         <div class="flex justify-between pt-2">
@@ -330,7 +378,7 @@
         <div class="bg-gray-50 rounded-xl border border-gray-200 p-4 text-sm">
           <p class="font-semibold text-gray-700 mb-2">Resumen final</p>
           <div class="space-y-1 text-gray-600">
-            <p><span class="text-gray-400">Tomador:</span> {{ form.nombre || '—' }}</p>
+            <p><span class="text-gray-400">Tomador:</span> {{ `${form.first_name} ${form.last_name}`.trim() || '—' }}</p>
             <p><span class="text-gray-400">Vehículo:</span> {{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }}
             </p>
             <p><span class="text-gray-400">Cobertura:</span> {{ alternative.aseguradora }} — {{ alternative.titulo }}
@@ -356,7 +404,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, defineComponent, h, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, defineComponent, h, onMounted, onUnmounted, watch } from 'vue'
 
 // ─── Componentes inline ────────────────────────────────────────────────────────
 const Field = defineComponent({
@@ -392,6 +440,7 @@ const props = defineProps<{
     patente: string | null; marca: string; modelo: string
     version: string; year: number; combustible: string
   }
+  taxConditions: { ref: string; label: string }[]
   checkoutToken: string
   submitUrl: string
   uploadPhotoUrl: string
@@ -441,26 +490,22 @@ const stepCircleClass = (s: number) => {
 }
 
 // ─── Form data ─────────────────────────────────────────────────────────────────
-// ─── DEUDA (Visred emisión, Fase 5) ──────────────────────────────────────────
-// La emisión Visred (PreSaleVehicleRequest.person_holder) pide datos del titular
-// que este checkout NO captura hoy. Mapeo contra lo que sí tenemos:
-//   document_number ← dni ✓   |   name ← nombre ✓
-//   FALTAN y hay que capturar (no defaulteables):
-//     - birthdate        (fecha de nacimiento del titular)
-//     - sex_id           (sexo)
-//     - tax_condition_id (condición frente al IVA / AFIP)
-//   Defaulteables para el flujo de auto/consumidor (confirmar con Visred):
-//     - person_type_id   → persona física
-//     - document_type_id → DNI
-// Decisión §9.5 del modelo de dominio: capturar acá vs defaults. Hasta resolverlo,
-// la emisión real queda bloqueada. Ver docs/v2/visred-integration/ROADMAP.md (Fase 5).
+// Titular completo para la emisión Visred (PreSaleVehicleRequest.person_holder):
+// nombre/teléfono se capturan partidos (first/last, prefix/number) y se agregan
+// birthdate/sex_id/tax_condition_id. `person_type_id`/`document_type_id` los
+// defaultea el adapter (física/DNI). Ver ROADMAP (D1, WS-B).
 const form = reactive({
-  nombre: '', dni: '', email: '', telefono: '',
+  first_name: '', last_name: '', dni: '', email: '',
+  birthdate: '', sex_id: '' as 'M' | 'F' | '',
+  tax_condition_id: '',
+  phone_prefix: '', phone_number: '',
   domicilio_calle: '', domicilio_numero: '', domicilio_cp: '',
   domicilio_provincia: '', domicilio_localidad: '',
   cc_brand: '', cc_pan: '', cc_expiry: '', cc_holder_name: '', cc_holder_dni: '',
   vehiculo_uso: '' as 'particular' | 'otro' | '',
   vehiculo_nro_chasis: '', vehiculo_nro_motor: '',
+  // Default: si el snapshot ya dice GNC, arranca tildado (igual es editable).
+  has_gnc: props.vehicle.combustible?.toLowerCase() === 'gnc',
 })
 
 const errors = reactive<Record<string, string>>({})
@@ -475,7 +520,9 @@ const provincias = [
 ]
 
 // ─── Fotos ─────────────────────────────────────────────────────────────────────
-const photoSlots = [
+// Slots base (incluye velocímetro, que algunas compañías exigen — D2). Los slots
+// de GNC se agregan solo si el vehículo tiene equipo (form.has_gnc).
+const baseSlots = [
   { key: 'tarjeta_verde', label: 'Frente Tarjeta Verde', icon: '📝', hint: 'Foto de frente' },
   { key: 'frente', label: 'Frente del vehículo', icon: '🚗', hint: 'Vista frontal completa' },
   { key: 'atras', label: 'Atrás del vehículo', icon: '🔙', hint: 'Vista trasera completa' },
@@ -483,7 +530,24 @@ const photoSlots = [
   { key: 'lateral_d', label: 'Lateral derecho', icon: '▶️', hint: 'Desde el lado derecho' },
   { key: 'auxilio', label: 'Rueda de auxilio', icon: '🔧', hint: 'En su habitáculo / baúl' },
   { key: 'parabrisas', label: 'Parabrisas desde el interior', icon: '🪟', hint: 'Sentado adentro, mirando adelante' },
+  { key: 'velocimetro', label: 'Velocímetro', icon: '⏱️', hint: 'Tablero con el kilometraje visible' },
 ]
+
+const gncSlots = [
+  { key: 'tubo_gnc', label: 'Tubo de GNC', icon: '🛢️', hint: 'Cilindro de gas en el baúl' },
+  { key: 'oblea_gnc', label: 'Oblea de GNC', icon: '🏷️', hint: 'Oblea de la revisión vigente' },
+]
+
+const photoSlots = computed(() => form.has_gnc ? [...baseSlots, ...gncSlots] : baseSlots)
+
+// Al destildar GNC, soltar las fotos de GNC ya tomadas (evita conteo inconsistente).
+watch(() => form.has_gnc, (hasGnc) => {
+  if (!hasGnc) {
+    gncSlots.forEach(slot => {
+      if (photoIds[slot.key]) removePhoto(slot.key)
+    })
+  }
+})
 
 const photos = reactive<Record<string, string>>({})     // key → preview URL (R2 URL)
 const photoIds = reactive<Record<string, string>>({})   // key → R2 storage_path
@@ -699,11 +763,16 @@ const validateStep = (s: number): boolean => {
   const clear = (keys: string[]) => keys.forEach(k => delete errors[k])
 
   if (s === 1) {
-    clear(['nombre', 'dni', 'email', 'telefono', 'domicilio_calle', 'domicilio_numero', 'domicilio_cp', 'domicilio_provincia', 'domicilio_localidad'])
-    if (!form.nombre.trim()) errors.nombre = 'Requerido'
+    clear(['first_name', 'last_name', 'dni', 'birthdate', 'sex_id', 'tax_condition_id', 'email', 'phone_prefix', 'phone_number', 'domicilio_calle', 'domicilio_numero', 'domicilio_cp', 'domicilio_provincia', 'domicilio_localidad'])
+    if (!form.first_name.trim()) errors.first_name = 'Requerido'
+    if (!form.last_name.trim()) errors.last_name = 'Requerido'
     if (!form.dni.trim()) errors.dni = 'Requerido'
+    if (!form.birthdate) errors.birthdate = 'Requerido'
+    if (!form.sex_id) errors.sex_id = 'Requerido'
+    if (!form.tax_condition_id) errors.tax_condition_id = 'Requerido'
     if (!form.email.trim()) errors.email = 'Requerido'
-    if (!form.telefono.trim()) errors.telefono = 'Requerido'
+    if (!form.phone_prefix.trim()) errors.phone_prefix = 'Característica requerida'
+    if (!form.phone_number.trim()) errors.phone_number = 'Número requerido'
     if (!form.domicilio_calle.trim()) errors.domicilio_calle = 'Requerido'
     if (!form.domicilio_numero.trim()) errors.domicilio_numero = 'Requerido'
     if (!form.domicilio_cp.trim()) errors.domicilio_cp = 'Requerido'
@@ -730,13 +799,13 @@ const validateStep = (s: number): boolean => {
   }
 
   if (s === 4) {
-    photoSlots.forEach(slot => {
+    photoSlots.value.forEach(slot => {
       if (!photoIds[slot.key]) errors[`photo_${slot.key}`] = 'Foto requerida'
     })
   }
 
   return !Object.keys(errors).some(k => {
-    const step1keys = ['nombre', 'dni', 'email', 'telefono', 'domicilio_calle', 'domicilio_numero', 'domicilio_cp', 'domicilio_provincia', 'domicilio_localidad']
+    const step1keys = ['first_name', 'last_name', 'dni', 'birthdate', 'sex_id', 'tax_condition_id', 'email', 'phone_prefix', 'phone_number', 'domicilio_calle', 'domicilio_numero', 'domicilio_cp', 'domicilio_provincia', 'domicilio_localidad']
     const step2keys = ['cc_brand', 'cc_pan', 'cc_expiry', 'cc_holder_name', 'cc_holder_dni']
     const step3keys = ['vehiculo_uso', 'vehiculo_nro_chasis', 'vehiculo_nro_motor']
     if (s === 1) return step1keys.includes(k)
@@ -752,16 +821,21 @@ const goToStep = (s: number) => {
 
 // ─── Submit ────────────────────────────────────────────────────────────────────
 const submitForm = async () => {
-  if (!validateStep(4) || photoCount.value < photoSlots.length) return
+  if (!validateStep(4) || photoCount.value < photoSlots.value.length) return
   submitting.value = true
 
   // Construir el payload JSON (liviano — solo strings, no archivos)
   const payload: Record<string, any> = {
     checkout_token: props.checkoutToken,
-    nombre: form.nombre,
+    first_name: form.first_name,
+    last_name: form.last_name,
     dni: form.dni,
+    birthdate: form.birthdate,
+    sex_id: form.sex_id,
+    tax_condition_id: form.tax_condition_id,
     email: form.email,
-    telefono: form.telefono,
+    phone_prefix: form.phone_prefix,
+    phone_number: form.phone_number,
     domicilio_calle: form.domicilio_calle,
     domicilio_numero: form.domicilio_numero,
     domicilio_cp: form.domicilio_cp,
@@ -770,6 +844,7 @@ const submitForm = async () => {
     vehiculo_uso: form.vehiculo_uso,
     vehiculo_nro_chasis: form.vehiculo_nro_chasis,
     vehiculo_nro_motor: form.vehiculo_nro_motor,
+    has_gnc: form.has_gnc,
     cc_brand: form.cc_brand,
     cc_pan: form.cc_pan.replace(/\s/g, ''),
     cc_expiry: form.cc_expiry,
@@ -805,7 +880,7 @@ const submitForm = async () => {
     // Errores de validación
     if (data.errors) {
       Object.assign(errors, data.errors)
-      const s1 = ['nombre', 'dni', 'email', 'telefono', 'domicilio_calle', 'domicilio_numero', 'domicilio_cp', 'domicilio_provincia', 'domicilio_localidad']
+      const s1 = ['first_name', 'last_name', 'dni', 'birthdate', 'sex_id', 'tax_condition_id', 'email', 'phone_prefix', 'phone_number', 'domicilio_calle', 'domicilio_numero', 'domicilio_cp', 'domicilio_provincia', 'domicilio_localidad']
       const s2 = ['cc_brand', 'cc_pan', 'cc_expiry', 'cc_holder_name', 'cc_holder_dni']
       const s3 = ['vehiculo_uso', 'vehiculo_nro_chasis', 'vehiculo_nro_motor']
       if (Object.keys(data.errors).some((k: string) => s1.includes(k))) step.value = 1

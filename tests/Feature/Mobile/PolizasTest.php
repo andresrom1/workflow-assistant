@@ -52,8 +52,6 @@ function makeVehicleRiskWithPoliza(Customer $customer, float $suma = 14_200_000)
         'coverage_detail' => 'Daños totales + parciales + robo',
         'sum_asegurada' => $suma,
         'cuota' => 78_450,
-        'cuota_due' => now()->addDays(7),
-        'vigencia' => now()->addMonths(6),
     ]);
 }
 
@@ -80,10 +78,21 @@ it('devuelve PAS + polizas propias + riesgos compartidos para una cuenta linkead
     $response->assertJson([
         'pas' => ['name' => 'Lucía Fernández', 'matricula' => '88.241'],
         'polizas_propias' => [
-            ['id' => $poliza->id, 'label' => 'Toyota Corolla 2021', 'company' => 'La Caja Seguros'],
+            [
+                'id' => $poliza->id,
+                'label' => 'Toyota Corolla 2021',
+                'company' => 'La Caja Seguros',
+                'coverage_detail' => 'Daños totales + parciales + robo',
+                'sum_asegurada' => '14200000.00',
+                'cuota' => '78450.00',
+            ],
         ],
         'riesgos_compartidos' => [],
     ]);
+
+    // Visred no expone cartera: vigencia/cuota_due no tienen fuente → no se exponen.
+    $response->assertJsonMissingPath('polizas_propias.0.vigencia')
+        ->assertJsonMissingPath('polizas_propias.0.cuota_due');
 });
 
 it('resuelve el tomador propio por email (identidad = email OAuth)', function (): void {

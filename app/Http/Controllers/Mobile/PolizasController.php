@@ -109,7 +109,6 @@ class PolizasController extends Controller
                 'company' => $poliza?->company,
                 'coverage' => $poliza?->coverage,
                 'sum_asegurada' => $poliza?->sum_asegurada,
-                'vigencia' => $poliza?->vigencia?->toDateString(),
                 'pas' => $titularPas ? [
                     'name' => $titularPas->name,
                     'phone' => $titularPas->pasPhone(),
@@ -134,8 +133,6 @@ class PolizasController extends Controller
             'coverage_detail' => $p->coverage_detail,
             'sum_asegurada' => $p->sum_asegurada,
             'cuota' => $p->cuota,
-            'cuota_due' => $p->cuota_due?->toDateString(),
-            'vigencia' => $p->vigencia->toDateString(),
             'estado' => $p->estado->value,
             'metadata' => $risk->metadata,
         ];

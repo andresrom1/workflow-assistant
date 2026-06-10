@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class QuoteAlternative extends Model
@@ -21,6 +22,7 @@ class QuoteAlternative extends Model
         'titulo',         // "C1"
         'normalized_grade', // 'A', 'B', 'C', 'D' (Vital para el Agente)
         'precio',
+        'sum_asegurada',  // Suma asegurada numérica (insured_amount, vía adapter)
         'moneda',
         'marketing_title',   // Título comercial
         'sum_insured_text',  // Texto del Suma Asegurada
@@ -32,11 +34,23 @@ class QuoteAlternative extends Model
         'features_tags' => 'array',
         'full_details' => 'array',
         'precio' => 'decimal:2', // Asegura que siempre manejemos dinero con precisión
+        'sum_asegurada' => 'decimal:2',
     ];
 
     public function quote(): BelongsTo
     {
         return $this->belongsTo(Quote::class);
+    }
+
+    /**
+     * Token opaco del proveedor para esta alternativa (quotation_result_id +
+     * flag de inspección). Lo consume la emisión; el dominio no lo expone. ADR-001.
+     *
+     * @return HasOne<QuoteAlternativeProviderRef, $this>
+     */
+    public function providerRef(): HasOne
+    {
+        return $this->hasOne(QuoteAlternativeProviderRef::class);
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Services\Quote\Strategies;
 
 use App\Contracts\QuotationProvider;
+use App\Exceptions\Visred\VisredApiException;
 use App\Events\QuoteProcessed;
 use App\Jobs\NotifyClientQuoteReady;
 use App\Models\Quote;
@@ -47,6 +48,9 @@ class ApiQuoteResolution implements QuoteResolutionStrategyInterface
         } catch (Throwable $e) {
             Log::error('[ApiQuoteResolution] Fallo: '.$e->getMessage(), [
                 'quote_id' => $quote->id,
+                // Un validation_error de Visred trae el detalle por-campo: sin esto el
+                // mensaje genérico ("Error de validación.") no dice qué campo falló.
+                'field_errors' => $e instanceof VisredApiException ? $e->fieldErrors() : null,
                 'trace' => $e->getTraceAsString(),
             ]);
 

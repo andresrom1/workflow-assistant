@@ -71,7 +71,7 @@ POST /v1/patrimoniales/vehicles/cotizar/   (body: QuotationVehicleRequest)
 {
   "product_id": "auto",            // "auto" | "moto"
   "address": { "zip_code": 5000 }, // QuotationAddressRequest (zip 1000–9999)
-  "person_holder": {               // nullable en cotización
+  "person_holder": {               // nominalmente nullable, pero ver nota abajo
     "document_number": "36356190"
   },
   "vehicle": {
@@ -83,6 +83,61 @@ POST /v1/patrimoniales/vehicles/cotizar/   (body: QuotationVehicleRequest)
   }
 }
 ```
+
+> **`person_holder` en cotización — DNI placeholder (decisión 2026-06-10).** El campo
+> es *nominalmente* nullable, pero **varias compañías lo exigen para cotizar**. Sin
+> `person_holder`, las tasks de **San Cristóbal** y **Galicia** terminan en `FAILURE`
+> (mensaje `"person_holder es requerido (valor recibido: None)"` / `"Field required"`,
+> `code` `validation_error` · `external_service_unavailable`; confirmado live replicando
+> la Quote #23, 2026-06-10). Las otras 5 compañías (Mercantil, Experta, Sancor, Río
+> Uruguay, Triunfo) cotizan sin DNI.
+>
+> **Decisión:** el DNI real recién se captura en checkout, así que en cotización
+> mandamos **siempre un DNI placeholder configurable** —
+> `config('visred.default_holder_dni')` (env `VISRED_DEFAULT_HOLDER_DNI`, default
+> `30000000`)— y se **sobrescribe con el DNI real al EMITIR**
+> (`PreSaleVehicleRequest.person_holder`). Si ni el snapshot ni el config tienen DNI,
+> el bloque se omite (mandar `document_number` vacío → 400). Ancla:
+> `VisredQuotationProvider::buildRequest`.
+>
+> **Cotización en dos fases — RECHAZADA (decisión del usuario 2026-06-10).** NO se
+> re-cotiza al capturar el DNI real: **una vez en checkout no se vuelve a la etapa de
+> cotización bajo ninguna circunstancia**. El precio que ve el cliente es el cotizado
+> con el placeholder; la emisión usa el DNI real del checkout.
+>
+> **El placeholder DNI funciona; Galicia/San Cristóbal fallan por infra del sandbox —
+> hallazgo live 2026-06-10 (corrige hipótesis previa).** El placeholder **sí es
+> aceptado**: una cotización manual al sandbox con `document_number: 30000000` devolvió
+> **San Cristóbal SUCCESS** (5 coberturas). Lo que bloquea a Galicia/San Cristóbal en
+> nuestras corridas es **`external_service_unavailable`** (503 en la tabla de errores
+> Visred, §2.5) — el **backend de la compañía no está disponible**, NO una validación
+> de nuestro request: **San Cristóbal → `"Error desconocido."`**, **Galicia → `"Field
+> required"`**, ambas con `code: external_service_unavailable` y `field_errors: null`.
+> Verificado por aislamiento: se reprodujo el request manual **exacto** (mismo vehículo
+> `AALCVEeg`, zip 5000, `sin-gnc`, DNI `30000000`, **mismo usuario** `andresrom@gmail.com`)
+> y falla; descartado combustible (GNC vs sin-gnc da igual), vehículo, zip y permisos
+> (ambas aparecen en `/discovery/companies/`). El SUCCESS manual ocurrió cuando el
+> backend de la compañía estaba arriba; es **intermitente en el sandbox**.
+>
+> Nota de schema (verificado live `GET /v1/schema/`): el `QuotationPersonHolderRequest`
+> solo acepta `document_number` (req) + `email`/`phone_prefix`/`phone_number` (nullable)
+> — NO `first_name`/`birthdate`/`sex_id`/`tax_condition_id` (esos viven en
+> `PreSalePersonHolderRequest`, emisión). Es decir, aunque quisiéramos mandar más datos
+> del titular en cotización, el contrato no lo permite — pero **no hace falta**: el
+> bloqueo es infra, no datos.
+>
+> **Implicancia:** la integración y el request son correctos. El manejo tolerante a
+> parcial (`poll` ignora FAILURE y sigue) ya cubre el caso; en sandbox esas 2 compañías
+> aparecen/desaparecen según su backend. Posible mejora futura: **reintento acotado
+> para tasks con `external_service_unavailable`** (transitorio), no para
+> `validation_error`.
+>
+> **⚠️ CONSULTAS a Visred** (con evidencia 2026-06-10): (1) ¿el
+> `external_service_unavailable` de Galicia/San Cristóbal es una **limitación conocida
+> del sandbox** o esperable también en prod? (2) Consecuencias de **cotizar con DNI
+> placeholder y emitir con el DNI real**: ¿la **prima depende del DNI** (scoring)?
+> ¿aceptan emitir contra un `quotation_result_id` cotizado con un DNI distinto?
+> ¿**re-tarifación silenciosa** o rechazo al emitir?
 
 Para construir ese `version_id` hay una cadena de params (todos GET, todos auth):
 `/params/{vehicle_type}/brands/` → `/params/{vehicle_type}/{brand_id}/years/` → `/params/{vehicle_type}/{brand_id}/{year_id}/groups/` (solo auto) → `/params/{vehicle_type}/{brand_id}/{year_id}/versions/?group_id=...`.

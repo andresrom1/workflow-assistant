@@ -10,6 +10,7 @@ use App\Models\CheckoutSession;
 use App\Models\InspectionPhoto;
 use App\Models\Quote;
 use App\Services\SettingsService;
+use App\Services\Visred\VisredCatalogService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -26,7 +27,7 @@ class CheckoutController extends Controller
      * Muestra el formulario de checkout.
      * El token opaco identifica unívocamente el par (quote + alternative).
      */
-    public function show(Request $request, string $token): Response
+    public function show(Request $request, string $token, VisredCatalogService $catalog): Response
     {
         $quote = Quote::where('checkout_token', $token)->firstOrFail();
 
@@ -68,6 +69,8 @@ class CheckoutController extends Controller
                 'year' => $snap->year,
                 'combustible' => $snap->combustible,
             ],
+            // Catálogo de condiciones fiscales para el select del titular (D1).
+            'taxConditions' => $catalog->taxConditions(),
             // Token que el frontend incluye como campo oculto en el POST
             'checkoutToken' => $token,
             // URLs para el frontend
@@ -179,11 +182,17 @@ class CheckoutController extends Controller
             ->firstOrFail();
 
         $validated = $request->validate([
-            // Datos personales
-            'nombre' => 'required|string|max:255',
+            // Datos personales del titular (holder). Split de nombre/teléfono que la
+            // emisión Visred exige (D1); birthdate/sex_id/tax_condition_id idem.
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
             'dni' => 'required|string|max:20',
+            'birthdate' => 'required|date',
+            'sex_id' => 'required|string|max:20',
+            'tax_condition_id' => 'required|string|max:50',
             'email' => 'required|email|max:255',
-            'telefono' => 'required|string|max:50',
+            'phone_prefix' => ['required', 'string', 'regex:/^\d{1,3}$/'],
+            'phone_number' => ['required', 'string', 'regex:/^\d{1,9}$/'],
             // Domicilio (5 campos)
             'domicilio_calle' => 'required|string|max:255',
             'domicilio_numero' => 'required|string|max:20',
@@ -194,6 +203,7 @@ class CheckoutController extends Controller
             'vehiculo_uso' => 'required|string|in:particular,otro',
             'vehiculo_nro_chasis' => 'required|string|max:50',
             'vehiculo_nro_motor' => 'required|string|max:50',
+            'has_gnc' => 'boolean',
             // Tarjeta de crédito
             'cc_brand' => 'required|string|in:visa,mastercard,amex,naranja,cabal,maestro',
             'cc_pan' => ['required', 'string', 'regex:/^\d{16}$/'],
@@ -222,10 +232,18 @@ class CheckoutController extends Controller
                 [
                     'quote_alternative_id' => $alternative->id,
                     'status' => 'submitted',
-                    'nombre' => $validated['nombre'],
+                    // `nombre`/`telefono` se mantienen poblados (compuestos) para mail/admin.
+                    'nombre' => trim($validated['first_name'].' '.$validated['last_name']),
+                    'first_name' => $validated['first_name'],
+                    'last_name' => $validated['last_name'],
+                    'birthdate' => $validated['birthdate'],
+                    'sex_id' => $validated['sex_id'],
+                    'tax_condition_id' => $validated['tax_condition_id'],
                     'dni' => $validated['dni'],
                     'email' => $validated['email'],
-                    'telefono' => $validated['telefono'],
+                    'telefono' => $validated['phone_prefix'].$validated['phone_number'],
+                    'phone_prefix' => $validated['phone_prefix'],
+                    'phone_number' => $validated['phone_number'],
                     'domicilio_calle' => $validated['domicilio_calle'],
                     'domicilio_numero' => $validated['domicilio_numero'],
                     'domicilio_cp' => $validated['domicilio_cp'],
@@ -234,6 +252,7 @@ class CheckoutController extends Controller
                     'vehiculo_uso' => $validated['vehiculo_uso'],
                     'vehiculo_nro_chasis' => $validated['vehiculo_nro_chasis'],
                     'vehiculo_nro_motor' => $validated['vehiculo_nro_motor'],
+                    'has_gnc' => $validated['has_gnc'] ?? false,
                     'cc_brand' => $validated['cc_brand'],
                     'cc_pan_encrypted' => Crypt::encryptString($validated['cc_pan']),
                     'cc_expiry_encrypted' => Crypt::encryptString($validated['cc_expiry']),

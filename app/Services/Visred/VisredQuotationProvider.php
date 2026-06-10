@@ -2,6 +2,7 @@
 
 namespace App\Services\Visred;
 
+use App\Contracts\DiscountPolicy;
 use App\Contracts\QuotationProvider;
 use App\Models\RiskProviderRef;
 use App\Models\RiskSnapshot;
@@ -28,7 +29,33 @@ class VisredQuotationProvider implements QuotationProvider
 
     private const COMPANIES_PATH = '/v1/discovery/companies/';
 
-    public function __construct(private readonly VisredClient $client) {}
+    private const DISCOUNT_PATH = '/v1/patrimoniales/vehicles/params/discount/';
+
+    /**
+     * Combustible de dominio (`RiskSnapshot.combustible`) → `fuel_type_id` del
+     * catálogo Visred (verificado live D6). Sin default: lo desconocido se OMITE
+     * (el campo es opcional) para no asumir un combustible erróneo.
+     */
+    private const FUEL_MAP = [
+        'nafta' => 'nafta',
+        'gnc' => 'gnc',
+        'con-gnc' => 'con-gnc',
+        'sin-gnc' => 'sin-gnc',
+        'diesel' => 'diesel',
+        'gasoil' => 'diesel',
+        'gas-oil' => 'diesel',
+        'gasoleo' => 'diesel',
+        'electrico' => 'electrico',
+        'electrica' => 'electrico',
+        'electric' => 'electrico',
+        'hibrido' => 'hibrido',
+        'hybrid' => 'hibrido',
+    ];
+
+    public function __construct(
+        private readonly VisredClient $client,
+        private readonly DiscountPolicy $discountPolicy,
+    ) {}
 
     /**
      * @return array{
@@ -43,9 +70,10 @@ class VisredQuotationProvider implements QuotationProvider
         $versionId = $this->resolvedVersionId($snapshot);
 
         $taskList = $this->client->post(self::COTIZAR_PATH, $this->buildRequest($snapshot, $versionId));
-        $taskIds = $this->taskIds($taskList);
+        $taskCompanies = $this->taskCompanies($taskList);
+        $taskIds = array_keys($taskCompanies);
 
-        $taskResults = $this->poll($taskIds);
+        $taskResults = $this->poll($taskIds, $taskCompanies);
         // Solo resolvemos nombres de compañía si hubo resultados (evita la llamada
         // a /discovery/companies/ cuando se agotó el budget o todo falló).
         $companies = $taskResults === [] ? [] : $this->companyNames();
@@ -89,41 +117,87 @@ class VisredQuotationProvider implements QuotationProvider
      */
     private function buildRequest(RiskSnapshot $snapshot, string $versionId): array
     {
-        $isGnc = strtolower((string) $snapshot->combustible) === 'gnc';
+        $vehicle = [
+            'version_id' => $versionId,
+            'year' => $snapshot->year,
+            'zero_kilometers' => false,
+        ];
 
-        return [
+        // fuel_type_id es opcional: solo se envía si el combustible de dominio
+        // mapea a un id conocido del catálogo. Sin default (no asumir combustible).
+        $fuel = $this->fuelTypeId($snapshot->combustible);
+        if ($fuel !== null) {
+            $vehicle['fuel_type_id'] = $fuel;
+
+            // Visred exige `insured_amount_fuel` cuando el equipo es GNC. El monto no
+            // se captura aún en cotización → default configurable (refinado en emisión).
+            if ($fuel === 'gnc') {
+                $vehicle['insured_amount_fuel'] = (int) config('visred.default_gnc_amount', 1_500_000);
+            }
+        }
+
+        $request = [
             'product_id' => 'auto',
             'address' => ['zip_code' => (int) $snapshot->codigo_postal],
-            'person_holder' => ['document_number' => (string) $snapshot->dni],
-            'vehicle' => [
-                'version_id' => $versionId,
-                'year' => $snapshot->year,
-                'zero_kilometers' => false,
-                'fuel_type_id' => $isGnc ? 'gnc' : 'sin-gnc',
-            ],
+            'vehicle' => $vehicle,
         ];
+
+        // person_holder: varias compañías (San Cristóbal, Galicia) RECHAZAN la
+        // cotización sin DNI (FAILURE "person_holder es requerido"). El DNI real se
+        // captura recién en checkout, así que en cotización mandamos un placeholder
+        // configurable y se sobrescribe con el real al EMITIR — NO se re-cotiza. Si
+        // ni el snapshot ni el config traen DNI, se omite el bloque (mandar
+        // document_number vacío gatilla un 400). Decisión + consulta a Visred sobre
+        // el impacto en la prima: docs/v2/08 §2.2.
+        $dni = trim((string) $snapshot->dni);
+        if ($dni === '') {
+            $dni = trim((string) config('visred.default_holder_dni'));
+        }
+        if ($dni !== '') {
+            $request['person_holder'] = ['document_number' => $dni];
+        }
+
+        return $request;
     }
 
     /**
-     * @param  array<string, mixed>  $taskList
-     * @return list<string>
+     * Mapea el combustible de dominio al `fuel_type_id` del catálogo, o `null` si
+     * no se reconoce (se omite el campo en vez de asumir uno).
      */
-    private function taskIds(array $taskList): array
+    private function fuelTypeId(?string $combustible): ?string
+    {
+        $key = strtr(mb_strtolower(trim((string) $combustible)), ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u']);
+
+        return self::FUEL_MAP[$key] ?? null;
+    }
+
+    /**
+     * task_id → company_id (slug) desde el TaskList. El map permite atribuir un
+     * FAILURE a su compañía en el log: el body de la task fallida solo trae el
+     * task_id (UUID), no el slug. Tasks sin id se omiten; sin company_id → ''.
+     *
+     * @param  array<string, mixed>  $taskList
+     * @return array<string, string>
+     */
+    private function taskCompanies(array $taskList): array
     {
         $tasks = $taskList['tasks_list'] ?? [];
         if (! is_array($tasks)) {
             return [];
         }
 
-        $ids = [];
+        $map = [];
         foreach ($tasks as $task) {
-            $id = is_array($task) ? ($task['task_id'] ?? null) : null;
+            if (! is_array($task)) {
+                continue;
+            }
+            $id = $task['task_id'] ?? null;
             if (is_scalar($id) && (string) $id !== '') {
-                $ids[] = (string) $id;
+                $map[(string) $id] = is_scalar($task['company_id'] ?? null) ? (string) $task['company_id'] : '';
             }
         }
 
-        return $ids;
+        return $map;
     }
 
     /**
@@ -131,9 +205,10 @@ class VisredQuotationProvider implements QuotationProvider
      * resolvieron (SUCCESS) e ignora las que fallan (FAILURE) o no llegan a tiempo.
      *
      * @param  list<string>  $taskIds
+     * @param  array<string, string>  $taskCompanies  task_id → company_id, para atribuir FAILURE en el log.
      * @return list<array<string, mixed>>
      */
-    private function poll(array $taskIds): array
+    private function poll(array $taskIds, array $taskCompanies = []): array
     {
         $budget = (int) config('visred.poll_budget', 120);
         $interval = max(1, (int) config('visred.poll_interval', 4));
@@ -154,7 +229,16 @@ class VisredQuotationProvider implements QuotationProvider
                     }
                     unset($pending[$taskId]);
                 } elseif ($status === 'FAILURE') {
-                    Log::warning('[VisredQuote] Task con FAILURE, se omite', ['task_id' => $taskId]);
+                    // Capturamos el cuerpo del FAILURE para diagnosticar el motivo por
+                    // compañía: algunas exigen person_holder/DNI para cotizar y lo omitimos
+                    // cuando aún no se capturó (→ field_errors). El body de una task fallida
+                    // es chico (sin quotation_results). Ver Causa B.
+                    Log::warning('[VisredQuote] Task con FAILURE, se omite', [
+                        'task_id' => $taskId,
+                        'company_id' => ($taskCompanies[$taskId] ?? '') !== '' ? $taskCompanies[$taskId] : null,
+                        'reason' => $this->failureReason($task),
+                        'body' => $task,
+                    ]);
                     unset($pending[$taskId]);
                 }
             }
@@ -168,6 +252,39 @@ class VisredQuotationProvider implements QuotationProvider
         }
 
         return $results;
+    }
+
+    /**
+     * Extrae un motivo legible del cuerpo de una task con FAILURE. La shape exacta
+     * no está documentada (la task termina en SUCCESS|FAILURE; el detalle del fallo
+     * no se especifica) → sondeamos los lugares habituales: `message`, `error`
+     * (string u objeto `{message}`), `detail`, y los mismos dentro de `result`.
+     * Devuelve `null` si no encuentra nada presentable (el `body` completo igual se
+     * loguea aparte).
+     *
+     * @param  array<string, mixed>  $task
+     */
+    private function failureReason(array $task): ?string
+    {
+        $result = is_array($task['result'] ?? null) ? $task['result'] : [];
+
+        foreach ([$task, $result] as $source) {
+            foreach (['message', 'detail'] as $key) {
+                if (is_scalar($source[$key] ?? null) && (string) $source[$key] !== '') {
+                    return (string) $source[$key];
+                }
+            }
+
+            $error = $source['error'] ?? null;
+            if (is_scalar($error) && (string) $error !== '') {
+                return (string) $error;
+            }
+            if (is_array($error) && is_scalar($error['message'] ?? null) && (string) $error['message'] !== '') {
+                return (string) $error['message'];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -219,12 +336,17 @@ class VisredQuotationProvider implements QuotationProvider
             return [];
         }
 
+        // Descuento elegido para ESTA compañía (máximo por defecto). Se aplica al
+        // fee acá (cotizar no acepta discount_id) y su ref se persiste para mandarlo
+        // en la emisión → el precio cotizado coincide con el cobrado.
+        $discount = $companyId !== '' ? $this->companyDiscount($companyId) : null;
+
         $alternatives = [];
         foreach ($results as $result) {
             if (! is_array($result)) {
                 continue;
             }
-            $alternative = $this->mapCover($result, $companyName);
+            $alternative = $this->mapCover($result, $companyName, $companyId, $discount);
             if ($alternative !== null) {
                 $alternatives[] = $alternative;
             }
@@ -234,36 +356,87 @@ class VisredQuotationProvider implements QuotationProvider
     }
 
     /**
+     * Descuento elegido para una compañía: trae su catálogo de bonificaciones
+     * (`{value, discount, description}`, por-compañía) y delega la selección a la
+     * {@see DiscountPolicy} (agnóstica). La obtención es Visred-específica → vive
+     * acá; la decisión de cuál, en la política. `null` si la compañía no bonifica.
+     *
+     * @return array{ref: string, percent: float}|null
+     */
+    private function companyDiscount(string $companyId): ?array
+    {
+        $payload = $this->client->get(self::DISCOUNT_PATH, ['company_id' => $companyId, 'product_id' => 'auto']);
+        // Tolera respuesta top-level [...] o envuelta en results/data.
+        $rows = $payload['results'] ?? $payload['data'] ?? $payload;
+
+        $discounts = [];
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $ref = $row['value'] ?? null;
+            $percent = $row['discount'] ?? null;
+            if (is_scalar($ref) && (string) $ref !== '' && is_numeric($percent)) {
+                $discounts[] = ['ref' => (string) $ref, 'percent' => (float) $percent];
+            }
+        }
+
+        // Tope del productor para ESTA compañía (no lo expone Visred → config).
+        $caps = (array) config('visred.max_discount_percent', []);
+        $cap = (float) ($caps[$companyId] ?? $caps['default'] ?? 0);
+
+        return $this->discountPolicy->choose($discounts, $cap);
+    }
+
+    /**
      * APIBaseQuotationResultDTO → alternativa de dominio, o `null` si no es
-     * presentable. Visred devuelve filas placeholder (`cover.id`/`name` vacíos) e
-     * ítems discontinuados (`active=false`): se descartan. Ver mapping docs/v2/08 §4.
+     * presentable. Visred devuelve filas placeholder (`cover.id`/`name` vacíos):
+     * se descartan. `cover.active=false` NO se filtra — Visred lo marca en planes
+     * vendibles (B/C/D, M PLUS, Auto Max 6…) que igual cotiza con fee real; filtrar
+     * por ese flag escondía coberturas válidas. Ver mapping docs/v2/08 §4.
      *
      * @param  array<string, mixed>  $coverResult
+     * @param  string  $companyId  Slug opaco de la compañía (lo persiste saveResults).
+     * @param  array{ref: string, percent: float}|null  $discount  Bonificación elegida (se aplica al fee).
      * @return array<string, mixed>|null
      */
-    private function mapCover(array $coverResult, string $companyName): ?array
+    private function mapCover(array $coverResult, string $companyName, string $companyId, ?array $discount): ?array
     {
         $cover = is_array($coverResult['cover'] ?? null) ? $coverResult['cover'] : [];
         $coverName = is_scalar($cover['name'] ?? null) ? (string) $cover['name'] : '';
-        $isActive = ($cover['active'] ?? false) === true;
 
-        // Solo coberturas presentables (con nombre) y vigentes (active).
-        if ($coverName === '' || ! $isActive) {
+        // Solo se descartan placeholders (sin nombre). NO se filtra por `cover.active`:
+        // Visred marca active=false en coberturas vendibles que igual cotiza con fee
+        // real (Mercantil B/M PLUS, Sancor Auto Max 6, RUS…); sus placeholders vienen
+        // con name/id vacíos → se atrapan acá por nombre.
+        if ($coverName === '') {
             return null;
         }
 
         $coverId = is_scalar($cover['id'] ?? null) ? (string) $cover['id'] : '';
         $insuredAmount = (int) ($coverResult['insured_amount'] ?? 0);
 
+        // Aplica la bonificación al fee (aproximación: % lineal sobre el premio
+        // cotizado; el premio bonificado exacto lo fija la compañía al emitir).
+        $baseFee = round((float) ($coverResult['fee'] ?? 0), 2);
+        $percent = $discount['percent'] ?? 0.0;
+        $precio = $percent > 0 ? round($baseFee * (1 - $percent / 100), 2) : $baseFee;
+
         return [
-            // external_* los stripea saveResults hacia quote_provider_refs (ADR-001).
+            // external_*, company_id, discount_id y requires_inspection_* los stripea
+            // saveResults hacia quote_alternative_provider_refs (ADR-001): tokens del
+            // proveedor que la emisión necesita, fuera de la tabla de dominio.
             'external_quote_id' => (string) ($coverResult['quotation_result_id'] ?? ''),
             'external_code' => $coverId,
+            'company_id' => $companyId,
+            'discount_id' => $discount['ref'] ?? null,
+            'requires_inspection_before_emission' => ($coverResult['require_inspection_before_emission'] ?? false) === true,
             'aseguradora' => $companyName,
             'titulo' => $coverName,
             'descripcion' => is_scalar($cover['description'] ?? null) ? (string) $cover['description'] : $coverName,
             'normalized_grade' => $this->normalizedGrade($coverId, $coverName),
-            'precio' => round((float) ($coverResult['fee'] ?? 0), 2),
+            'precio' => $precio,
+            'sum_asegurada' => $insuredAmount > 0 ? $insuredAmount : null,
             'moneda' => 'ARS',
             'marketing_title' => "{$companyName} - {$coverName}",
             'sum_insured_text' => $insuredAmount > 0 ? '$ '.number_format($insuredAmount, 0, ',', '.') : '',

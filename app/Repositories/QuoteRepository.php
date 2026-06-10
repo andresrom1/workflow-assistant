@@ -52,21 +52,40 @@ class QuoteRepository
             ]);
 
             // 3. Insertar alternativas de dominio (sin campos de proveedor)
-            if (! empty($engineResult['parsed_alternatives'])) {
+            $parsedAlternatives = $engineResult['parsed_alternatives'] ?? [];
+            if ($parsedAlternatives !== []) {
                 $domainAlternatives = array_map(function (array $alt): array {
-                    unset($alt['external_quote_id'], $alt['external_code']);
+                    unset($alt['external_quote_id'], $alt['external_code'], $alt['company_id'], $alt['discount_id'], $alt['requires_inspection_before_emission']);
 
                     return $alt;
-                }, $engineResult['parsed_alternatives']);
+                }, $parsedAlternatives);
 
-                $quote->alternatives()->createMany($domainAlternatives);
+                $created = $quote->alternatives()->createMany($domainAlternatives);
+
+                // 3b. Token opaco del proveedor POR alternativa (ADR-001): el
+                // quotation_result_id con el que la emisión emite la elegida +
+                // el flag de inspección pre-emisión. createMany conserva el orden
+                // de entrada, así que zipea posicional con $parsedAlternatives.
+                foreach ($created as $index => $alternative) {
+                    $parsed = $parsedAlternatives[$index] ?? [];
+                    $externalQuoteId = (string) ($parsed['external_quote_id'] ?? '');
+                    if ($externalQuoteId === '') {
+                        continue;
+                    }
+                    $alternative->providerRef()->create([
+                        'external_quote_id' => $externalQuoteId,
+                        'company_id' => $parsed['company_id'] ?? null,
+                        'discount_id' => $parsed['discount_id'] ?? null,
+                        'requires_inspection_before_emission' => $parsed['requires_inspection_before_emission'] ?? false,
+                    ]);
+                }
             }
 
-            // 4. Persistir referencia de proveedor (auditoría)
+            // 4. Persistir referencia de proveedor a nivel quote (auditoría: raw + id de la 1ra)
             QuoteProviderRef::create([
                 'quote_id' => $quote->id,
-                'external_quote_id' => $engineResult['parsed_alternatives'][0]['external_quote_id'] ?? null,
-                'raw_response' => $engineResult['raw'] ?? ['alternatives' => $engineResult['parsed_alternatives']],
+                'external_quote_id' => $parsedAlternatives[0]['external_quote_id'] ?? null,
+                'raw_response' => $engineResult['raw'] ?? ['alternatives' => $parsedAlternatives],
             ]);
         });
 

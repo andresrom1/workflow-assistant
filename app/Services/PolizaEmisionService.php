@@ -2,60 +2,276 @@
 
 namespace App\Services;
 
+use App\Contracts\EmissionProvider;
+use App\Enums\InspectionPhotoStatus;
 use App\Models\CheckoutSession;
+use App\Models\InspectionPhoto;
+use App\Models\Poliza;
 use App\Models\Quote;
+use App\Models\QuoteAlternative;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
+use Throwable;
 
 /**
- * Servicio de emisión de póliza contra la API externa.
+ * Orquesta la emisión de póliza: arma el request neutro desde el checkout + el
+ * snapshot + la alternativa elegida, lo despacha por el puerto {@see EmissionProvider}
+ * (agnóstico de proveedor) y materializa el resultado del lado de workflow-assistant.
  *
- * ═══════════════════════════════════════════════════════════
- *  SKELETON — Implementar cuando la API esté disponible
- * ═══════════════════════════════════════════════════════════
+ * Frontera de scope:
+ *  - Titular completo (`first_name`/`last_name`, `phone_prefix`/`phone_number`,
+ *    `birthdate`/`sex_id`/`tax_condition_id`) y `has_gnc`: capturados en checkout
+ *    (D1/D2, WS-B) y mapeados acá al request neutro.
+ *  - La materialización en cartera (find-or-create `Risk` + `Poliza`-referencia) se
+ *    delega a {@see PolicyReferenceService} (dominio cartera, separado del acto de
+ *    emitir). Acá solo se transiciona el `Quote` y se dispara esa materialización.
  *
- * Responsabilidades:
- *   1. Construir el payload con datos del quote + snapshot + checkout
- *   2. Llamar al endpoint de la API
- *   3. Parsear la respuesta y persistir la póliza emitida
- *   4. Actualizar el status del quote a 'poliza_emitida'
- *
- * Configuración esperada en config/services.php:
- *   'poliza_api' => [
- *       'base_url' => env('POLIZA_API_BASE_URL'),
- *       'key'      => env('POLIZA_API_KEY'),
- *       'timeout'  => env('POLIZA_API_TIMEOUT', 30),
- *   ]
- *
- * Variables .env requeridas:
- *   POLIZA_API_BASE_URL=https://api.aseguradora.com/v1
- *   POLIZA_API_KEY=secret
- *   POLIZA_API_TIMEOUT=30
+ * El dominio nunca importa una clase Visred: este servicio habla el shape neutro
+ * del puerto. Ver docs/v2/10 §3/§4/§5/§6.
  */
 class PolizaEmisionService
 {
+    public function __construct(
+        private readonly EmissionProvider $emissionProvider,
+        private readonly PolicyReferenceService $policyReference,
+    ) {}
+
     /**
      * Emite la póliza para un checkout completado.
      *
-     * @return array Respuesta de la API (número de póliza, vigencia, etc.)
+     * @return array<string, mixed> Resultado neutro de la emisión.
      *
-     * @throws \Exception Si la API falla o devuelve error
+     * @throws RuntimeException Si falta el quotation_result_id o la emisión falla.
      */
     public function emitir(Quote $quote, CheckoutSession $session): array
     {
-        // ── TODO: Descomentar cuando la API esté disponible ──────────────────
+        // D4.2 — idempotencia: EmitirPoliza reintenta ante excepción. Si el quote ya
+        // fue emitido (el presale existe), NO re-emitir → evita una doble pre-venta
+        // real contra el proveedor. Guard por estado (mínimo viable).
+        // TODO (ventana de carrera): un crash entre emit() y persistEmission() dejaría
+        // el estado sin marcar y el guard no cubriría ese reintento. Cerrar con una
+        // clave de idempotencia (p. ej. lock por quote) si se vuelve un problema real.
+        if ($quote->status === 'poliza_emitida') {
+            return $this->stashedResult($quote);
+        }
 
-        // $payload = $this->buildPayload($quote, $session);
-        // $response = $this->callApi('POST', '/polizas/emitir', $payload);
-        // $this->persistResult($quote, $response);
-        // return $response;
+        $alternative = $this->chosenAlternative($quote, $session);
+        $quotationResultRef = $alternative->providerRef?->external_quote_id;
 
-        // ── Skeleton activo: solo loguea ─────────────────────────────────────
+        if ($quotationResultRef === null || $quotationResultRef === '') {
+            throw new RuntimeException("No hay quotation_result_id para emitir el quote {$quote->id}.");
+        }
 
-        Log::info('PolizaEmisionService: API no implementada aún — skeleton activo', [
+        $result = $this->emissionProvider->emit($this->buildRequest($quote, $session, $alternative));
+
+        if ($result['status'] !== 'SUCCESS' || $result['presale_id'] === null) {
+            // Falla sin presale → excepción para que EmitirPoliza reintente.
+            throw new RuntimeException("La emisión del quote {$quote->id} no devolvió un presale_id.");
+        }
+
+        $this->persistEmission($quote, $alternative, $result);
+
+        if ($result['requires_inspection_after_emission'] === true) {
+            $this->uploadPostEmissionInspection($quote, $result);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Reconstruye el resultado neutro de una emisión ya materializada (guard de
+     * idempotencia): lo arma desde la `Poliza`-referencia en cartera, sin re-emitir
+     * y sin acoplar la referencia al `Quote` (esa vive en su propio dominio).
+     *
+     * @return array<string, mixed>
+     */
+    private function stashedResult(Quote $quote): array
+    {
+        $poliza = Poliza::query()->where('quote_id', $quote->id)->first();
+        $meta = is_array($poliza?->metadata) ? $poliza->metadata : [];
+
+        return [
+            'task_id' => '',
+            'status' => 'SUCCESS',
+            'presale_id' => $poliza?->presale_id !== null ? (int) $poliza->presale_id : null,
+            'proposal_number' => $meta['proposal_number'] ?? null,
+            'policy_number' => $poliza?->numero,
+            'emission_status' => $meta['emission_status'] ?? null,
+            'requires_inspection_after_emission' => $meta['requires_inspection_after_emission'] ?? false,
+            'company_id' => $poliza?->company_id,
+            'raw' => ['source' => 'stash (idempotencia)'],
+        ];
+    }
+
+    /**
+     * Inspección post-emisión, best-effort. La póliza YA está emitida (el presale
+     * existe), así que un fallo acá NO debe relanzar: relanzar reintentaría el
+     * `emit()` → doble emisión. Se loggea para resolución manual. El mapeo de las
+     * fotos al catálogo del proveedor vive en el adapter (puerto agnóstico).
+     *
+     * @param  array<string, mixed>  $result
+     */
+    private function uploadPostEmissionInspection(Quote $quote, array $result): void
+    {
+        $presaleId = $result['presale_id'] ?? null;
+        $companyId = $result['company_id'] ?? null;
+
+        if (! is_int($presaleId) || ! is_string($companyId) || $companyId === '') {
+            Log::warning('PolizaEmisionService: inspección post-emisión sin presale_id/company_id', [
+                'quote_id' => $quote->id,
+            ]);
+
+            return;
+        }
+
+        $photos = $this->confirmedPhotos($quote);
+
+        try {
+            $this->emissionProvider->uploadInspection($presaleId, $companyId, 'auto', $photos);
+        } catch (Throwable $e) {
+            Log::error('PolizaEmisionService: falló la inspección post-emisión (póliza ya emitida)', [
+                'quote_id' => $quote->id,
+                'presale_id' => $presaleId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * La cobertura elegida en checkout (fuente: la sesión; fallback: el quote).
+     */
+    private function chosenAlternative(Quote $quote, CheckoutSession $session): QuoteAlternative
+    {
+        $alternativeId = $session->quote_alternative_id ?? $quote->checkout_alternative_id;
+
+        $alternative = $quote->alternatives()
+            ->with('providerRef')
+            ->where('id', $alternativeId)
+            ->first();
+
+        if (! $alternative instanceof QuoteAlternative) {
+            throw new RuntimeException("El quote {$quote->id} no tiene una alternativa elegida válida.");
+        }
+
+        return $alternative;
+    }
+
+    /**
+     * Quote + CheckoutSession + snapshot + alternativa elegida → request neutro del
+     * puerto de emisión. NO menciona campos de Visred (el adapter traduce). Lo que
+     * el checkout no captura queda fuera (deuda scope checkout).
+     *
+     * @return array<string, mixed>
+     */
+    private function buildRequest(Quote $quote, CheckoutSession $session, QuoteAlternative $alternative): array
+    {
+        $snapshot = $quote->riskSnapshot;
+        $ref = $alternative->providerRef;
+
+        $request = [
+            'quotation_result_ref' => (string) $ref->external_quote_id,
+            'holder' => [
+                'document_number' => $session->dni,
+                'first_name' => $session->first_name,
+                'last_name' => $session->last_name,
+                'birthdate' => $session->birthdate?->format('Y-m-d'),
+                'sex_id' => $session->sex_id,
+                'tax_condition_id' => $session->tax_condition_id,
+                'email' => $session->email,
+                'phone_prefix' => $session->phone_prefix,
+                'phone_number' => $session->phone_number,
+            ],
+            'address' => [
+                'zip_code' => $session->domicilio_cp,
+                'street_name' => $session->domicilio_calle,
+                'street_number' => $session->domicilio_numero,
+            ],
+            'vehicle' => [
+                'plate' => $snapshot?->vehicle->patente,
+                'motor' => $session->vehiculo_nro_motor,
+                'chassis' => $session->vehiculo_nro_chasis,
+                'has_gnc' => $session->has_gnc,
+            ],
+            'payment' => $this->buildPayment($session),
+        ];
+
+        // Descuento elegido en cotización (DiscountPolicy): se manda en la emisión
+        // para que la compañía aplique la misma bonificación (precio cotizado == cobrado).
+        if (is_string($ref->discount_id) && $ref->discount_id !== '') {
+            $request['discount_id'] = $ref->discount_id;
+        }
+
+        // D4.1 — inspección before-emisión: si la cobertura elegida la exige, pasamos
+        // los ingredientes neutros (company_id opaco + product + fotos de dominio).
+        // El adapter arma las inspecciones (lógica Visred) y las embebe en el emit().
+        if ($ref->requires_inspection_before_emission === true && is_string($ref->company_id) && $ref->company_id !== '') {
+            $request['inspection_photos'] = [
+                'company_id' => $ref->company_id,
+                'product_id' => 'auto',
+                'photos' => $this->confirmedPhotos($quote),
+            ];
+        }
+
+        return $request;
+    }
+
+    /**
+     * Fotos de inspección confirmadas del checkout (dominio). Las consume tanto la
+     * inspección before-emisión (embebida en el emit) como la post-emisión.
+     *
+     * @return Collection<int, InspectionPhoto>
+     */
+    private function confirmedPhotos(Quote $quote): Collection
+    {
+        return InspectionPhoto::query()
+            ->where('quote_id', $quote->id)
+            ->where('status', InspectionPhotoStatus::Confirmed)
+            ->get();
+    }
+
+    /**
+     * Pago neutro desde la tarjeta cifrada del checkout. `cc_expiry` ("MM/YY")
+     * se parte en mes/año. El adapter aplana a los campos de Visred.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildPayment(CheckoutSession $session): array
+    {
+        $card = [
+            'brand' => $session->cc_brand,
+            'holder' => $session->cc_holder_name,
+            'number' => $session->cc_pan,
+        ];
+
+        $expiry = (string) $session->cc_expiry;
+        if (str_contains($expiry, '/')) {
+            [$month, $year] = explode('/', $expiry, 2);
+            $card['expire_month'] = (int) $month;
+            $card['expire_year'] = 2000 + (int) $year;
+        }
+
+        return ['method' => 'tarjeta', 'card' => $card];
+    }
+
+    /**
+     * Tras emitir: transiciona el `Quote` y materializa la referencia de póliza en
+     * cartera (find-or-create `Risk` + `Poliza`) vía {@see PolicyReferenceService}.
+     * La referencia vive en su propio dominio (doc 10 §4/§5), no en `Quote.metadata`.
+     *
+     * @param  array<string, mixed>  $result
+     */
+    private function persistEmission(Quote $quote, QuoteAlternative $alternative, array $result): void
+    {
+        $quote->update(['status' => 'poliza_emitida']);
+        $poliza = $this->policyReference->materialize($quote, $alternative, $result);
+
+        Log::info('PolizaEmisionService: emisión materializada en cartera', [
             'quote_id' => $quote->id,
-            'aseguradora' => $quote->alternatives()->find($quote->checkout_alternative_id)?->aseguradora,
+            'risk_id' => $poliza->risk_id,
+            'poliza_id' => $poliza->id,
+            'presale_id' => $result['presale_id'] ?? null,
+            'policy_number' => $result['policy_number'] ?? null,
         ]);
-
-        return ['status' => 'pending_api_implementation'];
     }
 }

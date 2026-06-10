@@ -30,6 +30,7 @@ class Quote extends Model
         'expires_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<RiskSnapshot, $this> */
     public function riskSnapshot(): BelongsTo
     {
         return $this->belongsTo(RiskSnapshot::class);
@@ -40,6 +41,7 @@ class Quote extends Model
         return $this->belongsTo(Conversation::class);
     }
 
+    /** @return HasMany<QuoteAlternative, $this> */
     public function alternatives(): HasMany
     {
         return $this->hasMany(QuoteAlternative::class);

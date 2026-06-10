@@ -21,6 +21,8 @@ const COTIZAR_URL = 'https://visred.test/v1/patrimoniales/vehicles/cotizar/';
 
 const COMPANIES_URL = 'https://visred.test/v1/discovery/companies/';
 
+const DISCOUNT_URL = 'https://visred.test/v1/patrimoniales/vehicles/params/discount*';
+
 beforeEach(function () {
     config()->set('visred.base_url', 'https://visred.test');
     config()->set('visred.sandbox', false);
@@ -92,6 +94,7 @@ function companiesResponse()
 it('cotiza, hace polling y aplana company→covers a alternativas neutras', function () {
     Http::fake([
         COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
         COTIZAR_URL => Http::response(['tasks_list' => [
             ['task_id' => 't-sc', 'company_id' => 'san-cristobal'],
             ['task_id' => 't-sancor', 'company_id' => 'sancor'],
@@ -124,6 +127,7 @@ it('cotiza, hace polling y aplana company→covers a alternativas neutras', func
 it('manda el request con el version_id resuelto y los datos del snapshot', function () {
     Http::fake([
         COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
         COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't1', 'company_id' => 'sancor']]]),
         'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [coverResult(1, 'rc', 'RC', 1.0)]),
     ]);
@@ -140,9 +144,130 @@ it('manda el request con el version_id resuelto y los datos del snapshot', funct
         && $r['person_holder']['document_number'] === '30111222');
 });
 
+it('manda insured_amount_fuel (default configurable) cuando el equipo es GNC', function () {
+    config()->set('visred.default_gnc_amount', 1_500_000);
+
+    Http::fake([
+        COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
+        COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't1', 'company_id' => 'sancor']]]),
+        'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [coverResult(1, 'rc', 'RC', 1.0)]),
+    ]);
+
+    // GNC: Visred exige el monto del equipo. No se captura en cotización → default.
+    app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('T_GNC', ['combustible' => 'gnc']));
+    Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL
+        && $r['vehicle']['fuel_type_id'] === 'gnc'
+        && $r['vehicle']['insured_amount_fuel'] === 1_500_000);
+
+    // No-GNC: el campo NO se manda (Visred lo exige solo para 'gnc').
+    app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('T_NAFTA', ['combustible' => 'nafta']));
+    Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL
+        && $r['vehicle']['fuel_type_id'] === 'nafta'
+        && ! isset($r['vehicle']['insured_amount_fuel']));
+});
+
+it('manda el DNI placeholder configurable cuando el cliente aún no lo cargó', function () {
+    config()->set('visred.default_holder_dni', '30000000');
+
+    Http::fake([
+        COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
+        COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't1', 'company_id' => 'sancor']]]),
+        'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [coverResult(1, 'rc', 'RC', 1.0)]),
+    ]);
+
+    // El DNI real se captura recién en checkout. En cotización mandamos un placeholder
+    // para no perder compañías que exigen person_holder (San Cristóbal/Galicia); se
+    // sobrescribe con el real al emitir. Ver docs/v2/08 §2.2.
+    app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('TOKEN_X', ['dni' => null]));
+
+    Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL
+        && $r['person_holder']['document_number'] === '30000000');
+});
+
+it('omite person_holder si ni el snapshot ni el config traen DNI (evita el 400)', function () {
+    config()->set('visred.default_holder_dni', '');
+
+    Http::fake([
+        COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
+        COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't1', 'company_id' => 'sancor']]]),
+        'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [coverResult(1, 'rc', 'RC', 1.0)]),
+    ]);
+
+    app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('TOKEN_X', ['dni' => null]));
+
+    Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL && ! isset($r['person_holder']));
+});
+
+it('mapea el combustible de dominio al fuel_type_id real del catálogo (nafta→nafta, diésel→diesel)', function () {
+    Http::fake([
+        COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
+        COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't1', 'company_id' => 'sancor']]]),
+        'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [coverResult(1, 'rc', 'RC', 1.0)]),
+    ]);
+
+    app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('T1', ['combustible' => 'nafta']));
+    Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL && $r['vehicle']['fuel_type_id'] === 'nafta');
+
+    app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('T2', ['combustible' => 'Diésel']));
+    Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL && $r['vehicle']['fuel_type_id'] === 'diesel');
+});
+
+it('omite fuel_type_id cuando el combustible no se reconoce (sin asumir uno)', function () {
+    Http::fake([
+        COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
+        COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't1', 'company_id' => 'sancor']]]),
+        'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [coverResult(1, 'rc', 'RC', 1.0)]),
+    ]);
+
+    app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('T3', ['combustible' => 'magia']));
+
+    Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL && ! isset($r['vehicle']['fuel_type_id']));
+});
+
+it('aplica el máximo descuento dentro del tope del productor y persiste el discount_id', function () {
+    config()->set('visred.max_discount_percent', ['default' => 20]); // tope del productor (sancor → default)
+
+    Http::fake([
+        COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
+        COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't1', 'company_id' => 'sancor']]]),
+        'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [coverResult(1, 'rc', 'RC', 1000.0)]),
+        'https://visred.test/v1/patrimoniales/vehicles/params/discount*' => Http::response([
+            ['value' => '0', 'discount' => 0, 'description' => 'NO BONIFICA'],
+            ['value' => 'P', 'discount' => 10, 'description' => 'Bonificación'],
+            ['value' => '5', 'discount' => 15, 'description' => 'Bonificación'],
+            ['value' => 'O', 'discount' => 30, 'description' => 'Bonificación'], // sobre el tope → se ignora
+        ]),
+    ]);
+
+    $alt = app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken())['parsed_alternatives'][0];
+    expect($alt['precio'])->toBe(850.0)          // 1000 * (1 - 15/100): 15% es el máx ≤ 20%
+        ->and($alt['discount_id'])->toBe('5');   // NO el 30% (supera el tope)
+});
+
+it('sin bonificaciones de la compañía: el fee queda sin tocar y discount_id nulo', function () {
+    Http::fake([
+        COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
+        COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't1', 'company_id' => 'sancor']]]),
+        'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [coverResult(1, 'rc', 'RC', 1000.0)]),
+        'https://visred.test/v1/patrimoniales/vehicles/params/discount*' => Http::response([]),
+    ]);
+
+    $alt = app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken())['parsed_alternatives'][0];
+    expect($alt['precio'])->toBe(1000.0)
+        ->and($alt['discount_id'])->toBeNull();
+});
+
 it('es tolerante a FAILURE parcial: devuelve las companies que resolvieron', function () {
     Http::fake([
         COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
         COTIZAR_URL => Http::response(['tasks_list' => [
             ['task_id' => 't-ok', 'company_id' => 'sancor'], ['task_id' => 't-fail', 'company_id' => 'rus'],
         ]]),
@@ -178,22 +303,23 @@ it('falla si no hay version_id resuelto en el store', function () {
         ->toThrow(RuntimeException::class);
 });
 
-it('filtra coberturas placeholder (sin nombre) e inactivas: solo presentables y vigentes', function () {
+it('descarta placeholders (sin nombre) pero conserva las active=false vendibles', function () {
     Http::fake([
         COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
         COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't-rus', 'company_id' => 'rus']]]),
         'https://visred.test/v1/tasks/t-rus/' => taskSuccess('rus', [
-            coverResult(1, 'sigma', 'Sigma', 109135.0),                          // presentable + vigente
-            coverResult(2, '', '', 114419.0, active: false),                     // placeholder (sin nombre)
-            coverResult(3, 't37', 'T37 Todo Riesgo', 117730.0, active: false),   // discontinuada (active=false)
+            coverResult(1, 'sigma', 'Sigma', 109135.0),                          // presentable
+            coverResult(2, '', '', 114419.0, active: false),                     // placeholder (sin nombre) → se descarta
+            coverResult(3, 't37', 'T37 Todo Riesgo', 117730.0, active: false),   // active=false pero con nombre/fee → vendible, se conserva
         ]),
     ]);
 
     $result = app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken());
 
-    expect($result['parsed_alternatives'])->toHaveCount(1);
-    expect($result['parsed_alternatives'][0]['titulo'])->toBe('Sigma')
-        ->and($result['parsed_alternatives'][0]['aseguradora'])->toBe('Rio Uruguay'); // company_id → nombre
+    expect($result['parsed_alternatives'])->toHaveCount(2);
+    expect(array_column($result['parsed_alternatives'], 'titulo'))->toBe(['Sigma', 'T37 Todo Riesgo']);
+    expect($result['parsed_alternatives'][0]['aseguradora'])->toBe('Rio Uruguay'); // company_id → nombre
 });
 
 it('E2E: ApiQuoteResolution con Visred real persiste alternativas + provider ref', function () {
@@ -201,6 +327,7 @@ it('E2E: ApiQuoteResolution con Visred real persiste alternativas + provider ref
 
     Http::fake([
         COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
         COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't-sancor', 'company_id' => 'sancor']]]),
         'https://visred.test/v1/tasks/t-sancor/' => taskSuccess('sancor', [
             coverResult(9001, 'todo-riesgo-c', 'Todo Riesgo C', 78450.0),
