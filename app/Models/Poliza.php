@@ -29,7 +29,6 @@ class Poliza extends Model
         'quote_id',
         'estado',
         'numero',
-        'presale_id',
         'company',
         'company_id',
         'product_id',

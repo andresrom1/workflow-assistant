@@ -24,12 +24,18 @@ interface EmissionProvider
      * Visred). El adapter la mapea a `PreSaleVehicleRequest`. El titular se asume
      * ya completo (capturar lo faltante es scope checkout).
      *
-     * Inspección before-emisión (D4.1): cuando la cobertura elegida la exige, el
-     * dominio NO arma las inspecciones (eso requiere conocimiento del proveedor:
-     * tipos requeridos, mapeo de `photo_key`, base64). Pasa los ingredientes neutros
-     * en `inspection_photos` (company_id opaco + product_id + fotos de dominio) y el
-     * adapter las construye y embebe en el `emit()`. `inspections` (pre-armadas) sigue
-     * soportado para llamadas que ya las tengan.
+     * Inspección (D4.1): el dominio NO arma las inspecciones (eso requiere
+     * conocimiento del proveedor: tipos requeridos, mapeo de `photo_key`, base64).
+     * Pasa los ingredientes neutros en `inspection_photos` (company_id opaco +
+     * product_id + fotos de dominio + `requires_before`) y el adapter resuelve TODO
+     * el ciclo de inspección INTERNAMENTE: si `requires_before` las embebe en el
+     * `emit()`; si la emisión exige inspección post-emisión, la sube él mismo (el
+     * `presale_id` no sale del adapter). `inspections` (pre-armadas) sigue soportado
+     * para llamadas que ya las tengan.
+     *
+     * Documentos: el adapter captura los documentos oficiales dentro de la ventana
+     * de emisión (con el `presale_id` vivo, internamente) y los devuelve como blobs
+     * NEUTROS en `documents` para que el dominio los persista. No expone `presale_id`.
      *
      * @param  array{
      *     quotation_result_ref: string,
@@ -38,31 +44,20 @@ interface EmissionProvider
      *     vehicle: array<string, mixed>,
      *     payment?: array<string, mixed>,
      *     inspections?: list<array{type_id: string, image_base64: string}>,
-     *     inspection_photos?: array{company_id: string, product_id: string, photos: iterable<InspectionPhoto>},
+     *     inspection_photos?: array{company_id: string, product_id: string, requires_before: bool, photos: iterable<InspectionPhoto>},
      *     discount_id?: string|null
      * }  $request
      * @return array{
      *     task_id: string,
      *     status: string,
-     *     presale_id: int|null,
      *     proposal_number: string|null,
      *     policy_number: string|null,
      *     emission_status: string|null,
      *     requires_inspection_after_emission: bool,
      *     company_id: string|null,
+     *     documents: list<array{kind: string, filename: string, mime: string, contents: string}>,
      *     raw: array<string, mixed>
      * }
      */
     public function emit(array $request): array;
-
-    /**
-     * Sube la inspección post-emisión cuando la compañía la exige
-     * (`requires_inspection_after_emission`). Recibe las fotos de dominio del
-     * checkout; el adapter consulta los tipos requeridos, las codifica y las
-     * traduce al contrato del proveedor. NO escribe en base de datos.
-     *
-     * @param  iterable<InspectionPhoto>  $photos
-     * @return array<string, mixed>
-     */
-    public function uploadInspection(int $presaleId, string $companyId, string $productId, iterable $photos): array;
 }

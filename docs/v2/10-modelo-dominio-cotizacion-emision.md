@@ -68,7 +68,7 @@ Conceptuales (nombres MANGO). Implementación: en Fase 1 se conserva el **array-
 
 **`EmissionRequest`**: `selected_provider_result_ref` (la cobertura elegida), `holder` (datos del titular), `address`, `vehicle` (patente/motor/chasis), `payment`, `inspection_photos[]`.
 
-**`EmissionResult`**: `policy_number`, `proposal_number`, `presale_id`, `company`, `product`, `status`, `requires_inspection_after_emission`, `pending_tasks[]` (p.ej. `download-poliza`).
+**`EmissionResult`**: `policy_number`, `proposal_number`, `company`, `product`, `status`, `requires_inspection_after_emission`, `documents[]` (blobs neutros capturados en la emisión: `{kind, filename, mime, contents}`). **No expone `presale_id`** — es un dato de Visred que se usa y muere **dentro** del adapter (inspección post-emisión + captura de documentos).
 
 ---
 
@@ -76,9 +76,9 @@ Conceptuales (nombres MANGO). Implementación: en Fase 1 se conserva el **array-
 
 ```
 risk_snapshot        Risk                       referencia de póliza            [ Visred = SoR ]
-(inmutable,     →    (identidad estable    →    (mínima: presale_id,       ⇢   estado, cobertura,
- por cotización)     + estado actual)            policy_number, company,        endosos, documentos
-                                                 product)                       (on-demand)
+(inmutable,     →    (identidad estable    →    (mínima: policy_number,    ⇢   estado, cobertura,
+ por cotización)     + estado actual)            company_id, product;           endosos, documentos
+                                                 sin presale_id)                (on-demand)
 ```
 
 | Entidad | Mutabilidad | Quién la posee | Qué guarda |
@@ -102,13 +102,15 @@ risk_snapshot        Risk                       referencia de póliza           
 
 ## 5. Referencia de póliza + cartera on-demand
 
-**Qué persistimos al emitir:** `presale_id`, `policy_number`, `company_id`, `product_id`, ligados a `Risk` + `Quote` (`Quote.status='poliza_emitida'`). Nada más del contrato.
+**Qué persistimos al emitir:** `policy_number`, `company_id`, `product_id`, ligados a `Risk` + `Quote` (`Quote.status='poliza_emitida'`). **NO persistimos `presale_id`** — es un dato de Visred acotado al ciclo de emisión que **no sale del adapter**. Nada más del contrato.
+
+> **Corrección (2026-06-15).** Originalmente `presale_id` se eligió como la referencia durable persistida en `polizas` (decisión (b) abajo) y como clave de cache/descarga de documentos. Es un **error**: `presale_id` solo vive durante la emisión. Se revirtió — la referencia durable es `policy_number`; ver Bitácora del ROADMAP.
 
 **Cartera (lectura frecuente) = on-demand con cache-aside de TTL corto:**
-- El **backend** (único que habla con Visred) cachea el estado/resumen de póliza por `presale_id` (Laravel `Cache`, TTL ~**2h** configurable).
+- El **backend** (único que habla con Visred) cachea el estado/resumen de póliza por `policy_number` (Laravel `Cache`, TTL ~**2h** configurable).
 - App abre → sirve de cache; TTL vence → refresca desde Visred; se **invalida** en pull-to-refresh o tras una acción que cambie la póliza.
 - Es **cache de performance, no proyección autoritativa** (la fuente sigue siendo Visred; dentro del TTL se tolera leve desactualización a cambio de no martillar la API).
-- **Documentos (PDF):** NO se cachean — se traen frescos al descargar (`POST /v1/documents/`), siempre la última versión.
+- **Documentos (PDF):** se **capturan al emitir** —dentro de `emit()`, con el `presale_id` vivo (`POST /v1/documents/` síncrono → `result.url` pre-firmada → bytes)— y se **persisten en R2** (`PolicyDocument`). Como el `presale_id` muere con la emisión, NO hay re-descarga fresca por handle: es un **snapshot** (rompe a propósito el "siempre la última versión"). El concepto de **túnel** (pasar bytes sin persistir) queda **caduco**. Lo post-emisión —renovaciones (ocurren en la compañía, **sin** Visred) y endosos— entra por **carga manual del admin** (`source=admin_upload`, deuda admin panel). `visible_to_client` decide qué ve mango-mobile; se sirve con URL R2 firmada y expirable.
 
 ### Decisión (b) — fate de la tabla `polizas` (modelo compartido con mango-mobile)
 

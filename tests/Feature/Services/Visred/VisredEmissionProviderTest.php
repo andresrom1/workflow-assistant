@@ -87,7 +87,7 @@ it('emite, hace polling y parsea el APIBasePreSaleResultDTO', function () {
     $result = app(VisredEmissionProvider::class)->emit(neutralRequest());
 
     expect($result['status'])->toBe('SUCCESS')
-        ->and($result['presale_id'])->toBe(55123)
+        ->and($result)->not->toHaveKey('presale_id') // dato de Visred: no sale del adapter
         ->and($result['proposal_number'])->toBe('PROP-9')
         ->and($result['policy_number'])->toBe('POL-9')
         ->and($result['emission_status'])->toBe('emitida')
@@ -176,12 +176,67 @@ it('before-emisión: arma las inspecciones desde las fotos (R2→base64) y las e
         'inspection_photos' => [
             'company_id' => 'sancor',
             'product_id' => 'auto',
+            'requires_before' => true,
             'photos' => [$photo],
         ],
     ]));
 
     Http::assertSent(fn (Request $r) => $r->url() === EMITIR_URL
         && isset($r['inspections'])
+        && $r['inspections'][0]['id'] === 'foto-frontal'
+        && $r['inspections'][0]['document_base64'] === base64_encode('BYTESFRENTE'));
+});
+
+it('captura los documentos oficiales al emitir y los devuelve como blobs neutros (presale no sale)', function () {
+    config()->set('visred.document_task_types', ['download-poliza' => 'poliza']);
+
+    Http::fake([
+        EMITIR_URL => Http::response(['task_id' => 't-doc', 'company_id' => 'sancor']),
+        'https://visred.test/v1/tasks/t-doc/' => taskPresaleSuccess(['presale_id' => 77, 'policy_number' => 'POL-77']),
+        'https://visred.test/v1/documents/' => Http::response(['result' => ['url' => 'https://files.visred.test/poliza-77.pdf']]),
+        'https://files.visred.test/poliza-77.pdf' => Http::response('PDFBYTES'),
+    ]);
+
+    $result = app(VisredEmissionProvider::class)->emit(neutralRequest());
+
+    expect($result)->not->toHaveKey('presale_id')
+        ->and($result['documents'])->toHaveCount(1)
+        ->and($result['documents'][0]['kind'])->toBe('poliza')
+        ->and($result['documents'][0]['mime'])->toBe('application/pdf')
+        ->and($result['documents'][0]['contents'])->toBe('PDFBYTES');
+
+    Http::assertSent(fn (Request $r) => $r->url() === 'https://visred.test/v1/documents/'
+        && $r['presale_id'] === 77
+        && $r['task_type_id'] === 'download-poliza');
+});
+
+it('sube la inspección post-emisión internamente con el presale cuando la compañía la exige', function () {
+    Storage::fake('r2');
+    Storage::disk('r2')->put('p/frente.jpg', 'BYTESFRENTE');
+    config()->set('visred.inspection_photo_map', ['frente' => 'foto-frontal']);
+
+    Http::fake([
+        EMITIR_URL => Http::response(['task_id' => 't-after', 'company_id' => 'sancor']),
+        'https://visred.test/v1/tasks/t-after/' => taskPresaleSuccess([
+            'presale_id' => 88,
+            'require_inspection_after_emission' => true,
+        ]),
+        'https://visred.test/v1/patrimoniales/vehicles/params/inspection-types/*' => Http::response([['id' => 'foto-frontal']]),
+        'https://visred.test/v1/patrimoniales/vehicles/emitir/88/inspeccion/' => Http::response(['status' => 'OK']),
+    ]);
+
+    $photo = new InspectionPhoto(['photo_key' => 'frente', 'storage_path' => 'p/frente.jpg']);
+
+    app(VisredEmissionProvider::class)->emit(neutralRequest([
+        'inspection_photos' => [
+            'company_id' => 'sancor',
+            'product_id' => 'auto',
+            'requires_before' => false,
+            'photos' => [$photo],
+        ],
+    ]));
+
+    Http::assertSent(fn (Request $r) => $r->url() === 'https://visred.test/v1/patrimoniales/vehicles/emitir/88/inspeccion/'
         && $r['inspections'][0]['id'] === 'foto-frontal'
         && $r['inspections'][0]['document_base64'] === base64_encode('BYTESFRENTE'));
 });
@@ -194,8 +249,7 @@ it('respeta el budget: si la task nunca termina, corta y devuelve FAILURE', func
 
     $result = app(VisredEmissionProvider::class)->emit(neutralRequest());
 
-    expect($result['status'])->toBe('FAILURE')
-        ->and($result['presale_id'])->toBeNull();
+    expect($result['status'])->toBe('FAILURE');
 
     // budget=12, interval=2 → no más de 6 sleeps; no loop infinito.
     Sleep::assertSleptTimes(6);
@@ -209,8 +263,7 @@ it('devuelve FAILURE si la task de emisión termina en FAILURE', function () {
 
     $result = app(VisredEmissionProvider::class)->emit(neutralRequest());
 
-    expect($result['status'])->toBe('FAILURE')
-        ->and($result['presale_id'])->toBeNull();
+    expect($result['status'])->toBe('FAILURE');
 });
 
 it('propaga VisredApiException ante un 400 de emitir', function () {

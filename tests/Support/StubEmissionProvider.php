@@ -18,18 +18,13 @@ class StubEmissionProvider implements EmissionProvider
         return [
             'task_id' => 'stub-emit-task',
             'status' => 'SUCCESS',
-            'presale_id' => 999001,
             'proposal_number' => 'PROP-STUB-1',
             'policy_number' => 'POL-STUB-1',
             'emission_status' => 'emitida',
             'requires_inspection_after_emission' => false,
             'company_id' => 'stub-company',
+            'documents' => [],
             'raw' => ['source' => 'StubEmissionProvider'],
         ];
-    }
-
-    public function uploadInspection(int $presaleId, string $companyId, string $productId, iterable $photos): array
-    {
-        return ['status' => 'SKIPPED', 'source' => 'StubEmissionProvider'];
     }
 }

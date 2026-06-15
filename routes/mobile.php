@@ -43,6 +43,8 @@ Route::middleware('auth:mobile')->group(function () {
     // Pólizas — bloque PAS + propias + riesgos compartidos (Home) y detalle.
     Route::get('/polizas', [PolizasController::class, 'index']);
     Route::get('/polizas/{id}', [PolizasController::class, 'show'])->whereNumber('id');
+    // Documentos oficiales persistidos en R2 (URL firmada). La app no habla con Visred.
+    Route::get('/polizas/{id}/documentos', [PolizasController::class, 'documentos'])->whereNumber('id');
 
     // Siniestro — aviso al PAS (spec v2 §4.2). Rate-limit liviano de
     // respaldo: el lock real de 48hs vive en el cliente.

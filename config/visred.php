@@ -108,6 +108,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Documentos oficiales a capturar al emitir
+    |--------------------------------------------------------------------------
+    |
+    | Mapa `task_type_id` (Visred) → `kind` (dominio) de los documentos que el
+    | adapter descarga dentro de `emit()` (con el `presale_id` vivo) y persiste en
+    | R2. El catálogo de task-type es global (no por póliza); que una compañía/
+    | producto no tenga uno disponible se maneja best-effort (se loggea, no rompe).
+    | `download-poliza` es el documento base; sumar `download-cupon`/`-certificate`/
+    | etc. acá cuando producto lo pida. Ver hallazgos-visred-task-type.md.
+    |
+    */
+    'document_task_types' => [
+        'download-poliza' => 'poliza',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Catálogo de condiciones fiscales (D1 — titular)
     |--------------------------------------------------------------------------
     |

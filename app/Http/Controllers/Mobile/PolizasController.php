@@ -7,12 +7,14 @@ use App\Exceptions\Api\ApiException;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\MobileAccount;
+use App\Models\PolicyDocument;
 use App\Models\Poliza;
 use App\Models\Risk;
 use App\Models\SharedRisk;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Endpoints de pólizas para la Home y el detalle de cada card.
@@ -68,6 +70,43 @@ class PolizasController extends Controller
         }
 
         return response()->json($this->polizaPayload($poliza));
+    }
+
+    /**
+     * GET /polizas/{id}/documentos
+     *
+     * Documentos oficiales de la póliza visibles para el cliente, servidos desde R2
+     * con URL firmada y expirable (son datos personales). Mismo authz que el detalle
+     * (titular o riesgo compartido). La app NUNCA habla con Visred: los documentos ya
+     * están persistidos en R2 (capturados al emitir o subidos por el admin).
+     */
+    public function documentos(Request $request, int $id): JsonResponse
+    {
+        /** @var MobileAccount $account */
+        $account = $request->user();
+
+        $poliza = Poliza::with('risk')->find($id);
+
+        if (! $poliza) {
+            throw new ApiException('No encontramos esa póliza.', 'POLIZA_NOT_FOUND', 404);
+        }
+
+        if (! $this->canAccessRisk($account, $poliza->risk)) {
+            throw new ApiException('No tenés acceso a esa póliza.', 'POLIZA_FORBIDDEN', 403);
+        }
+
+        $documentos = PolicyDocument::query()
+            ->where('poliza_id', $poliza->id)
+            ->where('visible_to_client', true)
+            ->orderBy('kind')
+            ->get()
+            ->map(fn (PolicyDocument $doc): array => [
+                'kind' => $doc->kind,
+                'url' => Storage::disk('r2')->temporaryUrl($doc->storage_path, now()->addMinutes(15)),
+                'captured_at' => $doc->captured_at?->toIso8601String(),
+            ])->all();
+
+        return response()->json(['documentos' => $documentos]);
     }
 
     /** @return array<int, array<string, mixed>> */

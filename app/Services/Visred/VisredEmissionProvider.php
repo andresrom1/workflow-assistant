@@ -3,9 +3,9 @@
 namespace App\Services\Visred;
 
 use App\Contracts\EmissionProvider;
-use App\Models\InspectionPhoto;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
+use Throwable;
 
 /**
  * Adapter de emisión Visred (implementa el puerto {@see EmissionProvider}).
@@ -25,19 +25,24 @@ class VisredEmissionProvider implements EmissionProvider
     public function __construct(
         private readonly VisredClient $client,
         private readonly VisredInspectionService $inspection,
+        private readonly VisredDocumentService $documents,
     ) {}
 
     /**
+     * Emite, hace polling y aplana el resultado. Dentro de esta MISMA llamada, con
+     * el `presale_id` vivo (y sin que salga del adapter), sube la inspección
+     * post-emisión si la compañía la exige y captura los documentos oficiales.
+     *
      * @param  array<string, mixed>  $request
      * @return array{
      *     task_id: string,
      *     status: string,
-     *     presale_id: int|null,
      *     proposal_number: string|null,
      *     policy_number: string|null,
      *     emission_status: string|null,
      *     requires_inspection_after_emission: bool,
      *     company_id: string|null,
+     *     documents: list<array{kind: string, filename: string, mime: string, contents: string}>,
      *     raw: array<string, mixed>
      * }
      */
@@ -47,27 +52,56 @@ class VisredEmissionProvider implements EmissionProvider
         $taskId = is_scalar($taskItem['task_id'] ?? null) ? (string) $taskItem['task_id'] : '';
 
         $result = $taskId === '' ? null : $this->pollEmission($taskId);
+        $neutral = $this->mapResult($taskId, $taskItem, $result);
 
-        return $this->mapResult($taskId, $taskItem, $result);
+        $presaleId = is_scalar($result['presale_id'] ?? null) ? (int) $result['presale_id'] : null;
+        if ($presaleId === null) {
+            return $neutral; // FAILURE: sin presale no hay inspección ni documentos.
+        }
+
+        if ($neutral['requires_inspection_after_emission'] === true) {
+            $this->uploadPostEmissionInspection($presaleId, $request);
+        }
+
+        $neutral['documents'] = $this->documents->capture($presaleId, 'auto');
+
+        return $neutral;
     }
 
     /**
-     * Inspección post-emisión: arma las inspecciones desde las fotos R2 (vía el
-     * servicio de inspección) y las sube al endpoint del presale. Delega toda la
-     * traducción Visred (tipos requeridos, base64, mapeo de `photo_key`).
+     * Inspección post-emisión (best-effort, interna). La póliza YA está emitida, así
+     * que un fallo NO debe relanzar (relanzar reintentaría el `emit()` → doble
+     * emisión); se loggea para resolución manual. Toma los ingredientes neutros del
+     * `inspection_photos` del request y delega la traducción Visred al servicio.
      *
-     * @param  iterable<InspectionPhoto>  $photos
-     * @return array<string, mixed>
+     * @param  array<string, mixed>  $request
      */
-    public function uploadInspection(int $presaleId, string $companyId, string $productId, iterable $photos): array
+    private function uploadPostEmissionInspection(int $presaleId, array $request): void
     {
-        $inspections = $this->inspection->buildInspections($companyId, $productId, $photos);
-
-        if ($inspections === []) {
-            return ['status' => 'SKIPPED', 'reason' => 'sin_inspecciones_resueltas'];
+        $block = $request['inspection_photos'] ?? null;
+        if (! is_array($block)) {
+            return;
         }
 
-        return $this->inspection->submitPostEmission($presaleId, $inspections);
+        $companyId = is_scalar($block['company_id'] ?? null) ? (string) $block['company_id'] : '';
+        $productId = is_scalar($block['product_id'] ?? null) ? (string) $block['product_id'] : 'auto';
+        $photos = $block['photos'] ?? null;
+
+        if ($companyId === '' || ! is_iterable($photos)) {
+            return;
+        }
+
+        try {
+            $inspections = $this->inspection->buildInspections($companyId, $productId, $photos);
+            if ($inspections !== []) {
+                $this->inspection->submitPostEmission($presaleId, $inspections);
+            }
+        } catch (Throwable $e) {
+            Log::error('[VisredEmission] inspección post-emisión falló (póliza ya emitida)', [
+                'presale_id' => $presaleId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -100,12 +134,16 @@ class VisredEmissionProvider implements EmissionProvider
         if (is_array($inspections) && $inspections !== []) {
             $payload['inspections'] = $this->buildInspections($inspections);
         } else {
-            // Before-emisión (D4.1): el dominio pasó los ingredientes neutros; acá
-            // se construyen las inspecciones (tipos requeridos + R2→base64 + mapeo
-            // de photo_key, traducción Visred) y se embeben en el emit().
-            $built = $this->buildBeforeEmissionInspections($request['inspection_photos'] ?? null);
-            if ($built !== []) {
-                $payload['inspections'] = $built;
+            // Before-emisión (D4.1): el dominio pasa los ingredientes neutros y marca
+            // `requires_before`. Solo si la cobertura la exige se embeben acá (tipos
+            // requeridos + R2→base64 + mapeo de photo_key, traducción Visred). Las
+            // mismas fotos sirven para la inspección post-emisión (ver emit()).
+            $block = $request['inspection_photos'] ?? null;
+            if (is_array($block) && ($block['requires_before'] ?? false) === true) {
+                $built = $this->buildBeforeEmissionInspections($block);
+                if ($built !== []) {
+                    $payload['inspections'] = $built;
+                }
             }
         }
 
@@ -286,19 +324,22 @@ class VisredEmissionProvider implements EmissionProvider
     }
 
     /**
-     * `APIBasePreSaleResultDTO` → shape neutra de MANGO. SUCCESS sii hay `presale_id`.
+     * `APIBasePreSaleResultDTO` → shape neutra de MANGO. SUCCESS sii Visred devolvió
+     * `presale_id`; ese `presale_id` se usa internamente (inspección/documentos) y NO
+     * se expone en la shape neutra (es un dato de Visred). `documents` la rellena
+     * `emit()` tras la captura.
      *
      * @param  array<string, mixed>  $taskItem
      * @param  array<string, mixed>|null  $result
      * @return array{
      *     task_id: string,
      *     status: string,
-     *     presale_id: int|null,
      *     proposal_number: string|null,
      *     policy_number: string|null,
      *     emission_status: string|null,
      *     requires_inspection_after_emission: bool,
      *     company_id: string|null,
+     *     documents: list<array{kind: string, filename: string, mime: string, contents: string}>,
      *     raw: array<string, mixed>
      * }
      */
@@ -309,13 +350,13 @@ class VisredEmissionProvider implements EmissionProvider
         return [
             'task_id' => $taskId,
             'status' => $presaleId !== null ? 'SUCCESS' : 'FAILURE',
-            'presale_id' => $presaleId,
             'proposal_number' => is_scalar($result['proposal_number'] ?? null) ? (string) $result['proposal_number'] : null,
             'policy_number' => is_scalar($result['policy_number'] ?? null) ? (string) $result['policy_number'] : null,
             'emission_status' => is_scalar($result['status'] ?? null) ? (string) $result['status'] : null,
             'requires_inspection_after_emission' => ($result['require_inspection_after_emission'] ?? false) === true,
             // company_id sale del TaskItem de emitir (lo usa la inspección post-emisión).
             'company_id' => is_scalar($taskItem['company_id'] ?? null) ? (string) $taskItem['company_id'] : null,
+            'documents' => [],
             'raw' => ['source' => 'Visred', 'emitir' => $taskItem, 'task' => $result],
         ];
     }

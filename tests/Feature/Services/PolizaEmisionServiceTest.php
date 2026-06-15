@@ -7,6 +7,7 @@ use App\Enums\RiskType;
 use App\Models\CheckoutSession;
 use App\Models\Conversation;
 use App\Models\InspectionPhoto;
+use App\Models\PolicyDocument;
 use App\Models\Poliza;
 use App\Models\Quote;
 use App\Models\Risk;
@@ -14,6 +15,7 @@ use App\Models\RiskSnapshot;
 use App\Services\PolizaEmisionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
@@ -101,11 +103,11 @@ function emittableQuote(bool $withRef = true, bool $requiresInspectionBefore = f
 it('emite con el puerto, marca poliza_emitida y materializa la referencia en cartera', function () {
     [$quote, $session, $snapshot] = emittableQuote();
 
-    // TestCase bindea StubEmissionProvider por defecto (presale 999001).
+    // TestCase bindea StubEmissionProvider por defecto.
     $result = app(PolizaEmisionService::class)->emitir($quote, $session);
 
     expect($result['status'])->toBe('SUCCESS')
-        ->and($result['presale_id'])->toBe(999001);
+        ->and($result)->not->toHaveKey('presale_id'); // presale_id no sale del adapter
 
     expect($quote->refresh()->status)->toBe('poliza_emitida');
 
@@ -113,8 +115,8 @@ it('emite con el puerto, marca poliza_emitida y materializa la referencia en car
     expect($quote->metadata['emission'] ?? null)->toBeNull();
 
     $poliza = Poliza::where('quote_id', $quote->id)->firstOrFail();
-    expect($poliza->presale_id)->toBe('999001')
-        ->and($poliza->numero)->toBe('POL-STUB-1')
+    // La referencia durable es el número de póliza (sin presale_id).
+    expect($poliza->numero)->toBe('POL-STUB-1')
         ->and($poliza->company_id)->toBe('stub-company')
         ->and($poliza->product_id)->toBe('auto');
 
@@ -159,13 +161,8 @@ it('arma el request neutro desde checkout + snapshot + la ref elegida', function
                 'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 1,
                 'proposal_number' => 'PR', 'policy_number' => 'P',
                 'emission_status' => 'emitida', 'requires_inspection_after_emission' => false,
-                'company_id' => 'sancor', 'raw' => [],
+                'company_id' => 'sancor', 'documents' => [], 'raw' => [],
             ];
-        }
-
-        public function uploadInspection(int $presaleId, string $companyId, string $productId, iterable $photos): array
-        {
-            return ['status' => 'SKIPPED'];
         }
     };
     app()->instance(EmissionProvider::class, $spy);
@@ -203,54 +200,42 @@ it('lanza si la alternativa elegida no tiene quotation_result_id', function () {
         ->toThrow(RuntimeException::class);
 });
 
-it('dispara la inspección post-emisión cuando la compañía la exige', function () {
+it('persiste en cartera los documentos capturados al emitir (visibles al cliente)', function () {
+    Storage::fake('r2');
     [$quote, $session] = emittableQuote();
 
-    foreach (['frente', 'atras'] as $key) {
-        InspectionPhoto::create([
-            'quote_id' => $quote->id,
-            'photo_key' => $key,
-            'storage_path' => "p/{$key}.jpg",
-            'storage_url' => 'http://r2/'.$key,
-            'status' => InspectionPhotoStatus::Confirmed,
-        ]);
-    }
-
-    $spy = new class implements EmissionProvider
+    // La inspección post-emisión es ahora interna del adapter (ver
+    // VisredEmissionProviderTest); el dominio solo persiste los documentos que el
+    // adapter capturó (con el presale vivo, sin que salga de él).
+    app()->instance(EmissionProvider::class, new class implements EmissionProvider
     {
-        /** @var array<string, mixed> */
-        public array $uploadArgs = [];
-
         public function emit(array $request): array
         {
             return [
-                'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 42,
+                'task_id' => 't', 'status' => 'SUCCESS',
                 'proposal_number' => 'PR', 'policy_number' => 'P', 'emission_status' => 'emitida',
-                'requires_inspection_after_emission' => true, 'company_id' => 'sancor', 'raw' => [],
+                'requires_inspection_after_emission' => false, 'company_id' => 'sancor',
+                'documents' => [
+                    ['kind' => 'poliza', 'filename' => 'poliza.pdf', 'mime' => 'application/pdf', 'contents' => 'PDFBYTES'],
+                ],
+                'raw' => [],
             ];
         }
-
-        public function uploadInspection(int $presaleId, string $companyId, string $productId, iterable $photos): array
-        {
-            $this->uploadArgs = [
-                'presale' => $presaleId, 'company' => $companyId,
-                'product' => $productId, 'count' => count(iterator_to_array($photos)),
-            ];
-
-            return ['status' => 'OK'];
-        }
-    };
-    app()->instance(EmissionProvider::class, $spy);
+    });
 
     app(PolizaEmisionService::class)->emitir($quote, $session);
 
-    expect($spy->uploadArgs['presale'])->toBe(42)
-        ->and($spy->uploadArgs['company'])->toBe('sancor')
-        ->and($spy->uploadArgs['product'])->toBe('auto')
-        ->and($spy->uploadArgs['count'])->toBe(2);
+    $poliza = Poliza::where('quote_id', $quote->id)->firstOrFail();
+    $doc = PolicyDocument::where('poliza_id', $poliza->id)->firstOrFail();
+
+    expect($doc->kind)->toBe('poliza')
+        ->and($doc->source)->toBe('visred_emission')
+        ->and($doc->visible_to_client)->toBeTrue()
+        ->and(Storage::disk('r2')->get($doc->storage_path))->toBe('PDFBYTES');
 });
 
-it('no falla la emisión si la inspección post-emisión tira excepción (póliza ya emitida)', function () {
+it('la emisión no falla ni persiste documentos cuando la captura viene vacía', function () {
+    Storage::fake('r2');
     [$quote, $session] = emittableQuote();
 
     app()->instance(EmissionProvider::class, new class implements EmissionProvider
@@ -258,22 +243,20 @@ it('no falla la emisión si la inspección post-emisión tira excepción (póliz
         public function emit(array $request): array
         {
             return [
-                'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 42,
+                'task_id' => 't', 'status' => 'SUCCESS',
                 'proposal_number' => 'PR', 'policy_number' => 'P', 'emission_status' => 'emitida',
-                'requires_inspection_after_emission' => true, 'company_id' => 'sancor', 'raw' => [],
+                'requires_inspection_after_emission' => false, 'company_id' => 'sancor',
+                'documents' => [],
+                'raw' => [],
             ];
-        }
-
-        public function uploadInspection(int $presaleId, string $companyId, string $productId, iterable $photos): array
-        {
-            throw new RuntimeException('inspección caída');
         }
     });
 
     $result = app(PolizaEmisionService::class)->emitir($quote, $session);
 
     expect($result['status'])->toBe('SUCCESS')
-        ->and($quote->refresh()->status)->toBe('poliza_emitida');
+        ->and($quote->refresh()->status)->toBe('poliza_emitida')
+        ->and(PolicyDocument::count())->toBe(0);
 });
 
 it('pasa el bloque neutro de inspección before-emisión al puerto cuando la cobertura la exige', function () {
@@ -301,13 +284,8 @@ it('pasa el bloque neutro de inspección before-emisión al puerto cuando la cob
             return [
                 'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 1,
                 'proposal_number' => 'PR', 'policy_number' => 'P', 'emission_status' => 'emitida',
-                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'raw' => [],
+                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'documents' => [], 'raw' => [],
             ];
-        }
-
-        public function uploadInspection(int $presaleId, string $companyId, string $productId, iterable $photos): array
-        {
-            return ['status' => 'SKIPPED'];
         }
     };
     app()->instance(EmissionProvider::class, $spy);
@@ -336,13 +314,8 @@ it('no pasa el bloque de inspección cuando la cobertura no la exige', function 
             return [
                 'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 1,
                 'proposal_number' => 'PR', 'policy_number' => 'P', 'emission_status' => 'emitida',
-                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'raw' => [],
+                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'documents' => [], 'raw' => [],
             ];
-        }
-
-        public function uploadInspection(int $presaleId, string $companyId, string $productId, iterable $photos): array
-        {
-            return ['status' => 'SKIPPED'];
         }
     };
     app()->instance(EmissionProvider::class, $spy);
@@ -367,7 +340,6 @@ it('es idempotente: no re-emite si el quote ya está poliza_emitida (D4.2)', fun
         'risk_id' => $risk->id,
         'quote_id' => $quote->id,
         'estado' => PolizaEstado::Vigente,
-        'presale_id' => '555',
         'numero' => 'POL-OLD',
         'company_id' => 'sancor',
         'product_id' => 'auto',
@@ -385,13 +357,8 @@ it('es idempotente: no re-emite si el quote ya está poliza_emitida (D4.2)', fun
             return [
                 'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 1, 'proposal_number' => 'PR',
                 'policy_number' => 'P', 'emission_status' => 'emitida',
-                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'raw' => [],
+                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'documents' => [], 'raw' => [],
             ];
-        }
-
-        public function uploadInspection(int $presaleId, string $companyId, string $productId, iterable $photos): array
-        {
-            return ['status' => 'SKIPPED'];
         }
     };
     app()->instance(EmissionProvider::class, $spy);
@@ -400,11 +367,11 @@ it('es idempotente: no re-emite si el quote ya está poliza_emitida (D4.2)', fun
 
     expect($spy->emitCalls)->toBe(0)
         ->and($result['status'])->toBe('SUCCESS')
-        ->and($result['presale_id'])->toBe(555)
+        ->and($result)->not->toHaveKey('presale_id')
         ->and($result['policy_number'])->toBe('POL-OLD');
 });
 
-it('lanza (para reintento del job) si la emisión no devuelve presale_id', function () {
+it('lanza (para reintento del job) si la emisión no es exitosa', function () {
     [$quote, $session] = emittableQuote();
 
     app()->instance(EmissionProvider::class, new class implements EmissionProvider
@@ -415,13 +382,8 @@ it('lanza (para reintento del job) si la emisión no devuelve presale_id', funct
                 'task_id' => 't', 'status' => 'FAILURE', 'presale_id' => null,
                 'proposal_number' => null, 'policy_number' => null,
                 'emission_status' => null, 'requires_inspection_after_emission' => false,
-                'company_id' => null, 'raw' => [],
+                'company_id' => null, 'documents' => [], 'raw' => [],
             ];
-        }
-
-        public function uploadInspection(int $presaleId, string $companyId, string $productId, iterable $photos): array
-        {
-            return ['status' => 'SKIPPED'];
         }
     });
 

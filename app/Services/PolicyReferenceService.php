@@ -15,9 +15,10 @@ use Illuminate\Support\Facades\DB;
  *
  * Dominio CARTERA, separado del acto de emitir: la compañía es el System of Record
  * (estado/cobertura/endosos/documentos viven allá, on-demand); MANGO guarda solo la
- * referencia mínima (`presale_id`/`company_id`/`product_id` + `policy_number`) ligada
- * a un `Risk` (find-or-create por patente) y al `Quote`. No conoce a Visred ni al
- * canal: recibe el resultado neutro de la emisión y modelos de dominio.
+ * referencia mínima durable (`policy_number` + `company_id`/`product_id`) ligada a un
+ * `Risk` (find-or-create por patente) y al `Quote`. NO persiste el `presale_id`: es un
+ * dato de Visred acotado al ciclo de emisión, no sale del adapter. No conoce a Visred
+ * ni al canal: recibe el resultado neutro de la emisión y modelos de dominio.
  */
 class PolicyReferenceService
 {
@@ -32,14 +33,12 @@ class PolicyReferenceService
         return DB::transaction(function () use ($quote, $alternative, $emissionResult): Poliza {
             $risk = $this->findOrCreateRisk($quote);
 
-            $presaleId = $emissionResult['presale_id'] ?? null;
-
             return Poliza::updateOrCreate(
                 ['quote_id' => $quote->id],
                 [
                     'risk_id' => $risk->id,
-                    // Referencia opaca al System of Record (la compañía vía el proveedor).
-                    'presale_id' => $presaleId !== null ? (string) $presaleId : null,
+                    // Referencia durable al System of Record: el número de póliza (el
+                    // `presale_id` de Visred no se persiste — muere con la emisión).
                     'numero' => $emissionResult['policy_number'] ?? null,
                     'company_id' => $emissionResult['company_id'] ?? null,
                     'product_id' => 'auto',

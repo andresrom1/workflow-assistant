@@ -5,11 +5,13 @@ use App\Enums\RiskType;
 use App\Enums\UserRole;
 use App\Models\Customer;
 use App\Models\MobileAccount;
+use App\Models\PolicyDocument;
 use App\Models\Poliza;
 use App\Models\Risk;
 use App\Models\SharedRisk;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 
@@ -260,4 +262,56 @@ it('GET /polizas/{id} devuelve 404 si la póliza no existe', function (): void {
     $this->getJson('/api/mobile/v1/polizas/99999')
         ->assertStatus(404)
         ->assertJson(['code' => 'POLIZA_NOT_FOUND']);
+});
+
+it('GET /polizas/{id}/documentos devuelve los documentos visibles con URL firmada', function (): void {
+    Storage::fake('r2');
+    Storage::disk('r2')->buildTemporaryUrlsUsing(
+        fn (string $path, $expiration): string => "https://signed.test/{$path}"
+    );
+
+    $pas = makePas();
+    $customer = makeCustomer($pas);
+    $poliza = makeVehicleRiskWithPoliza($customer);
+
+    PolicyDocument::create([
+        'poliza_id' => $poliza->id,
+        'kind' => 'poliza',
+        'storage_path' => "policy-documents/{$poliza->id}/poliza.pdf",
+        'source' => 'visred_emission',
+        'visible_to_client' => true,
+        'captured_at' => now(),
+    ]);
+    // No visible para el cliente (p. ej. carga interna del admin): no debe aparecer.
+    PolicyDocument::create([
+        'poliza_id' => $poliza->id,
+        'kind' => 'endoso',
+        'storage_path' => "policy-documents/{$poliza->id}/endoso.pdf",
+        'source' => 'admin_upload',
+        'visible_to_client' => false,
+    ]);
+
+    $account = MobileAccount::factory()->create(['email' => $customer->email, 'customer_id' => $customer->id]);
+    Sanctum::actingAs($account, ['*'], 'mobile');
+
+    $this->getJson("/api/mobile/v1/polizas/{$poliza->id}/documentos")
+        ->assertOk()
+        ->assertJsonCount(1, 'documentos')
+        ->assertJson(['documentos' => [[
+            'kind' => 'poliza',
+            'url' => "https://signed.test/policy-documents/{$poliza->id}/poliza.pdf",
+        ]]]);
+});
+
+it('GET /polizas/{id}/documentos devuelve 403 si la póliza no es accesible', function (): void {
+    $pas = makePas();
+    $otro = makeCustomer($pas, 'otro@example.com');
+    $poliza = makeVehicleRiskWithPoliza($otro);
+
+    $account = MobileAccount::factory()->create(['email' => 'andres@gmail.com', 'customer_id' => null]);
+    Sanctum::actingAs($account, ['*'], 'mobile');
+
+    $this->getJson("/api/mobile/v1/polizas/{$poliza->id}/documentos")
+        ->assertStatus(403)
+        ->assertJson(['code' => 'POLIZA_FORBIDDEN']);
 });

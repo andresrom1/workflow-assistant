@@ -51,4 +51,18 @@
 
 ---
 
+---
+
+## Actualización (2026-06-15) — documentos oficiales: persistir, no tunelizar
+
+El **patrón túnel quedó caduco** (era: mango → backend → Visred con `presale_id` → backend pasa los bytes sin persistir → mango). Razón: `presale_id` solo vive durante la emisión, así que no se puede re-descargar fresco después.
+
+Modelo vigente:
+- **Captura automática (solo emisión Visred):** dentro de `emit()`, con el `presale_id` vivo, el adapter pide `POST /v1/documents/` y **persiste el PDF en R2** (`PolicyDocument`, `source=visred_emission`). El `presale_id` no sale del adapter.
+- **Post-emisión (renovaciones/endosos/correcciones):** la **renovación ocurre en la compañía, sin Visred → no hay `presale_id`**. Esos documentos entran por **carga manual del admin** (`source=admin_upload`, deuda admin panel), con `visible_to_client`.
+- **Lectura mango:** `GET /polizas/{id}/documentos` sirve URLs R2 firmadas/expirables. La app sigue sin hablar con Visred (la invariante se mantiene; lo que cambia es que el backend persiste en vez de pasar-por).
+- La pregunta abierta de empaquetado por compañía sigue vigente; se resuelve mirando un PDF real cuando haya emisión.
+
+---
+
 *Registro, no spec. La integración de cotización/emisión y los documentos oficiales se trabajan en sus propios documentos cuando se retomen.*

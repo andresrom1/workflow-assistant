@@ -12,7 +12,6 @@ use App\Models\QuoteAlternative;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
-use Throwable;
 
 /**
  * Orquesta la emisión de póliza: arma el request neutro desde el checkout + el
@@ -35,6 +34,7 @@ class PolizaEmisionService
     public function __construct(
         private readonly EmissionProvider $emissionProvider,
         private readonly PolicyReferenceService $policyReference,
+        private readonly PolicyDocumentService $policyDocuments,
     ) {}
 
     /**
@@ -47,8 +47,8 @@ class PolizaEmisionService
     public function emitir(Quote $quote, CheckoutSession $session): array
     {
         // D4.2 — idempotencia: EmitirPoliza reintenta ante excepción. Si el quote ya
-        // fue emitido (el presale existe), NO re-emitir → evita una doble pre-venta
-        // real contra el proveedor. Guard por estado (mínimo viable).
+        // fue emitido (ya hay Poliza-referencia), NO re-emitir → evita una doble
+        // pre-venta real contra el proveedor. Guard por estado (mínimo viable).
         // TODO (ventana de carrera): un crash entre emit() y persistEmission() dejaría
         // el estado sin marcar y el guard no cubriría ese reintento. Cerrar con una
         // clave de idempotencia (p. ej. lock por quote) si se vuelve un problema real.
@@ -65,16 +65,17 @@ class PolizaEmisionService
 
         $result = $this->emissionProvider->emit($this->buildRequest($quote, $session, $alternative));
 
-        if ($result['status'] !== 'SUCCESS' || $result['presale_id'] === null) {
-            // Falla sin presale → excepción para que EmitirPoliza reintente.
-            throw new RuntimeException("La emisión del quote {$quote->id} no devolvió un presale_id.");
+        if ($result['status'] !== 'SUCCESS') {
+            // Falla → excepción para que EmitirPoliza reintente. (La inspección
+            // post-emisión la resuelve el adapter internamente con el presale vivo.)
+            throw new RuntimeException("La emisión del quote {$quote->id} no fue exitosa.");
         }
 
-        $this->persistEmission($quote, $alternative, $result);
+        $poliza = $this->persistEmission($quote, $alternative, $result);
 
-        if ($result['requires_inspection_after_emission'] === true) {
-            $this->uploadPostEmissionInspection($quote, $result);
-        }
+        // Documentos oficiales capturados en la emisión (por el adapter, con el
+        // presale vivo y sin que salga de él): se persisten en cartera. Best-effort.
+        $this->policyDocuments->storeFromEmission($poliza, $result['documents']);
 
         return $result;
     }
@@ -94,48 +95,16 @@ class PolizaEmisionService
         return [
             'task_id' => '',
             'status' => 'SUCCESS',
-            'presale_id' => $poliza?->presale_id !== null ? (int) $poliza->presale_id : null,
             'proposal_number' => $meta['proposal_number'] ?? null,
             'policy_number' => $poliza?->numero,
             'emission_status' => $meta['emission_status'] ?? null,
             'requires_inspection_after_emission' => $meta['requires_inspection_after_emission'] ?? false,
             'company_id' => $poliza?->company_id,
+            // Re-entrada idempotente: la captura de documentos ya corrió en la 1ª
+            // emisión; no se re-captura (el presale ya no vive).
+            'documents' => [],
             'raw' => ['source' => 'stash (idempotencia)'],
         ];
-    }
-
-    /**
-     * Inspección post-emisión, best-effort. La póliza YA está emitida (el presale
-     * existe), así que un fallo acá NO debe relanzar: relanzar reintentaría el
-     * `emit()` → doble emisión. Se loggea para resolución manual. El mapeo de las
-     * fotos al catálogo del proveedor vive en el adapter (puerto agnóstico).
-     *
-     * @param  array<string, mixed>  $result
-     */
-    private function uploadPostEmissionInspection(Quote $quote, array $result): void
-    {
-        $presaleId = $result['presale_id'] ?? null;
-        $companyId = $result['company_id'] ?? null;
-
-        if (! is_int($presaleId) || ! is_string($companyId) || $companyId === '') {
-            Log::warning('PolizaEmisionService: inspección post-emisión sin presale_id/company_id', [
-                'quote_id' => $quote->id,
-            ]);
-
-            return;
-        }
-
-        $photos = $this->confirmedPhotos($quote);
-
-        try {
-            $this->emissionProvider->uploadInspection($presaleId, $companyId, 'auto', $photos);
-        } catch (Throwable $e) {
-            Log::error('PolizaEmisionService: falló la inspección post-emisión (póliza ya emitida)', [
-                'quote_id' => $quote->id,
-                'presale_id' => $presaleId,
-                'error' => $e->getMessage(),
-            ]);
-        }
     }
 
     /**
@@ -202,14 +171,18 @@ class PolizaEmisionService
             $request['discount_id'] = $ref->discount_id;
         }
 
-        // D4.1 — inspección before-emisión: si la cobertura elegida la exige, pasamos
-        // los ingredientes neutros (company_id opaco + product + fotos de dominio).
-        // El adapter arma las inspecciones (lógica Visred) y las embebe en el emit().
-        if ($ref->requires_inspection_before_emission === true && is_string($ref->company_id) && $ref->company_id !== '') {
+        // D4.1 — inspección: pasamos los ingredientes neutros (company_id opaco +
+        // product + fotos de dominio + `requires_before`). El adapter resuelve TODO el
+        // ciclo: si la cobertura lo exige embebe el before en el emit(); la inspección
+        // post-emisión la sube él con el presale vivo. El dominio no arma inspecciones
+        // ni ve el presale.
+        $photos = $this->confirmedPhotos($quote);
+        if (is_string($ref->company_id) && $ref->company_id !== '' && $photos->isNotEmpty()) {
             $request['inspection_photos'] = [
                 'company_id' => $ref->company_id,
                 'product_id' => 'auto',
-                'photos' => $this->confirmedPhotos($quote),
+                'requires_before' => $ref->requires_inspection_before_emission === true,
+                'photos' => $photos,
             ];
         }
 
@@ -261,7 +234,7 @@ class PolizaEmisionService
      *
      * @param  array<string, mixed>  $result
      */
-    private function persistEmission(Quote $quote, QuoteAlternative $alternative, array $result): void
+    private function persistEmission(Quote $quote, QuoteAlternative $alternative, array $result): Poliza
     {
         $quote->update(['status' => 'poliza_emitida']);
         $poliza = $this->policyReference->materialize($quote, $alternative, $result);
@@ -270,8 +243,9 @@ class PolizaEmisionService
             'quote_id' => $quote->id,
             'risk_id' => $poliza->risk_id,
             'poliza_id' => $poliza->id,
-            'presale_id' => $result['presale_id'] ?? null,
             'policy_number' => $result['policy_number'] ?? null,
         ]);
+
+        return $poliza;
     }
 }

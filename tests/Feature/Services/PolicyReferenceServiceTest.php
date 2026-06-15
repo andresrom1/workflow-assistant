@@ -43,9 +43,10 @@ function quoteWithAlternative(): array
 function emissionResult(): array
 {
     return [
-        'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 7788,
+        'task_id' => 't', 'status' => 'SUCCESS',
         'proposal_number' => 'PR-1', 'policy_number' => 'POL-1', 'emission_status' => 'emitida',
-        'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'raw' => [],
+        'requires_inspection_after_emission' => false, 'company_id' => 'sancor',
+        'documents' => [], 'raw' => [],
     ];
 }
 
@@ -55,7 +56,6 @@ it('crea un Risk nuevo y la Poliza-referencia ligada al Quote', function () {
     $poliza = app(PolicyReferenceService::class)->materialize($quote, $alternative, emissionResult());
 
     expect($poliza->quote_id)->toBe($quote->id)
-        ->and($poliza->presale_id)->toBe('7788')
         ->and($poliza->numero)->toBe('POL-1')
         ->and($poliza->company)->toBe('Sancor')       // display que MANGO ya conoce
         ->and($poliza->coverage)->toBe('Todo Riesgo')
