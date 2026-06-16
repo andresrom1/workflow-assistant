@@ -2,10 +2,15 @@
 
 namespace App\Services;
 
+use App\Enums\PolicyDocumentKind;
+use App\Enums\PolicyDocumentSource;
 use App\Models\PolicyDocument;
 use App\Models\Poliza;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -25,28 +30,66 @@ class PolicyDocumentService
     public function storeFromEmission(Poliza $poliza, array $documents): void
     {
         foreach ($documents as $document) {
-            $this->storeOne($poliza, $document, 'visred_emission');
+            $this->storeOne($poliza, $document);
         }
+    }
+
+    /**
+     * Carga manual desde el admin (post-emisión: renovaciones/endosos/correcciones).
+     *
+     * Siempre `create()`: los documentos se acumulan al contrato, nunca se reemplazan,
+     * así que conviven varios del mismo `kind`. El `uuid` del path evita colisiones.
+     * No es best-effort: si la persistencia en R2 falla, lanza para que el admin lo vea.
+     */
+    public function storeAdminUpload(
+        Poliza $poliza,
+        UploadedFile $file,
+        PolicyDocumentKind $kind,
+        bool $visibleToClient,
+        ?string $label = null,
+    ): PolicyDocument {
+        $extension = $file->getClientOriginalExtension() ?: $file->guessExtension() ?: 'pdf';
+        $path = "policy-documents/{$poliza->id}/{$kind->value}-".Str::uuid()->toString().".{$extension}";
+
+        $stored = Storage::disk('r2')->put($path, $file->get());
+
+        if ($stored === false) {
+            throw new RuntimeException("No se pudo guardar el documento en R2 (póliza {$poliza->id}).");
+        }
+
+        return PolicyDocument::create([
+            'poliza_id' => $poliza->id,
+            'kind' => $kind,
+            'storage_path' => $path,
+            'storage_url' => Storage::disk('r2')->url($path),
+            'original_filename' => $file->getClientOriginalName(),
+            'label' => $label,
+            'source' => PolicyDocumentSource::AdminUpload,
+            'visible_to_client' => $visibleToClient,
+            'captured_at' => now(),
+        ]);
     }
 
     /**
      * @param  array<string, mixed>  $document
      */
-    private function storeOne(Poliza $poliza, array $document, string $source): void
+    private function storeOne(Poliza $poliza, array $document): void
     {
-        $kind = is_scalar($document['kind'] ?? null) ? (string) $document['kind'] : '';
+        $kind = is_scalar($document['kind'] ?? null)
+            ? PolicyDocumentKind::tryFrom((string) $document['kind'])
+            : null;
         $contents = $document['contents'] ?? null;
 
-        if ($kind === '' || ! is_string($contents) || $contents === '') {
+        if ($kind === null || ! is_string($contents) || $contents === '') {
             return;
         }
 
         try {
-            $path = "policy-documents/{$poliza->id}/{$kind}.pdf";
+            $path = "policy-documents/{$poliza->id}/{$kind->value}.pdf";
             Storage::disk('r2')->put($path, $contents);
 
             PolicyDocument::updateOrCreate(
-                ['poliza_id' => $poliza->id, 'kind' => $kind, 'source' => $source],
+                ['poliza_id' => $poliza->id, 'kind' => $kind, 'source' => PolicyDocumentSource::VisredEmission],
                 [
                     'storage_path' => $path,
                     'storage_url' => Storage::disk('r2')->url($path),
@@ -57,7 +100,7 @@ class PolicyDocumentService
         } catch (Throwable $e) {
             Log::error('PolicyDocumentService: falló la persistencia de un documento (póliza ya emitida)', [
                 'poliza_id' => $poliza->id,
-                'kind' => $kind,
+                'kind' => $kind->value,
                 'error' => $e->getMessage(),
             ]);
         }

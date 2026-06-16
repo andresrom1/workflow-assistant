@@ -303,6 +303,39 @@ it('GET /polizas/{id}/documentos devuelve los documentos visibles con URL firmad
         ]]]);
 });
 
+it('GET /polizas/{id}/documentos incluye un documento de carga manual visible para el cliente', function (): void {
+    Storage::fake('r2');
+    Storage::disk('r2')->buildTemporaryUrlsUsing(
+        fn (string $path, $expiration): string => "https://signed.test/{$path}"
+    );
+
+    $pas = makePas();
+    $customer = makeCustomer($pas);
+    $poliza = makeVehicleRiskWithPoliza($customer);
+
+    // Documento subido por el admin post-emisión (renovación/endoso) marcado visible.
+    PolicyDocument::create([
+        'poliza_id' => $poliza->id,
+        'kind' => 'endoso',
+        'storage_path' => "policy-documents/{$poliza->id}/endoso-abc.pdf",
+        'original_filename' => 'endoso-cambio-uso.pdf',
+        'source' => 'admin_upload',
+        'visible_to_client' => true,
+        'captured_at' => now(),
+    ]);
+
+    $account = MobileAccount::factory()->create(['email' => $customer->email, 'customer_id' => $customer->id]);
+    Sanctum::actingAs($account, ['*'], 'mobile');
+
+    $this->getJson("/api/mobile/v1/polizas/{$poliza->id}/documentos")
+        ->assertOk()
+        ->assertJsonCount(1, 'documentos')
+        ->assertJson(['documentos' => [[
+            'kind' => 'endoso',
+            'url' => "https://signed.test/policy-documents/{$poliza->id}/endoso-abc.pdf",
+        ]]]);
+});
+
 it('GET /polizas/{id}/documentos devuelve 403 si la póliza no es accesible', function (): void {
     $pas = makePas();
     $otro = makeCustomer($pas, 'otro@example.com');

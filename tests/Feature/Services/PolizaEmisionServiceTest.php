@@ -2,6 +2,8 @@
 
 use App\Contracts\EmissionProvider;
 use App\Enums\InspectionPhotoStatus;
+use App\Enums\PolicyDocumentKind;
+use App\Enums\PolicyDocumentSource;
 use App\Enums\PolizaEstado;
 use App\Enums\RiskType;
 use App\Models\CheckoutSession;
@@ -228,8 +230,8 @@ it('persiste en cartera los documentos capturados al emitir (visibles al cliente
     $poliza = Poliza::where('quote_id', $quote->id)->firstOrFail();
     $doc = PolicyDocument::where('poliza_id', $poliza->id)->firstOrFail();
 
-    expect($doc->kind)->toBe('poliza')
-        ->and($doc->source)->toBe('visred_emission')
+    expect($doc->kind)->toBe(PolicyDocumentKind::Poliza)
+        ->and($doc->source)->toBe(PolicyDocumentSource::VisredEmission)
         ->and($doc->visible_to_client)->toBeTrue()
         ->and(Storage::disk('r2')->get($doc->storage_path))->toBe('PDFBYTES');
 });

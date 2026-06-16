@@ -12,6 +12,7 @@ use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\CoverageDocumentController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\PolicyDocumentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\TrackingController;
@@ -57,6 +58,19 @@ Route::middleware(['auth'])->group(function () {
 
     Route::resource('coverage-documents', CoverageDocumentController::class)
         ->only(['index', 'store', 'show', 'update', 'destroy']);
+
+    // Documentos de póliza — carga manual post-emisión (renovaciones/endosos/correcciones).
+    // El admin busca una póliza (index) y entra a su gestor de documentos (show).
+    Route::get('/policy-documents', [PolicyDocumentController::class, 'index'])
+        ->name('policy-documents.index');
+    Route::get('/policy-documents/{poliza}', [PolicyDocumentController::class, 'show'])
+        ->whereNumber('poliza')->name('policy-documents.show');
+    Route::post('/policy-documents/{poliza}/documents', [PolicyDocumentController::class, 'store'])
+        ->whereNumber('poliza')->name('policy-documents.store');
+    Route::patch('/policy-documents/documents/{policyDocument}/visibility', [PolicyDocumentController::class, 'toggleVisibility'])
+        ->name('policy-documents.toggle-visibility');
+    Route::delete('/policy-documents/documents/{policyDocument}', [PolicyDocumentController::class, 'destroy'])
+        ->name('policy-documents.destroy');
 
     // ─── Solo Admin ───────────────────────────────────────────────────────────
     Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function () {

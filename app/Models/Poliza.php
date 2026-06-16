@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -64,6 +65,12 @@ class Poliza extends Model
     public function quote(): BelongsTo
     {
         return $this->belongsTo(Quote::class);
+    }
+
+    /** @return HasMany<PolicyDocument, $this> */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(PolicyDocument::class);
     }
 
     /** @param  Builder<self>  $query */

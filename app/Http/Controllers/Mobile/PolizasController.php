@@ -101,7 +101,7 @@ class PolizasController extends Controller
             ->orderBy('kind')
             ->get()
             ->map(fn (PolicyDocument $doc): array => [
-                'kind' => $doc->kind,
+                'kind' => $doc->kind->value,
                 'url' => Storage::disk('r2')->temporaryUrl($doc->storage_path, now()->addMinutes(15)),
                 'captured_at' => $doc->captured_at?->toIso8601String(),
             ])->all();
