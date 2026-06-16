@@ -12,8 +12,13 @@
             <h1 class="text-xl sm:text-2xl font-semibold tracking-tight" style="color: var(--text-1);">
               {{ customer.name }}
             </h1>
-            <p class="text-xs font-mono mt-0.5" style="color: var(--text-3);">DNI {{ customer.dni }}</p>
+            <p class="text-xs font-mono mt-0.5" style="color: var(--text-3);">DNI {{ customer.dni ?? '—' }}</p>
           </div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <Link :href="`/customers/${customer.id}/edit`" class="btn btn-secondary text-sm">Editar</Link>
+          <button @click="showDelete = true" class="btn btn-danger text-sm">Eliminar</button>
         </div>
       </div>
 
@@ -88,6 +93,40 @@
             <p v-else class="text-sm text-center py-6" style="color: var(--text-3);">Sin vehículos registrados.</p>
           </div>
 
+          <!-- Pólizas -->
+          <div class="rounded-[14px] p-5" style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">
+                Pólizas ({{ customer.polizas.length }})
+              </h2>
+              <Link :href="`/polizas/create?customer=${customer.id}`" class="btn btn-primary text-xs py-1.5 px-3">
+                Agregar póliza
+              </Link>
+            </div>
+            <div v-if="customer.polizas.length" class="space-y-2.5">
+              <Link v-for="p in customer.polizas" :key="p.id" :href="`/polizas/${p.id}/edit`"
+                class="block rounded-[10px] p-4 transition-colors"
+                style="border: 1px solid var(--border-sub);">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold truncate" style="color: var(--text-1);">
+                      {{ p.numero ?? 'Sin número' }}
+                      <span class="font-normal" style="color: var(--text-3);">· {{ p.company ?? '—' }}</span>
+                    </p>
+                    <p class="text-xs mt-0.5 font-mono" style="color: var(--text-3);">
+                      {{ p.patente ?? p.label }}<template v-if="p.coverage"> · {{ p.coverage }}</template>
+                    </p>
+                  </div>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0"
+                    :style="estadoStyle(p.estado)">
+                    {{ p.estado }}
+                  </span>
+                </div>
+              </Link>
+            </div>
+            <p v-else class="text-sm text-center py-6" style="color: var(--text-3);">Sin pólizas registradas.</p>
+          </div>
+
           <!-- Conversaciones -->
           <div class="rounded-[14px] p-5" style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
             <h2 class="text-[11px] font-semibold uppercase tracking-wider mb-4" style="color: var(--text-3);">
@@ -114,21 +153,70 @@
       </div>
     </div>
   </div>
+
+  <!-- Modal confirmar eliminación -->
+  <Transition name="fade">
+    <div v-if="showDelete" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-black/50" @click="showDelete = false" />
+      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
+           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">
+          ¿Eliminar a {{ customer.name }}?
+        </h3>
+        <p class="text-sm mb-5" style="color: var(--text-2);">
+          El cliente se archiva (soft-delete). Si tiene una póliza vigente, la eliminación se bloquea.
+        </p>
+        <div class="flex justify-end gap-2">
+          <button @click="showDelete = false"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);">
+            Cancelar
+          </button>
+          <button @click="submitDelete"
+            class="px-4 py-2 rounded-lg text-sm font-semibold"
+            style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);">
+            Eliminar
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import { Link, router } from '@inertiajs/vue3'
 import BackLink from '@/components/UI/BackLink.vue'
 import Avatar from '@/components/UI/Avatar.vue'
 
-defineProps<{
+const props = defineProps<{
   customer: {
-    id: number; name: string; dni: string
+    id: number; name: string; dni: string | null
     email: string | null; phone: string | null; created_at: string
     vehicles: Array<{ id: number; patente: string; marca: string | null; modelo: string | null; year: number | null; uso: string | null; is_complete: boolean }>
     conversations: Array<{ id: number; external_conversation_id: string; last_message_at: string | null; created_at: string }>
+    polizas: Array<{ id: number; numero: string | null; company: string | null; coverage: string | null; estado: string; vigencia: string | null; patente: string | null; label: string }>
   }
 }>()
+
+const showDelete = ref(false)
+
+const submitDelete = () => {
+  showDelete.value = false
+  router.delete(`/customers/${props.customer.id}`)
+}
+
+const estadoStyle = (estado: string): string => {
+  if (estado === 'vigente') { return 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);' }
+  if (estado === 'emitida') { return 'background: var(--accent-100); color: var(--accent-600);' }
+  return 'background: var(--border-sub); color: var(--text-3);'
+}
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
 </script>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>

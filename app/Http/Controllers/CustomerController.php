@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\PolizaEstado;
 use App\Models\Customer;
 use App\Repositories\CustomerRepository;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -48,11 +50,27 @@ class CustomerController extends Controller
     {
         $customer = $this->customerRepository->findWithRelations(
             id: $customer->id,
-            relations: ['vehicles', 'conversations']
+            relations: ['vehicles', 'conversations', 'risks.polizas']
         );
 
         if (! $customer instanceof Customer) {
             return redirect()->route('customers.index')->with('error', 'Cliente no encontrado');
+        }
+
+        $polizas = [];
+        foreach ($customer->risks as $risk) {
+            foreach ($risk->polizas as $p) {
+                $polizas[] = [
+                    'id' => $p->id,
+                    'numero' => $p->numero,
+                    'company' => $p->company,
+                    'coverage' => $p->coverage,
+                    'estado' => $p->estado->value,
+                    'vigencia' => $p->vigencia?->toDateString(),
+                    'patente' => $risk->metadata['patente'] ?? null,
+                    'label' => $risk->label,
+                ];
+            }
         }
 
         return Inertia::render('Customers/Show', [
@@ -78,18 +96,90 @@ class CustomerController extends Controller
                     'last_message_at' => $c->last_message_at,
                     'created_at' => $c->created_at->toIso8601String(),
                 ]),
+                'polizas' => $polizas,
             ],
         ]);
     }
 
-    // Métodos sin implementar — se dejan vacíos
-    public function create() {}
+    public function create(): Response
+    {
+        return Inertia::render('Customers/Create');
+    }
 
-    public function store(Request $request) {}
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $this->validateCustomer($request, null);
 
-    public function edit(Customer $customer) {}
+        $customer = $this->customerRepository->create($validated);
 
-    public function update(Request $request, Customer $customer) {}
+        return redirect()->route('customers.show', $customer)
+            ->with('flash', ['success' => 'Cliente creado.']);
+    }
 
-    public function destroy(Customer $customer) {}
+    public function edit(Customer $customer): Response
+    {
+        return Inertia::render('Customers/Edit', [
+            'customer' => [
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'dni' => $customer->dni,
+                'email' => $customer->email,
+                'phone' => $customer->phone,
+            ],
+        ]);
+    }
+
+    public function update(Request $request, Customer $customer): RedirectResponse
+    {
+        $validated = $this->validateCustomer($request, $customer);
+
+        $this->customerRepository->update($customer, $validated);
+
+        return redirect()->route('customers.show', $customer)
+            ->with('flash', ['success' => 'Cliente actualizado.']);
+    }
+
+    public function destroy(Customer $customer): RedirectResponse
+    {
+        $hasVigente = $customer->risks()
+            ->whereHas('polizas', fn ($q) => $q->where('estado', PolizaEstado::Vigente))
+            ->exists();
+
+        if ($hasVigente) {
+            return back()->with('flash', [
+                'error' => 'No se puede eliminar: el cliente tiene una póliza vigente.',
+            ]);
+        }
+
+        $customer->delete();
+
+        return redirect()->route('customers.index')
+            ->with('flash', ['success' => 'Cliente eliminado.']);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validateCustomer(Request $request, ?Customer $customer): array
+    {
+        $ignoreId = $customer?->id;
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'dni' => ['nullable', 'string', 'max:20', Rule::unique('customers', 'dni')->ignore($ignoreId)],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('customers', 'email')->ignore($ignoreId)],
+            'phone' => 'nullable|string|max:30',
+        ]);
+
+        if (empty($validated['dni']) && empty($validated['email']) && empty($validated['phone'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'dni' => 'Ingresá al menos un identificador: DNI, email o teléfono.',
+            ]);
+        }
+
+        return array_filter(
+            $validated,
+            fn ($value): bool => $value !== null && $value !== '',
+        );
+    }
 }

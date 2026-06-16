@@ -7,9 +7,12 @@
         <h1 class="text-xl sm:text-2xl font-semibold tracking-tight" style="color: var(--text-1);">
           Clientes
         </h1>
-        <span class="text-xs font-medium" style="color: var(--text-3);">
-          Total: <span class="font-semibold" style="color: var(--text-2);">{{ customers.total }}</span>
-        </span>
+        <div class="flex items-center gap-3">
+          <span class="text-xs font-medium" style="color: var(--text-3);">
+            Total: <span class="font-semibold" style="color: var(--text-2);">{{ customers.total }}</span>
+          </span>
+          <Link href="/customers/create" class="btn btn-primary text-sm">Nuevo cliente</Link>
+        </div>
       </div>
 
       <!-- Buscador -->

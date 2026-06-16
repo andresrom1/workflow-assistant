@@ -3,8 +3,8 @@
 namespace App\Services\Quote\Strategies;
 
 use App\Contracts\QuotationProvider;
-use App\Exceptions\Visred\VisredApiException;
 use App\Events\QuoteProcessed;
+use App\Exceptions\Visred\VisredApiException;
 use App\Jobs\NotifyClientQuoteReady;
 use App\Models\Quote;
 use App\Models\RiskSnapshot;
