@@ -1,5 +1,12 @@
 @import 'tailwindcss';
 @import 'vue-sonner/style.css';
+@import "tw-animate-css";
+@import "shadcn-vue/tailwind.css";
+
+/* La app conmuta el tema con [data-theme="dark"] (no con la clase .dark).
+   El script anti-FOUC en app.blade.php siempre fija un data-theme explícito,
+   por eso alcanza con apuntar el variant a ese atributo. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -275,5 +282,259 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
+  }
+}
+
+@theme inline {
+  /* No redefinir --font-sans aquí: se mantiene 'Inter' del @theme de arriba. */
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/*
+  Tokens semánticos de shadcn mapeados al design system propio.
+  Como referencian las variables existentes (--bg-card, --text-1, etc.) que ya
+  conmutan con [data-theme], los componentes shadcn siguen el tema automáticamente
+  sin necesitar un bloque .dark aparte.
+  --border y --radius-* NO se redefinen acá: los provee el design system de arriba.
+*/
+:root {
+  --background: var(--bg-app);
+  --foreground: var(--text-1);
+  --card: var(--bg-card);
+  --card-foreground: var(--text-1);
+  --popover: var(--bg-card);
+  --popover-foreground: var(--text-1);
+  --primary: var(--accent-600);
+  --primary-foreground: #ffffff;
+  --secondary: var(--bg-raised);
+  --secondary-foreground: var(--text-1);
+  --muted: var(--bg-raised);
+  --muted-foreground: var(--text-3);
+  --accent: var(--border-sub);
+  --accent-foreground: var(--text-1);
+  --destructive: var(--dot-danger);
+  --input: var(--border);
+  --ring: var(--accent-600);
+  --radius: 0.625rem;
+  /* chart-* / sidebar-*: el panel usa su propio sidebar (--sb-*) y no usa charts;
+     se mapean al sistema por consistencia si algún componente shadcn los tomara. */
+  --chart-1: var(--accent-600);
+  --chart-2: var(--dot-teal);
+  --chart-3: var(--dot-orange);
+  --chart-4: var(--dot-violet);
+  --chart-5: var(--dot-ok);
+  --sidebar: var(--sb-bg);
+  --sidebar-foreground: var(--sb-item-text);
+  --sidebar-primary: var(--accent-600);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--sb-item-hover-bg);
+  --sidebar-accent-foreground: var(--sb-item-hover-text);
+  --sidebar-border: var(--sb-border);
+  --sidebar-ring: var(--accent-600);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    @apply font-sans;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MARCA MANGO — páginas customer-facing (checkout, etc.)
+   Sistema "noir" del brandbook: Playfair + DM Sans, naranja #FF6B00,
+   dark-first. Aislado del panel admin (índigo) vía data-brand / .mg-root.
+
+   Doble selector a propósito:
+   · .mg-root          → pinta la página sin FOUC (la setea el layout en su raíz)
+   · [data-brand=mango] → la setea el layout en <html> al montar, para que el
+                          dropdown del Select (que se teletransporta al <body>,
+                          fuera del .mg-root) herede los mismos tokens.
+   Va al final del archivo: misma especificidad que :root/[data-theme], gana orden.
+══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Light (default) ─────────────────────────────────────────────────────── */
+[data-brand="mango"],
+.mg-root {
+  --mg-bg:             #f7f4ee;
+  --mg-surface:        #ffffff;
+  --mg-surface-2:      #efebe3;
+  --mg-fg:             #16110d;
+  --mg-fg-dim:         rgba(22, 17, 13, 0.62);
+  --mg-fg-faint:       rgba(22, 17, 13, 0.40);
+  --mg-hairline:       rgba(22, 17, 13, 0.14);
+  --mg-hairline-strong:rgba(22, 17, 13, 0.28);
+  --mg-mango:          #ff6b00;
+  --mg-mango-soft:     #ffa040;
+  --mg-mango-tint:     #fff3e8;
+  --mg-ok:             #00a86b;
+  --mg-ok-tint:        #e7f7f0;
+  --mg-bad:            #e5484d;
+  --mg-warn:           #c77a12;
+  --mg-focus:          0 0 0 3px rgba(255, 107, 0, 0.28);
+
+  --mg-font-display: 'Playfair Display', Georgia, serif;
+  --mg-font-ui:      'DM Sans', system-ui, sans-serif;
+  --mg-font-mono:    'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+  /* Override de los tokens semánticos shadcn → el Select portaleado matchea.
+     Usan var(--mg-*), así re-resuelven solos cuando noir redefine los --mg-*. */
+  --background:           var(--mg-bg);
+  --foreground:           var(--mg-fg);
+  --card:                 var(--mg-surface);
+  --card-foreground:      var(--mg-fg);
+  --popover:              var(--mg-surface);
+  --popover-foreground:   var(--mg-fg);
+  --primary:              var(--mg-mango);
+  --primary-foreground:   #ffffff;
+  --secondary:            var(--mg-surface-2);
+  --secondary-foreground: var(--mg-fg);
+  --muted:                var(--mg-surface-2);
+  --muted-foreground:     var(--mg-fg-dim);
+  --accent:               var(--mg-surface-2);
+  --accent-foreground:    var(--mg-fg);
+  --border:               var(--mg-hairline-strong);
+  --input:                var(--mg-hairline-strong);
+  --ring:                 var(--mg-mango);
+}
+
+/* ── Noir (sigue el SO del celular vía [data-theme="dark"]) ──────────────── */
+[data-brand="mango"][data-theme="dark"],
+[data-theme="dark"] .mg-root {
+  --mg-bg:             #0a0908;
+  --mg-surface:        #161412;
+  --mg-surface-2:      #1f1b17;
+  --mg-fg:             #f2efe9;
+  --mg-fg-dim:         rgba(242, 239, 233, 0.55);
+  --mg-fg-faint:       rgba(242, 239, 233, 0.30);
+  --mg-hairline:       rgba(242, 239, 233, 0.14);
+  --mg-hairline-strong:rgba(242, 239, 233, 0.28);
+  --mg-mango:          #ff6b00;
+  --mg-mango-soft:     #ffa040;
+  --mg-mango-tint:     rgba(255, 107, 0, 0.12);
+  --mg-ok:             #3cd6a1;
+  --mg-ok-tint:        rgba(60, 214, 161, 0.12);
+  --mg-bad:            #f26b6b;
+  --mg-warn:           #f0b82f;
+  --mg-focus:          0 0 0 3px rgba(255, 107, 0, 0.38);
+}
+
+/* ── Clases utilitarias de marca ─────────────────────────────────────────── */
+@layer components {
+
+  .mg-field {
+    @apply w-full px-3.5 py-2.5 text-sm outline-none rounded-xl transition-all;
+    background: var(--mg-surface);
+    color: var(--mg-fg);
+    border: 1px solid var(--mg-hairline-strong);
+    font-family: var(--mg-font-ui);
+  }
+  .mg-field::placeholder { color: var(--mg-fg-faint); }
+  .mg-field:focus {
+    border-color: var(--mg-mango);
+    box-shadow: var(--mg-focus);
+  }
+  .mg-field-error { border-color: var(--mg-bad) !important; }
+  .mg-field-error:focus { box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.25) !important; }
+
+  .mg-btn-primary,
+  .mg-btn-ghost,
+  .mg-btn-submit {
+    @apply inline-flex items-center justify-center gap-2 rounded-full
+           font-semibold uppercase transition-all cursor-pointer outline-none select-none
+           active:scale-[.98] disabled:opacity-50 disabled:cursor-not-allowed;
+    font-family: var(--mg-font-ui);
+    letter-spacing: 0.08em;
+  }
+  .mg-btn-primary:focus-visible,
+  .mg-btn-ghost:focus-visible,
+  .mg-btn-submit:focus-visible { box-shadow: var(--mg-focus); }
+
+  .mg-btn-primary {
+    @apply px-6 py-3 text-xs text-white;
+    background: var(--mg-mango);
+    box-shadow: 0 8px 24px rgba(255, 107, 0, 0.22);
+  }
+  .mg-btn-primary:hover { background: var(--mg-mango-soft); }
+
+  .mg-btn-ghost {
+    @apply px-6 py-3 text-xs;
+    background: transparent;
+    color: var(--mg-fg);
+    border: 1px solid var(--mg-hairline-strong);
+  }
+  .mg-btn-ghost:hover { background: var(--mg-surface-2); }
+
+  .mg-btn-submit {
+    @apply px-6 py-3.5 text-xs text-white w-full;
+    background: var(--mg-ok);
+    box-shadow: 0 8px 24px rgba(0, 168, 107, 0.20);
+  }
+  .mg-btn-submit:hover { filter: brightness(1.05); }
+
+  .mg-card {
+    background: var(--mg-surface);
+    border: 1px solid var(--mg-hairline);
+    border-radius: 16px;
+  }
+
+  .mg-overline {
+    font-family: var(--mg-font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--mg-fg-dim);
+  }
+
+  .mg-display {
+    font-family: var(--mg-font-display);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--mg-fg);
+  }
+
+  .mg-heading {
+    font-family: var(--mg-font-ui);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--mg-fg);
   }
 }

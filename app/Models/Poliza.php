@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  *
  * @property PolizaEstado $estado
  * @property array<string, mixed> $metadata
+ * @property-read int|null $documents_count
+ * @property-read int|null $visible_documents_count
  */
 class Poliza extends Model
 {
@@ -71,6 +74,23 @@ class Poliza extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(PolicyDocument::class);
+    }
+
+    /** @return HasOne<PolicyDocument, $this> */
+    public function latestDocument(): HasOne
+    {
+        return $this->hasOne(PolicyDocument::class)->latestOfMany('captured_at');
+    }
+
+    /**
+     * Referencia opaca del proveedor para la captura diferida de documentos (solo
+     * existe mientras queden PDFs pendientes de descargar). Ver {@see PolizaProviderRef}.
+     *
+     * @return HasOne<PolizaProviderRef, $this>
+     */
+    public function providerRef(): HasOne
+    {
+        return $this->hasOne(PolizaProviderRef::class);
     }
 
     /** @param  Builder<self>  $query */

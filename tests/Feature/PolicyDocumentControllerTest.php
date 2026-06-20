@@ -45,6 +45,34 @@ it('filtra el index por número de póliza', function (): void {
             ->where('polizas.data.0.numero', 'POL-AAA'));
 });
 
+it('filtra el index por pólizas con documentos', function (): void {
+    $conDocs = Poliza::factory()->create(['numero' => 'POL-CON']);
+    PolicyDocument::factory()->adminUpload()->create(['poliza_id' => $conDocs->id]);
+    Poliza::factory()->create(['numero' => 'POL-SIN']);
+
+    $this->actingAs($this->user)
+        ->get(route('policy-documents.index', ['filter' => 'with']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('polizas.data', 1)
+            ->where('polizas.data.0.numero', 'POL-CON')
+            ->where('polizas.data.0.documents_count', 1));
+});
+
+it('filtra el index por pólizas sin documentos', function (): void {
+    $conDocs = Poliza::factory()->create(['numero' => 'POL-CON']);
+    PolicyDocument::factory()->adminUpload()->create(['poliza_id' => $conDocs->id]);
+    Poliza::factory()->create(['numero' => 'POL-SIN']);
+
+    $this->actingAs($this->user)
+        ->get(route('policy-documents.index', ['filter' => 'without']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('polizas.data', 1)
+            ->where('polizas.data.0.numero', 'POL-SIN')
+            ->where('polizas.data.0.documents_count', 0));
+});
+
 it('sube un documento manual y lo persiste en R2 como admin_upload', function (): void {
     $poliza = Poliza::factory()->create();
     $file = UploadedFile::fake()->create('endoso-junio.pdf', 200, 'application/pdf');

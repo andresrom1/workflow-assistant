@@ -1,22 +1,24 @@
 <template>
+  <MangoLayout :hide-header="isMobile && quote.status === 'checkout_pending'">
+
   <!-- ══════ FALLBACK: no es dispositivo móvil ══════ -->
-  <div v-if="!isMobile" class="min-h-screen bg-gray-900 flex items-center justify-center p-6">
+  <div v-if="!isMobile" class="flex items-center justify-center p-6 min-h-[calc(100dvh-58px)]">
     <div class="text-center max-w-sm">
       <div class="text-6xl mb-6">📱</div>
-      <h1 class="text-2xl font-bold text-white mb-3">Abrí este link desde tu celular</h1>
-      <p class="text-gray-400 text-sm leading-relaxed">
-        Este formulario fue diseñado para completarse desde un dispositivo móvil
-        <strong class="text-gray-200">(Android o iOS)</strong>.<br><br>
-        Por favor, copiá el link y abrilo desde tu teléfono.
+      <h1 class="mg-display text-2xl mb-3">No podés ingresar desde este dispositivo</h1>
+      <p class="text-sm leading-relaxed" style="color: var(--mg-fg-dim)">
+        Por favor, continuá desde un dispositivo móvil
+        <strong style="color: var(--mg-fg)">(Android o iOS)</strong>.<br><br>
+        Copiá el link y abrilo desde tu teléfono.
       </p>
-      <div class="mt-8 flex justify-center gap-4">
-        <div class="flex items-center gap-2 bg-gray-800 rounded-xl px-4 py-3">
+      <div class="mt-8 flex justify-center gap-3">
+        <div class="mg-card flex items-center gap-2 px-4 py-3">
           <span class="text-2xl">🤖</span>
-          <span class="text-sm text-gray-300 font-medium">Android</span>
+          <span class="text-sm font-medium" style="color: var(--mg-fg)">Android</span>
         </div>
-        <div class="flex items-center gap-2 bg-gray-800 rounded-xl px-4 py-3">
+        <div class="mg-card flex items-center gap-2 px-4 py-3">
           <span class="text-2xl">🍎</span>
-          <span class="text-sm text-gray-300 font-medium">iOS</span>
+          <span class="text-sm font-medium" style="color: var(--mg-fg)">iOS</span>
         </div>
       </div>
     </div>
@@ -24,217 +26,246 @@
 
   <!-- ══════ ESTADO INVÁLIDO ══════ -->
   <div v-else-if="quote.status !== 'checkout_pending'"
-    class="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+    class="flex items-center justify-center p-6 min-h-[calc(100dvh-58px)]">
     <div class="text-center max-w-sm">
       <div class="text-6xl mb-6">⚠️</div>
-      <h1 class="text-2xl font-bold text-gray-900 mb-3">Link no disponible</h1>
-      <p class="text-gray-500 text-sm leading-relaxed">
-        Este link de checkout ya fue procesado, ha expirado o no es válido para cargar información.
+      <h1 class="mg-display text-2xl mb-3">Link no disponible</h1>
+      <p class="text-sm leading-relaxed" style="color: var(--mg-fg-dim)">
+        Este link de checkout ya fue procesado, expiró o no es válido para cargar información.
       </p>
     </div>
   </div>
 
   <!-- ══════ FORMULARIO PRINCIPAL (mobile only) ══════ -->
-  <div v-else class="min-h-screen bg-gray-50">
+  <div v-else>
 
     <!-- Header sticky con cobertura -->
-    <div class="bg-white border-b border-gray-200 px-4 py-4 sticky top-0 z-10 shadow-sm">
-      <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider">Cobertura seleccionada</p>
-      <div class="flex items-center justify-between mt-1">
-        <div>
-          <p class="font-bold text-gray-900 text-sm">{{ alternative.aseguradora }} — {{ alternative.titulo }}</p>
-          <p class="text-xs text-gray-500">{{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }} <span
-              v-if="vehicle.patente">· {{ vehicle.patente }}</span></p>
+    <div class="px-4 py-4 sticky top-0 z-20"
+      :style="{ background: 'var(--mg-bg)', borderBottom: '1px solid var(--mg-hairline)' }">
+      <div class="flex items-center justify-between mb-3">
+        <MangoLogo compact :height="22" />
+        <p class="mg-overline">Cobertura</p>
+      </div>
+      <div class="flex items-end justify-between gap-3">
+        <div class="min-w-0">
+          <p class="mg-heading text-[15px] truncate">{{ alternative.aseguradora }} — {{ alternative.titulo }}</p>
+          <p class="text-xs mt-0.5 truncate" style="color: var(--mg-fg-dim)">{{ vehicle.marca }} {{ vehicle.modelo }}
+            {{ vehicle.year }} <span v-if="vehicle.patente">· {{ vehicle.patente }}</span></p>
         </div>
-        <div class="text-right">
-          <span class="text-lg font-bold text-gray-900">${{ formatPrice(alternative.precio) }}</span>
-          <span class="text-xs text-gray-400 block">/mes</span>
+        <div class="text-right flex-shrink-0 leading-none">
+          <span class="mg-display text-3xl">${{ formatPrice(alternative.precio) }}</span>
+          <span class="text-xs block mt-0.5"
+            style="color: var(--mg-fg-dim); font-style: italic; font-family: var(--mg-font-display)">/mes</span>
         </div>
       </div>
     </div>
 
     <!-- Indicador de pasos -->
-    <div class="bg-white border-b border-gray-100 px-4 py-3">
+    <div class="px-4 py-3.5" :style="{ borderBottom: '1px solid var(--mg-hairline)' }">
       <div class="flex items-center justify-between">
         <div v-for="(label, i) in stepLabels" :key="i" class="flex items-center">
           <div class="flex flex-col items-center">
             <div
               class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200"
-              :class="stepCircleClass(i + 1)">
+              :style="stepCircleStyle(i + 1)">
               <span v-if="step > i + 1">✓</span>
               <span v-else>{{ i + 1 }}</span>
             </div>
-            <span class="text-xs mt-1 font-medium" :class="step === i + 1 ? 'text-blue-600' : 'text-gray-400'">{{ label
-            }}</span>
+            <span class="text-[10px] mt-1.5 font-semibold uppercase tracking-wide"
+              :style="{ color: step === i + 1 ? 'var(--mg-mango)' : 'var(--mg-fg-dim)' }">{{ label }}</span>
           </div>
-          <div v-if="i < stepLabels.length - 1" class="w-6 h-px bg-gray-200 mb-4 mx-1" />
+          <div v-if="i < stepLabels.length - 1" class="w-5 h-px mb-4 mx-1"
+            :style="{ background: 'var(--mg-hairline-strong)' }" />
         </div>
       </div>
     </div>
 
-    <div ref="formRef" class="pb-8">
+    <div ref="formRef" class="pb-10 max-w-md mx-auto">
 
       <!-- ══════════ PASO 1: Datos personales ══════════ -->
       <div v-show="step === 1" class="px-4 pt-6 space-y-4">
-        <h2 class="text-base font-bold text-gray-800">Datos del tomador</h2>
+        <h2 class="mg-heading text-lg">Datos del tomador</h2>
 
-        <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+        <div class="mg-card p-4 space-y-4">
           <div class="grid grid-cols-2 gap-3 items-start">
             <Field label="Nombre *" :error="errors.first_name">
-              <input v-model="form.first_name" type="text" name="first_name" placeholder="Juan Alberto" class="field"
-                :class="{ 'field-error': errors.first_name }" autocomplete="given-name" />
+              <input v-model="form.first_name" type="text" name="first_name" placeholder="Juan Alberto" class="mg-field"
+                :class="{ 'mg-field-error': errors.first_name }" autocomplete="given-name" />
             </Field>
             <Field label="Apellido *" :error="errors.last_name">
-              <input v-model="form.last_name" type="text" name="last_name" placeholder="Pérez" class="field"
-                :class="{ 'field-error': errors.last_name }" autocomplete="family-name" />
+              <input v-model="form.last_name" type="text" name="last_name" placeholder="Pérez" class="mg-field"
+                :class="{ 'mg-field-error': errors.last_name }" autocomplete="family-name" />
             </Field>
           </div>
 
           <Field label="DNI *" :error="errors.dni">
-            <input v-model="form.dni" type="text" name="dni" placeholder="30000000" inputmode="numeric" class="field"
-              :class="{ 'field-error': errors.dni }" />
+            <input v-model="form.dni" type="text" name="dni" placeholder="30000000" inputmode="numeric" class="mg-field"
+              :class="{ 'mg-field-error': errors.dni }" />
           </Field>
 
           <div class="grid grid-cols-2 gap-3 items-start">
             <Field label="Fecha de nacimiento *" :error="errors.birthdate">
-              <input v-model="form.birthdate" type="date" name="birthdate" class="field"
-                :class="{ 'field-error': errors.birthdate }" autocomplete="bday" />
+              <input v-model="form.birthdate" type="date" name="birthdate" class="mg-field"
+                :class="{ 'mg-field-error': errors.birthdate }" autocomplete="bday" />
             </Field>
             <Field label="Sexo *" :error="errors.sex_id">
-              <select v-model="form.sex_id" name="sex_id" class="field" :class="{ 'field-error': errors.sex_id }">
-                <option value="" disabled>Seleccioná</option>
-                <option value="M">Masculino</option>
-                <option value="F">Femenino</option>
-              </select>
+              <Select v-model="form.sex_id">
+                <SelectTrigger class="w-full h-[38px]" :aria-invalid="!!errors.sex_id || undefined">
+                  <SelectValue placeholder="Seleccioná" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="M">Masculino</SelectItem>
+                    <SelectItem value="F">Femenino</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
           </div>
 
           <Field label="Condición fiscal *" :error="errors.tax_condition_id">
-            <select v-model="form.tax_condition_id" name="tax_condition_id" class="field"
-              :class="{ 'field-error': errors.tax_condition_id }">
-              <option value="" disabled>Seleccioná la condición frente al IVA</option>
-              <option v-for="tc in taxConditions" :key="tc.ref" :value="tc.ref">{{ tc.label }}</option>
-            </select>
-            <p v-if="!taxConditions.length" class="text-xs text-amber-600 mt-1">
+            <Select v-model="form.tax_condition_id">
+              <SelectTrigger class="w-full h-[38px]" :aria-invalid="!!errors.tax_condition_id || undefined">
+                <SelectValue placeholder="Seleccioná la condición frente al IVA" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem v-for="tc in taxConditions" :key="tc.ref" :value="tc.ref">{{ tc.label }}</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <p v-if="!taxConditions.length" class="text-xs mt-1" style="color: var(--mg-warn)">
               No se pudieron cargar las condiciones fiscales. Reintentá más tarde.
             </p>
           </Field>
 
           <Field label="Email *" :error="errors.email">
-            <input v-model="form.email" type="email" name="email" placeholder="juan@ejemplo.com" class="field"
-              :class="{ 'field-error': errors.email }" autocomplete="email" />
+            <input v-model="form.email" type="email" name="email" placeholder="juan@ejemplo.com" class="mg-field"
+              :class="{ 'mg-field-error': errors.email }" autocomplete="email" />
           </Field>
 
           <Field label="Teléfono *" :error="errors.phone_prefix || errors.phone_number">
             <div class="grid grid-cols-[90px_1fr] gap-3">
               <input v-model="form.phone_prefix" type="tel" name="phone_prefix" placeholder="11" maxlength="3"
-                inputmode="numeric" class="field" :class="{ 'field-error': errors.phone_prefix }"
+                inputmode="numeric" class="mg-field" :class="{ 'mg-field-error': errors.phone_prefix }"
                 @input="form.phone_prefix = form.phone_prefix.replace(/\D/g, '').slice(0, 3)" />
               <input v-model="form.phone_number" type="tel" name="phone_number" placeholder="1234567" maxlength="9"
-                inputmode="numeric" class="field" :class="{ 'field-error': errors.phone_number }" autocomplete="tel-national"
+                inputmode="numeric" class="mg-field" :class="{ 'mg-field-error': errors.phone_number }" autocomplete="tel-national"
                 @input="form.phone_number = form.phone_number.replace(/\D/g, '').slice(0, 9)" />
             </div>
-            <p class="text-xs text-gray-400 mt-1">Característica (sin 0) y número (sin 15).</p>
+            <p class="text-xs mt-1" style="color: var(--mg-fg-dim)">Característica (sin 0) y número (sin 15).</p>
           </Field>
         </div>
 
-        <h2 class="text-base font-bold text-gray-800 pt-2">Domicilio</h2>
-        <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+        <h2 class="mg-heading text-lg pt-2">Domicilio</h2>
+        <div class="mg-card p-4 space-y-4">
           <Field label="Calle *" :error="errors.domicilio_calle">
             <input v-model="form.domicilio_calle" type="text" name="domicilio_calle" placeholder="Av. Siempreviva"
-              class="field" :class="{ 'field-error': errors.domicilio_calle }" autocomplete="street-address" />
+              class="mg-field" :class="{ 'mg-field-error': errors.domicilio_calle }" autocomplete="street-address" />
           </Field>
 
           <div class="grid grid-cols-2 gap-3 items-start">
             <Field label="Número *" :error="errors.domicilio_numero">
-              <input v-model="form.domicilio_numero" type="text" name="domicilio_numero" placeholder="742" class="field"
-                :class="{ 'field-error': errors.domicilio_numero }" inputmode="numeric" />
+              <input v-model="form.domicilio_numero" type="text" name="domicilio_numero" placeholder="742" class="mg-field"
+                :class="{ 'mg-field-error': errors.domicilio_numero }" inputmode="numeric" />
             </Field>
             <Field label="Código Postal *" :error="errors.domicilio_cp">
-              <input v-model="form.domicilio_cp" type="text" name="domicilio_cp" placeholder="1414" class="field"
-                :class="{ 'field-error': errors.domicilio_cp }" inputmode="numeric" autocomplete="postal-code" />
+              <input v-model="form.domicilio_cp" type="text" name="domicilio_cp" placeholder="1414" class="mg-field"
+                :class="{ 'mg-field-error': errors.domicilio_cp }" inputmode="numeric" autocomplete="postal-code" />
             </Field>
           </div>
 
           <Field label="Provincia *" :error="errors.domicilio_provincia">
-            <select v-model="form.domicilio_provincia" name="domicilio_provincia" class="field"
-              :class="{ 'field-error': errors.domicilio_provincia }">
-              <option value="" disabled>Seleccioná la provincia</option>
-              <option v-for="p in provincias" :key="p" :value="p">{{ p }}</option>
-            </select>
+            <Select v-model="form.domicilio_provincia">
+              <SelectTrigger class="w-full h-[38px]" :aria-invalid="!!errors.domicilio_provincia || undefined">
+                <SelectValue placeholder="Seleccioná la provincia" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem v-for="p in provincias" :key="p" :value="p">{{ p }}</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </Field>
 
           <Field label="Localidad *" :error="errors.domicilio_localidad">
             <input v-model="form.domicilio_localidad" type="text" name="domicilio_localidad" placeholder="Buenos Aires"
-              class="field" :class="{ 'field-error': errors.domicilio_localidad }" autocomplete="address-level2" />
+              class="mg-field" :class="{ 'mg-field-error': errors.domicilio_localidad }" autocomplete="address-level2" />
           </Field>
         </div>
 
         <div class="flex justify-end pt-2">
-          <button type="button" @click="goToStep(2)" class="btn-primary">Siguiente →</button>
+          <button type="button" @click="goToStep(2)" class="mg-btn-primary">Siguiente →</button>
         </div>
       </div>
 
       <!-- ══════════ PASO 2: Datos de pago ══════════ -->
       <div v-show="step === 2" class="px-4 pt-6 space-y-4">
-        <h2 class="text-base font-bold text-gray-800">Datos de pago</h2>
+        <h2 class="mg-heading text-lg">Datos de pago</h2>
 
-        <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+        <div class="mg-card p-4 space-y-4">
           <Field label="Marca de tarjeta *" :error="errors.cc_brand">
-            <select v-model="form.cc_brand" name="cc_brand" class="field" :class="{ 'field-error': errors.cc_brand }">
-              <option value="" disabled>Seleccioná la marca</option>
-              <option value="visa">Visa</option>
-              <option value="mastercard">Mastercard</option>
-              <option value="amex">American Express</option>
-              <option value="naranja">Naranja</option>
-              <option value="cabal">Cabal</option>
-              <option value="maestro">Maestro</option>
-            </select>
+            <Select v-model="form.cc_brand">
+              <SelectTrigger class="w-full h-[38px]" :aria-invalid="!!errors.cc_brand || undefined">
+                <SelectValue placeholder="Seleccioná la marca" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="visa">Visa</SelectItem>
+                  <SelectItem value="mastercard">Mastercard</SelectItem>
+                  <SelectItem value="amex">American Express</SelectItem>
+                  <SelectItem value="naranja">Naranja</SelectItem>
+                  <SelectItem value="cabal">Cabal</SelectItem>
+                  <SelectItem value="maestro">Maestro</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </Field>
 
           <Field label="Número de tarjeta *" :error="errors.cc_pan">
             <input v-model="form.cc_pan" type="text" name="cc_pan" placeholder="4111 1111 1111 1111" maxlength="19"
-              inputmode="numeric" @input="formatPan" @blur="validatePanLuhn" class="field font-mono"
-              :class="{ 'field-error': errors.cc_pan }" autocomplete="off" />
+              inputmode="numeric" @input="formatPan" @blur="validatePanLuhn" class="mg-field font-mono"
+              :class="{ 'mg-field-error': errors.cc_pan }" autocomplete="off" />
           </Field>
 
           <div class="max-w-[150px]">
             <Field label="Vencimiento *" :error="errors.cc_expiry">
               <input v-model="form.cc_expiry" type="text" name="cc_expiry" placeholder="MM/AA" maxlength="5"
-                inputmode="numeric" @input="formatExpiry" class="field font-mono"
-                :class="{ 'field-error': errors.cc_expiry }" autocomplete="off" />
+                inputmode="numeric" @input="formatExpiry" class="mg-field font-mono"
+                :class="{ 'mg-field-error': errors.cc_expiry }" autocomplete="off" />
             </Field>
           </div>
 
           <Field label="Nombre del titular *" :error="errors.cc_holder_name">
             <input v-model="form.cc_holder_name" type="text" name="cc_holder_name" placeholder="Juan Alberto Pérez"
-              class="field" :class="{ 'field-error': errors.cc_holder_name }" autocomplete="off" />
+              class="mg-field" :class="{ 'mg-field-error': errors.cc_holder_name }" autocomplete="off" />
           </Field>
 
           <Field label="DNI del titular *" :error="errors.cc_holder_dni">
             <input v-model="form.cc_holder_dni" type="text" name="cc_holder_dni" placeholder="30000000"
-              inputmode="numeric" class="field" :class="{ 'field-error': errors.cc_holder_dni }" autocomplete="off" />
-            <p class="text-xs text-gray-400 mt-1">Puede diferir del tomador del seguro.</p>
+              inputmode="numeric" class="mg-field" :class="{ 'mg-field-error': errors.cc_holder_dni }" autocomplete="off" />
+            <p class="text-xs mt-1" style="color: var(--mg-fg-dim)">Puede diferir del tomador del seguro.</p>
           </Field>
         </div>
 
         <div class="flex justify-between pt-2">
-          <button type="button" @click="step = 1" class="btn-ghost">← Atrás</button>
-          <button type="button" @click="goToStep(3)" class="btn-primary">Siguiente →</button>
+          <button type="button" @click="step = 1" class="mg-btn-ghost">← Atrás</button>
+          <button type="button" @click="goToStep(3)" class="mg-btn-primary">Siguiente →</button>
         </div>
       </div>
 
       <!-- ══════════ PASO 3: Verificación del vehículo ══════════ -->
       <div v-show="step === 3" class="px-4 pt-6 space-y-4">
-        <h2 class="text-base font-bold text-gray-800">Verificación del vehículo</h2>
-        <p class="text-xs text-gray-500">Confirmá que los datos del vehículo sean correctos. Estos datos son inmutables
-          y provienen del snapshot de cotización.</p>
+        <h2 class="mg-heading text-lg">Verificación del vehículo</h2>
+        <p class="text-xs" style="color: var(--mg-fg-dim)">Confirmá que los datos del vehículo sean correctos. Son
+          inmutables: vienen del snapshot de la cotización.</p>
 
         <!-- Datos inmutables del snapshot -->
-        <div class="bg-blue-50 rounded-xl border border-blue-100 p-4 space-y-3">
+        <div class="mg-card p-4 space-y-3" :style="{ background: 'var(--mg-mango-tint)', borderColor: 'transparent' }">
           <div class="flex items-center justify-between">
-            <span class="text-xs text-blue-600 font-semibold uppercase tracking-wider">Datos del snapshot</span>
-            <span class="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-medium">Solo lectura</span>
+            <span class="mg-overline" style="color: var(--mg-mango)">Datos del snapshot</span>
+            <span class="text-[10px] rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide"
+              :style="{ background: 'var(--mg-mango)', color: '#fff' }">Solo lectura</span>
           </div>
           <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <ReadOnlyField v-if="vehicle.patente" label="Patente" :value="vehicle.patente" />
@@ -247,94 +278,97 @@
         </div>
 
         <!-- Datos adicionales que ingresa el cliente -->
-        <h3 class="text-sm font-bold text-gray-700 pt-1">Datos adicionales</h3>
-        <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+        <h3 class="mg-heading text-sm pt-1">Datos adicionales</h3>
+        <div class="mg-card p-4 space-y-4">
           <Field label="Uso del vehículo *" :error="errors.vehiculo_uso">
             <div class="grid grid-cols-2 gap-3 mt-1">
-              <label class="flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
-                :class="form.vehiculo_uso === 'particular' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'">
+              <label class="flex items-center gap-2 rounded-xl px-3 py-2.5 cursor-pointer transition-colors"
+                :style="selectableStyle(form.vehiculo_uso === 'particular')">
                 <input type="radio" v-model="form.vehiculo_uso" value="particular" name="vehiculo_uso" class="hidden" />
                 <span class="text-xl">🚗</span>
-                <span class="text-sm font-medium">Particular</span>
+                <span class="text-sm font-medium" style="color: var(--mg-fg)">Particular</span>
               </label>
-              <label class="flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
-                :class="form.vehiculo_uso === 'otro' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'">
+              <label class="flex items-center gap-2 rounded-xl px-3 py-2.5 cursor-pointer transition-colors"
+                :style="selectableStyle(form.vehiculo_uso === 'otro')">
                 <input type="radio" v-model="form.vehiculo_uso" value="otro" name="vehiculo_uso" class="hidden" />
                 <span class="text-xl">🚕</span>
-                <span class="text-sm font-medium">Otro</span>
+                <span class="text-sm font-medium" style="color: var(--mg-fg)">Otro</span>
               </label>
             </div>
-            <p v-if="errors.vehiculo_uso" class="text-xs text-red-600 mt-1">{{ errors.vehiculo_uso }}</p>
+            <p v-if="errors.vehiculo_uso" class="text-xs mt-1" style="color: var(--mg-bad)">{{ errors.vehiculo_uso }}</p>
           </Field>
 
           <Field label="Nro. de chasis *" :error="errors.vehiculo_nro_chasis">
             <input v-model="form.vehiculo_nro_chasis" type="text" name="vehiculo_nro_chasis"
-              placeholder="9BWZZZ377VT004251" class="field font-mono text-sm"
-              :class="{ 'field-error': errors.vehiculo_nro_chasis }" style="text-transform: uppercase"
+              placeholder="9BWZZZ377VT004251" class="mg-field font-mono text-sm"
+              :class="{ 'mg-field-error': errors.vehiculo_nro_chasis }" style="text-transform: uppercase"
               @input="form.vehiculo_nro_chasis = form.vehiculo_nro_chasis.toUpperCase()" />
           </Field>
 
           <Field label="Nro. de motor *" :error="errors.vehiculo_nro_motor">
             <input v-model="form.vehiculo_nro_motor" type="text" name="vehiculo_nro_motor" placeholder="AZD5789"
-              class="field font-mono text-sm" :class="{ 'field-error': errors.vehiculo_nro_motor }"
+              class="mg-field font-mono text-sm" :class="{ 'mg-field-error': errors.vehiculo_nro_motor }"
               style="text-transform: uppercase"
               @input="form.vehiculo_nro_motor = form.vehiculo_nro_motor.toUpperCase()" />
           </Field>
 
-          <label class="flex items-center justify-between gap-3 border rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
-            :class="form.has_gnc ? 'border-blue-500 bg-blue-50' : 'border-gray-300'">
+          <label class="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 cursor-pointer transition-colors"
+            :style="selectableStyle(form.has_gnc)">
             <span class="flex items-center gap-2">
               <span class="text-xl">⛽</span>
-              <span class="text-sm font-medium">¿Tiene equipo de GNC?</span>
+              <span class="text-sm font-medium" style="color: var(--mg-fg)">¿Tiene equipo de GNC?</span>
             </span>
-            <input type="checkbox" v-model="form.has_gnc" name="has_gnc" class="w-5 h-5 accent-blue-600" />
+            <input type="checkbox" v-model="form.has_gnc" name="has_gnc" class="w-5 h-5"
+              style="accent-color: var(--mg-mango)" />
           </label>
-          <p class="text-xs text-gray-400 -mt-2">Si tiene gas, te pediremos fotos del tubo y la oblea en el paso de inspección.</p>
+          <p class="text-xs -mt-2" style="color: var(--mg-fg-dim)">Si tiene gas, te pedimos fotos del tubo y la oblea en
+            el paso de inspección.</p>
         </div>
 
         <div class="flex justify-between pt-2">
-          <button type="button" @click="step = 2" class="btn-ghost">← Atrás</button>
-          <button type="button" @click="goToStep(4)" class="btn-primary">Siguiente →</button>
+          <button type="button" @click="step = 2" class="mg-btn-ghost">← Atrás</button>
+          <button type="button" @click="goToStep(4)" class="mg-btn-primary">Siguiente →</button>
         </div>
       </div>
 
       <!-- ══════════ PASO 4: Inspección fotográfica ══════════ -->
       <div v-show="step === 4" class="px-4 pt-6 space-y-4">
-        <h2 class="text-base font-bold text-gray-800">Inspección fotográfica</h2>
-        <p class="text-xs text-gray-500 leading-relaxed">
-          Sacá cada foto <strong>en este momento</strong> con la cámara de tu teléfono.
-          No se permite subir imágenes desde la galería.
+        <h2 class="mg-heading text-lg">Inspección fotográfica</h2>
+        <p class="text-xs leading-relaxed" style="color: var(--mg-fg-dim)">
+          Sacá cada foto <strong style="color: var(--mg-fg)">en este momento</strong> con la cámara de tu teléfono.
+          No se pueden subir imágenes desde la galería.
         </p>
 
         <div class="space-y-3">
           <div v-for="(slot, i) in photoSlots" :key="slot.key"
-            class="bg-white rounded-xl border overflow-hidden transition-colors"
-            :class="photoIds[slot.key] ? 'border-green-400' : (uploading[slot.key] ? 'border-blue-400' : (errors[`photo_${slot.key}`] ? 'border-red-400' : 'border-gray-200'))">
+            class="mg-card overflow-hidden transition-colors" :style="photoSlotStyle(slot.key)">
             <div class="flex items-center gap-3 p-3">
               <!-- Preview / ícono -->
-              <div
-                class="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+              <div class="flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center"
+                :style="{ background: 'var(--mg-surface-2)' }">
                 <img v-if="photos[slot.key]" :src="photos[slot.key]" class="w-full h-full object-cover"
                   :alt="slot.label" />
                 <div v-else-if="uploading[slot.key]"
-                  class="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                  class="animate-spin w-6 h-6 border-2 rounded-full"
+                  :style="{ borderColor: 'var(--mg-mango)', borderTopColor: 'transparent' }"></div>
                 <span v-else class="text-2xl">{{ slot.icon }}</span>
               </div>
 
               <div class="flex-1 min-w-0">
-                <p class="font-medium text-sm text-gray-800">{{ slot.label }}</p>
-                <p v-if="uploading[slot.key]" class="text-xs text-blue-600 mt-0.5">Subiendo foto…</p>
-                <p v-else class="text-xs text-gray-500 mt-0.5">{{ slot.hint }}</p>
-                <p v-if="errors[`photo_${slot.key}`]" class="text-xs text-red-600 mt-0.5">{{ errors[`photo_${slot.key}`]
-                }}</p>
+                <p class="font-medium text-sm" style="color: var(--mg-fg)">{{ slot.label }}</p>
+                <p v-if="uploading[slot.key]" class="text-xs mt-0.5" style="color: var(--mg-mango)">Subiendo foto…</p>
+                <p v-else class="text-xs mt-0.5" style="color: var(--mg-fg-dim)">{{ slot.hint }}</p>
+                <p v-if="errors[`photo_${slot.key}`]" class="text-xs mt-0.5" style="color: var(--mg-bad)">{{
+                  errors[`photo_${slot.key}`] }}</p>
               </div>
 
               <!-- Botón eliminar (solo si hay foto subida) -->
               <button v-if="photoIds[slot.key] && !uploading[slot.key]"
                 type="button"
                 @click="removePhoto(slot.key)"
-                class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center transition-colors active:bg-red-200">
-                <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+                :style="{ background: 'var(--mg-mango-tint)' }">
+                <svg class="w-4 h-4" style="color: var(--mg-bad)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
                 </svg>
               </button>
@@ -346,7 +380,7 @@
                 <input type="file" accept="image/*" capture="environment" class="hidden"
                   @change="onPhotoCapture($event, slot.key)" :disabled="!!uploading[slot.key]" />
                 <div class="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
-                  :class="photoIds[slot.key] ? 'bg-green-500' : (uploading[slot.key] ? 'bg-gray-400' : 'bg-blue-600')">
+                  :style="cameraBtnStyle(slot.key)">
                   <span v-if="photoIds[slot.key]" class="text-white text-sm">✓</span>
                   <svg v-else class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -361,36 +395,37 @@
         </div>
 
         <!-- Progreso de fotos -->
-        <div class="bg-white rounded-xl border border-gray-200 p-3">
+        <div class="mg-card p-3">
           <div class="flex items-center justify-between mb-2">
-            <span class="text-sm font-medium text-gray-700">Progreso</span>
+            <span class="mg-overline">Progreso</span>
             <span class="text-sm font-bold"
-              :class="photoCount === photoSlots.length ? 'text-green-600' : 'text-gray-500'">{{ photoCount }}/{{
-                photoSlots.length }}</span>
+              :style="{ color: photoCount === photoSlots.length ? 'var(--mg-ok)' : 'var(--mg-fg-dim)' }">{{ photoCount
+              }}/{{ photoSlots.length }}</span>
           </div>
           <div class="flex gap-1">
             <div v-for="(slot, i) in photoSlots" :key="slot.key" class="h-1.5 flex-1 rounded-full transition-colors"
-              :class="photoIds[slot.key] ? 'bg-green-500' : 'bg-gray-200'" />
+              :style="{ background: photoIds[slot.key] ? 'var(--mg-ok)' : 'var(--mg-hairline-strong)' }" />
           </div>
         </div>
 
         <!-- Resumen antes del envío -->
-        <div class="bg-gray-50 rounded-xl border border-gray-200 p-4 text-sm">
-          <p class="font-semibold text-gray-700 mb-2">Resumen final</p>
-          <div class="space-y-1 text-gray-600">
-            <p><span class="text-gray-400">Tomador:</span> {{ `${form.first_name} ${form.last_name}`.trim() || '—' }}</p>
-            <p><span class="text-gray-400">Vehículo:</span> {{ vehicle.marca }} {{ vehicle.modelo }} {{ vehicle.year }}
-            </p>
-            <p><span class="text-gray-400">Cobertura:</span> {{ alternative.aseguradora }} — {{ alternative.titulo }}
-            </p>
-            <p><span class="text-gray-400">Prima:</span> ${{ formatPrice(alternative.precio) }}/mes</p>
-            <p><span class="text-gray-400">Fotos:</span> {{ photoCount }}/{{ photoSlots.length }}</p>
+        <div class="mg-card p-4 text-sm" :style="{ background: 'var(--mg-surface-2)' }">
+          <p class="mg-overline mb-2">Resumen final</p>
+          <div class="space-y-1" style="color: var(--mg-fg)">
+            <p><span style="color: var(--mg-fg-dim)">Tomador:</span> {{ `${form.first_name} ${form.last_name}`.trim() ||
+              '—' }}</p>
+            <p><span style="color: var(--mg-fg-dim)">Vehículo:</span> {{ vehicle.marca }} {{ vehicle.modelo }} {{
+              vehicle.year }}</p>
+            <p><span style="color: var(--mg-fg-dim)">Cobertura:</span> {{ alternative.aseguradora }} — {{
+              alternative.titulo }}</p>
+            <p><span style="color: var(--mg-fg-dim)">Prima:</span> ${{ formatPrice(alternative.precio) }}/mes</p>
+            <p><span style="color: var(--mg-fg-dim)">Fotos:</span> {{ photoCount }}/{{ photoSlots.length }}</p>
           </div>
         </div>
 
-        <div class="flex justify-between pt-2">
-          <button type="button" @click="step = 3" class="btn-ghost">← Atrás</button>
-          <button type="button" :disabled="submitting || photoCount < photoSlots.length" class="btn-submit"
+        <div class="flex items-center gap-3 pt-2">
+          <button type="button" @click="step = 3" class="mg-btn-ghost flex-shrink-0">← Atrás</button>
+          <button type="button" :disabled="submitting || photoCount < photoSlots.length" class="mg-btn-submit"
             @click="submitForm">
             <span v-if="submitting">Enviando…</span>
             <span v-else-if="photoCount < photoSlots.length">Fotos incompletas ({{ photoCount }}/{{ photoSlots.length
@@ -401,19 +436,39 @@
       </div>
     </div>
   </div>
+
+  <!-- ══════ MODAL DE AVISO (reemplaza window.alert) ══════ -->
+  <Transition name="fade">
+    <div v-if="notice" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6"
+      @click.self="closeNotice">
+      <div class="mg-card w-full max-w-sm p-6 text-center" :style="{ boxShadow: '0 20px 60px rgba(0,0,0,.35)' }">
+        <h3 class="mg-heading text-lg mb-2">{{ notice.title }}</h3>
+        <p class="text-sm leading-relaxed mb-6" style="color: var(--mg-fg-dim)">{{ notice.message }}</p>
+        <button type="button" class="mg-btn-primary w-full" @click="closeNotice">Entendido</button>
+      </div>
+    </div>
+  </Transition>
+
+  </MangoLayout>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, defineComponent, h, onMounted, onUnmounted, watch } from 'vue'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
+import MangoLayout from '@/layouts/MangoLayout.vue'
+import MangoLogo from '@/components/Mango/MangoLogo.vue'
 
 // ─── Componentes inline ────────────────────────────────────────────────────────
 const Field = defineComponent({
   props: { label: String, error: String },
   setup(props, { slots }) {
     return () => h('div', [
-      h('span', { class: 'block text-sm font-medium text-gray-700 mb-1' }, props.label),
+      h('span', {
+        class: 'block text-sm font-medium mb-1.5',
+        style: 'color: var(--mg-fg); font-family: var(--mg-font-ui)',
+      }, props.label),
       slots.default?.(),
-      props.error ? h('p', { class: 'mt-1 text-xs text-red-600' }, props.error) : null,
+      props.error ? h('p', { class: 'mt-1 text-xs', style: 'color: var(--mg-bad)' }, props.error) : null,
     ])
   }
 })
@@ -422,8 +477,11 @@ const ReadOnlyField = defineComponent({
   props: { label: String, value: String },
   setup(props) {
     return () => h('div', [
-      h('p', { class: 'text-xs text-gray-500' }, props.label),
-      h('p', { class: 'font-semibold text-gray-800 truncate' }, props.value || '—'),
+      h('p', { class: 'mg-overline' }, props.label),
+      h('p', {
+        class: 'font-semibold truncate mt-0.5',
+        style: 'color: var(--mg-fg); font-family: var(--mg-font-ui)',
+      }, props.value || '—'),
     ])
   }
 })
@@ -448,11 +506,8 @@ const props = defineProps<{
 }>()
 
 // ─── Mobile detection ──────────────────────────────────────────────────────────
-// const isMobile = computed(() =>
-//   /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-// )
-// const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-const isMobile = true  // Forzar mobile durante desarrollo
+// El form solo se completa desde un celular (cámara + flujo de inspección).
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 // ─── CSRF ──────────────────────────────────────────────────────────────────────
 const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? ''
 
@@ -483,10 +538,37 @@ const step = ref(1)
 const stepLabels = ['Personal', 'Pago', 'Vehículo', 'Inspección']
 const submitting = ref(false)
 
-const stepCircleClass = (s: number) => {
-  if (step.value > s) return 'bg-green-500 text-white'
-  if (step.value === s) return 'bg-blue-600 text-white'
-  return 'bg-gray-200 text-gray-500'
+const stepCircleStyle = (s: number) => {
+  if (step.value > s) return { background: 'var(--mg-ok)', color: '#fff' }
+  if (step.value === s) return { background: 'var(--mg-mango)', color: '#fff' }
+  return { background: 'transparent', color: 'var(--mg-fg-dim)', border: '1px solid var(--mg-hairline-strong)' }
+}
+
+// ─── Estilos de marca para elementos seleccionables / fotos ─────────────────────
+const selectableStyle = (active: boolean) =>
+  active
+    ? { background: 'var(--mg-mango-tint)', border: '1px solid var(--mg-mango)' }
+    : { background: 'transparent', border: '1px solid var(--mg-hairline-strong)' }
+
+const photoSlotStyle = (key: string) => {
+  if (photoIds[key]) return { borderColor: 'var(--mg-ok)' }
+  if (uploading[key]) return { borderColor: 'var(--mg-mango)' }
+  if (errors[`photo_${key}`]) return { borderColor: 'var(--mg-bad)' }
+  return {}
+}
+
+const cameraBtnStyle = (key: string) => {
+  if (photoIds[key]) return { background: 'var(--mg-ok)' }
+  if (uploading[key]) return { background: 'var(--mg-fg-faint)' }
+  return { background: 'var(--mg-mango)' }
+}
+
+// ─── Modal de aviso (reemplaza window.alert — diálogos nativos prohibidos) ──────
+const notice = ref<{ title: string; message: string; onClose?: () => void } | null>(null)
+const closeNotice = () => {
+  const cb = notice.value?.onClose
+  notice.value = null
+  cb?.()
 }
 
 // ─── Form data ─────────────────────────────────────────────────────────────────
@@ -722,7 +804,10 @@ const removePhoto = async (key: string) => {
     // 3. Fallo en red: Como es Optimistic UI, informamos el problema pero lo hemos ocultado.  
     // Si bien no existe local, la CleanupTempPhotos lo borrará 24h más tarde.
     console.error(`Fallo borrado silencioso de foto ${key}`, err)
-    alert('Hubo un error de conexión al limpiar la foto, pero podés continuar completando el formulario.')
+    notice.value = {
+      title: 'No se pudo limpiar la foto',
+      message: 'Hubo un error de conexión, pero podés continuar completando el formulario.',
+    }
   }
 }
 
@@ -872,8 +957,11 @@ const submitForm = async () => {
     }
 
     if (res.status === 409) {
-      alert('El link de checkout expiró o ya fue procesado.')
-      window.location.reload()
+      notice.value = {
+        title: 'Link no disponible',
+        message: 'El link de checkout expiró o ya fue procesado.',
+        onClose: () => window.location.reload(),
+      }
       return
     }
 
@@ -889,7 +977,10 @@ const submitForm = async () => {
       else step.value = 4
     }
   } catch {
-    alert('Error de conexión. Verificá tu internet e intentá de nuevo.')
+    notice.value = {
+      title: 'Error de conexión',
+      message: 'Verificá tu internet e intentá de nuevo.',
+    }
   } finally {
     submitting.value = false
   }
@@ -901,5 +992,12 @@ const formatPrice = (n: number) =>
 </script>
 
 <style scoped>
-/* Usamos clases inline de Tailwind CDN/utility directamente — no @apply */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

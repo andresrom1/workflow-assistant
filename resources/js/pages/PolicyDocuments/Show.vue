@@ -29,11 +29,16 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="field-label">Tipo de documento *</label>
-              <select v-model="uploadForm.kind" class="field"
-                :class="{ 'field-error': uploadForm.errors.kind }">
-                <option value="">Seleccionar...</option>
-                <option v-for="k in kinds" :key="k.value" :value="k.value">{{ k.label }}</option>
-              </select>
+              <Select v-model="uploadForm.kind">
+                <SelectTrigger class="w-full h-[38px]" :aria-invalid="!!uploadForm.errors.kind || undefined">
+                  <SelectValue placeholder="Seleccionar..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem v-for="k in kinds" :key="k.value" :value="k.value">{{ k.label }}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
               <p v-if="uploadForm.errors.kind" class="field-error-text">{{ uploadForm.errors.kind }}</p>
             </div>
             <div>
@@ -170,6 +175,7 @@
 import { ref } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import BackLink from '@/components/UI/BackLink.vue'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 
 interface DocumentItem {
   id: number

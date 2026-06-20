@@ -33,11 +33,11 @@ class IdentifyCustomerTool implements Mockable, Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'identifier_type' => $schema->string()->enum(['email', 'phone', 'wbid'])
-                ->description('Tipo de identificador provisto por el usuario: email, phone (teléfono) o wbid (DNI/CUIT).')
+            'identifier_type' => $schema->string()->enum(['email', 'phone', 'dni'])
+                ->description('Tipo de identificador provisto por el usuario: email, phone (teléfono) o dni (DNI/CUIT).')
                 ->required(),
             'identifier_value' => $schema->string()
-                ->description('El valor del identificador (ej: usuario@ejemplo.com, 1150001234, 20304050607).')
+                ->description('El valor del identificador (ej: usuario@ejemplo.com, 1150001234, 30304050).')
                 ->required(),
         ];
     }

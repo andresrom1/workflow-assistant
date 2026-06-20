@@ -46,9 +46,16 @@
     </div>
     <div>
       <label class="field-label">Estado *</label>
-      <select v-model="form.estado" class="field" :class="{ 'field-error': form.errors.estado }">
-        <option v-for="e in estados" :key="e.value" :value="e.value">{{ e.label }}</option>
-      </select>
+      <Select v-model="form.estado">
+        <SelectTrigger class="w-full h-[38px]" :aria-invalid="!!form.errors.estado || undefined">
+          <SelectValue placeholder="Seleccionar..." />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            <SelectItem v-for="e in estados" :key="e.value" :value="e.value">{{ e.label }}</SelectItem>
+          </SelectGroup>
+        </SelectContent>
+      </Select>
       <p v-if="form.errors.estado" class="field-error-text">{{ form.errors.estado }}</p>
     </div>
   </div>
@@ -56,6 +63,7 @@
 
 <script setup lang="ts">
 import type { InertiaForm } from '@inertiajs/vue3'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 
 defineProps<{
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

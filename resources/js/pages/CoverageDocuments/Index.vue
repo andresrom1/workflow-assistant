@@ -29,14 +29,19 @@
               </div>
               <div>
                 <label class="field-label">Tipo de documento *</label>
-                <select v-model="uploadForm.document_type" class="field"
-                  :class="{ 'field-error': uploadForm.errors.document_type }">
-                  <option value="">Seleccionar...</option>
-                  <option value="insert">Insert</option>
-                  <option value="asistencia">Asistencia</option>
-                  <option value="manual">Manual del asegurado</option>
-                  <option value="general">General</option>
-                </select>
+                <Select v-model="uploadForm.document_type">
+                  <SelectTrigger class="w-full h-[38px]" :aria-invalid="!!uploadForm.errors.document_type || undefined">
+                    <SelectValue placeholder="Seleccionar..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="insert">Insert</SelectItem>
+                      <SelectItem value="asistencia">Asistencia</SelectItem>
+                      <SelectItem value="manual">Manual del asegurado</SelectItem>
+                      <SelectItem value="general">General</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
                 <p v-if="uploadForm.errors.document_type" class="field-error-text">{{ uploadForm.errors.document_type }}</p>
               </div>
               <div>
@@ -52,20 +57,31 @@
               </div>
               <div>
                 <label class="field-label">Modo de extraccion *</label>
-                <select v-model="uploadForm.extraction_mode" class="field"
-                  :class="{ 'field-error': uploadForm.errors.extraction_mode }">
-                  <option value="ai">Procesar con IA</option>
-                  <option value="manual">Ingresar manualmente</option>
-                </select>
+                <Select v-model="uploadForm.extraction_mode">
+                  <SelectTrigger class="w-full h-[38px]" :aria-invalid="!!uploadForm.errors.extraction_mode || undefined">
+                    <SelectValue placeholder="Seleccionar..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="ai">Procesar con IA</SelectItem>
+                      <SelectItem value="manual">Ingresar manualmente</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
                 <p v-if="uploadForm.errors.extraction_mode" class="field-error-text">{{ uploadForm.errors.extraction_mode }}</p>
               </div>
               <div v-if="uploadForm.extraction_mode === 'ai'">
                 <label class="field-label">Proveedor IA</label>
-                <select v-model="uploadForm.extraction_provider" class="field">
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
-                  <option value="gemini">Gemini</option>
-                </select>
+                <Select v-model="uploadForm.extraction_provider">
+                  <SelectTrigger class="w-full h-[38px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="anthropic">Anthropic</SelectItem>
+                      <SelectItem value="gemini">Gemini</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div class="flex justify-end gap-2 mt-4">
@@ -92,11 +108,16 @@
               class="field pl-9" />
           </div>
           <div class="flex gap-2">
-            <select v-model="perPageInput" @change="buscar" class="field" style="width: auto;">
-              <option value="15">15 / pag</option>
-              <option value="25">25 / pag</option>
-              <option value="50">50 / pag</option>
-            </select>
+            <Select v-model="perPageInput" @update:model-value="buscar">
+              <SelectTrigger class="h-[38px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="15">15 / pag</SelectItem>
+                  <SelectItem value="25">25 / pag</SelectItem>
+                  <SelectItem value="50">50 / pag</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             <button type="submit" class="btn btn-primary">Buscar</button>
           </div>
         </form>
@@ -208,6 +229,7 @@ import { Link, router, useForm } from '@inertiajs/vue3'
 import RowActionMin from '@/components/UI/RowActionMin.vue'
 import ChevronRight from '@/components/UI/ChevronRight.vue'
 import Pagination from '@/components/UI/Pagination.vue'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 
 interface DocumentItem {
   id: number

@@ -32,10 +32,14 @@ class PolicyDocumentController extends Controller
     {
         $search = trim((string) $request->input('search', ''));
         $perPage = (int) $request->input('per_page', 25);
+        $filter = in_array($request->input('filter'), ['with', 'without'], true)
+            ? $request->input('filter')
+            : 'all';
 
         $polizas = Poliza::query()
-            ->with('risk.customer')
+            ->with(['risk.customer', 'latestDocument'])
             ->withCount('documents')
+            ->withCount(['documents as visible_documents_count' => fn ($q) => $q->where('visible_to_client', true)])
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($q) use ($search): void {
                     $q->where('numero', 'ilike', "%{$search}%")
@@ -43,6 +47,10 @@ class PolicyDocumentController extends Controller
                         ->orWhereHas('risk.customer', fn ($c) => $c->where('name', 'ilike', "%{$search}%"));
                 });
             })
+            ->when($filter === 'with', fn ($q) => $q->has('documents'))
+            ->when($filter === 'without', fn ($q) => $q->doesntHave('documents'))
+            // Documentación-céntrico: las pólizas con carga más reciente arriba; las sin docs al final.
+            ->orderByRaw('(select max(captured_at) from policy_documents where policy_documents.poliza_id = polizas.id) desc nulls last')
             ->orderByDesc('updated_at')
             ->paginate($perPage)
             ->withQueryString()
@@ -53,13 +61,15 @@ class PolicyDocumentController extends Controller
                 'patente' => $poliza->risk->metadata['patente'] ?? null,
                 'label' => $poliza->risk->label,
                 'cliente' => $poliza->risk->customer?->name,
-                'estado' => $poliza->estado->value,
                 'documents_count' => $poliza->documents_count,
+                'visible_count' => $poliza->visible_documents_count,
+                'last_kind' => $poliza->latestDocument?->kind->label(),
+                'last_document_at' => $poliza->latestDocument?->captured_at?->toIso8601String(),
             ]);
 
         return Inertia::render('PolicyDocuments/Index', [
             'polizas' => $polizas,
-            'filters' => ['search' => $search, 'per_page' => $perPage],
+            'filters' => ['search' => $search, 'per_page' => $perPage, 'filter' => $filter],
         ]);
     }
 

@@ -100,7 +100,7 @@ El link se genera en el flujo de chat (`openai_chatkit` / WhatsApp) y se envía 
 ### Panel admin/operador (`auth`) → **`workflow-assistant`**
 - Perfil: `/profile` (`ProfileController`).
 - Chat interno de pruebas: `/chat` (`ChatController`).
-- Clientes: `/customers`, `/customers/{customer}` (`CustomerController`).
+- Conversaciones (registros de cliente): `/conversations`, `/conversations/{customer}` (`ConversationController`).
 - Cotizaciones: `resource quotes` (index/show, `QuoteController`).
 - Documentos de cobertura (RAG): `resource coverage-documents` (`CoverageDocumentController`).
 

@@ -29,11 +29,16 @@
               class="field pl-9" />
           </div>
           <div class="flex gap-2">
-            <select v-model="perPageInput" @change="buscar" class="field" style="width: auto;">
-              <option value="15">15 / pág</option>
-              <option value="25">25 / pág</option>
-              <option value="50">50 / pág</option>
-            </select>
+            <Select v-model="perPageInput" @update:model-value="buscar">
+              <SelectTrigger class="h-[38px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="15">15 / pág</SelectItem>
+                  <SelectItem value="25">25 / pág</SelectItem>
+                  <SelectItem value="50">50 / pág</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             <button type="submit" class="btn btn-primary">Buscar</button>
           </div>
         </form>
@@ -118,6 +123,7 @@ import { ref } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import RowActionMin from '@/components/UI/RowActionMin.vue'
 import Pagination from '@/components/UI/Pagination.vue'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 
 interface PolizaRow {
   id: number; numero: string | null; company: string | null; coverage: string | null

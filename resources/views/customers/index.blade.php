@@ -41,7 +41,7 @@
 
         <!-- Search and Filters -->
         <div class="bg-white rounded-lg shadow p-6 mb-6">
-            <form method="GET" action="{{ route('customers.index') }}" class="flex flex-col sm:flex-row gap-4">
+            <form method="GET" action="{{ route('conversations.index') }}" class="flex flex-col sm:flex-row gap-4">
                 <div class="flex-1 relative">
                     <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -158,7 +158,7 @@
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm">
                                     <a
-                                        href="{{ route('customers.show', $customer->id) }}"
+                                        href="{{ route('conversations.show', $customer->id) }}"
                                         class="text-blue-600 hover:text-blue-900 font-medium"
                                     >
                                         Ver detalles

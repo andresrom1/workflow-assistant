@@ -28,7 +28,7 @@
           <p class="text-[11px] uppercase tracking-wide" style="color: var(--text-3);">Vehículo</p>
           <p class="text-sm font-semibold mt-0.5" style="color: var(--text-1);">{{ vehicle.label }}</p>
         </div>
-        <Link :href="`/customers/${vehicle.customer_id}`" class="text-xs font-semibold" style="color: var(--accent-600);">
+        <Link :href="`/conversations/${vehicle.customer_id}`" class="text-xs font-semibold" style="color: var(--accent-600);">
           Ver cliente →
         </Link>
       </div>

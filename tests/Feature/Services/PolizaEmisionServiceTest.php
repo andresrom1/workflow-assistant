@@ -6,19 +6,23 @@ use App\Enums\PolicyDocumentKind;
 use App\Enums\PolicyDocumentSource;
 use App\Enums\PolizaEstado;
 use App\Enums\RiskType;
+use App\Jobs\CapturePendingPolicyDocuments;
 use App\Models\CheckoutSession;
 use App\Models\Conversation;
 use App\Models\InspectionPhoto;
 use App\Models\PolicyDocument;
 use App\Models\Poliza;
+use App\Models\PolizaProviderRef;
 use App\Models\Quote;
 use App\Models\Risk;
 use App\Models\RiskSnapshot;
 use App\Services\PolizaEmisionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Tests\Support\StubsPendingDocuments;
 
 uses(RefreshDatabase::class);
 
@@ -152,6 +156,8 @@ it('arma el request neutro desde checkout + snapshot + la ref elegida', function
 
     $spy = new class implements EmissionProvider
     {
+        use StubsPendingDocuments;
+
         /** @var array<string, mixed>|null */
         public ?array $captured = null;
 
@@ -163,7 +169,7 @@ it('arma el request neutro desde checkout + snapshot + la ref elegida', function
                 'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 1,
                 'proposal_number' => 'PR', 'policy_number' => 'P',
                 'emission_status' => 'emitida', 'requires_inspection_after_emission' => false,
-                'company_id' => 'sancor', 'documents' => [], 'raw' => [],
+                'company_id' => 'sancor', 'documents' => [], 'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []], 'raw' => [],
             ];
         }
     };
@@ -211,6 +217,8 @@ it('persiste en cartera los documentos capturados al emitir (visibles al cliente
     // adapter capturó (con el presale vivo, sin que salga de él).
     app()->instance(EmissionProvider::class, new class implements EmissionProvider
     {
+        use StubsPendingDocuments;
+
         public function emit(array $request): array
         {
             return [
@@ -220,6 +228,7 @@ it('persiste en cartera los documentos capturados al emitir (visibles al cliente
                 'documents' => [
                     ['kind' => 'poliza', 'filename' => 'poliza.pdf', 'mime' => 'application/pdf', 'contents' => 'PDFBYTES'],
                 ],
+                'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []],
                 'raw' => [],
             ];
         }
@@ -236,12 +245,65 @@ it('persiste en cartera los documentos capturados al emitir (visibles al cliente
         ->and(Storage::disk('r2')->get($doc->storage_path))->toBe('PDFBYTES');
 });
 
+it('persiste la referencia opaca del proveedor y encola el reintento cuando quedan documentos pendientes', function () {
+    Storage::fake('r2');
+    Queue::fake();
+    [$quote, $session] = emittableQuote();
+
+    app()->instance(EmissionProvider::class, new class implements EmissionProvider
+    {
+        use StubsPendingDocuments;
+
+        public function emit(array $request): array
+        {
+            return [
+                'task_id' => 't', 'status' => 'SUCCESS',
+                'proposal_number' => 'PR', 'policy_number' => 'P', 'emission_status' => 'emitida',
+                'requires_inspection_after_emission' => false, 'company_id' => 'triunfo',
+                // Uno listo, dos todavía generándose.
+                'documents' => [
+                    ['kind' => 'poliza', 'filename' => 'poliza.pdf', 'mime' => 'application/pdf', 'contents' => 'PDFBYTES'],
+                ],
+                'pending_documents' => ['token' => '32094', 'product_id' => 'auto', 'kinds' => ['certificado', 'circulation-card']],
+                'raw' => [],
+            ];
+        }
+    });
+
+    app(PolizaEmisionService::class)->emitir($quote, $session);
+
+    $poliza = Poliza::where('quote_id', $quote->id)->firstOrFail();
+    $ref = PolizaProviderRef::where('poliza_id', $poliza->id)->firstOrFail();
+
+    expect($ref->document_token)->toBe('32094')
+        ->and($ref->product_id)->toBe('auto')
+        ->and($ref->pending_document_kinds)->toBe(['certificado', 'circulation-card']);
+
+    // El documento listo se persistió de una; los pendientes van por el job.
+    expect(PolicyDocument::where('poliza_id', $poliza->id)->count())->toBe(1);
+    Queue::assertPushed(CapturePendingPolicyDocuments::class, fn (CapturePendingPolicyDocuments $job): bool => $job->polizaId === $poliza->id);
+});
+
+it('no persiste referencia ni encola reintento cuando no quedó nada pendiente', function () {
+    Storage::fake('r2');
+    Queue::fake();
+    [$quote, $session] = emittableQuote();
+
+    // StubEmissionProvider devuelve pending_documents.kinds vacío.
+    app(PolizaEmisionService::class)->emitir($quote, $session);
+
+    expect(PolizaProviderRef::count())->toBe(0);
+    Queue::assertNotPushed(CapturePendingPolicyDocuments::class);
+});
+
 it('la emisión no falla ni persiste documentos cuando la captura viene vacía', function () {
     Storage::fake('r2');
     [$quote, $session] = emittableQuote();
 
     app()->instance(EmissionProvider::class, new class implements EmissionProvider
     {
+        use StubsPendingDocuments;
+
         public function emit(array $request): array
         {
             return [
@@ -249,6 +311,7 @@ it('la emisión no falla ni persiste documentos cuando la captura viene vacía',
                 'proposal_number' => 'PR', 'policy_number' => 'P', 'emission_status' => 'emitida',
                 'requires_inspection_after_emission' => false, 'company_id' => 'sancor',
                 'documents' => [],
+                'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []],
                 'raw' => [],
             ];
         }
@@ -276,6 +339,8 @@ it('pasa el bloque neutro de inspección before-emisión al puerto cuando la cob
 
     $spy = new class implements EmissionProvider
     {
+        use StubsPendingDocuments;
+
         /** @var array<string, mixed>|null */
         public ?array $captured = null;
 
@@ -286,7 +351,7 @@ it('pasa el bloque neutro de inspección before-emisión al puerto cuando la cob
             return [
                 'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 1,
                 'proposal_number' => 'PR', 'policy_number' => 'P', 'emission_status' => 'emitida',
-                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'documents' => [], 'raw' => [],
+                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'documents' => [], 'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []], 'raw' => [],
             ];
         }
     };
@@ -306,6 +371,8 @@ it('no pasa el bloque de inspección cuando la cobertura no la exige', function 
 
     $spy = new class implements EmissionProvider
     {
+        use StubsPendingDocuments;
+
         /** @var array<string, mixed>|null */
         public ?array $captured = null;
 
@@ -316,7 +383,7 @@ it('no pasa el bloque de inspección cuando la cobertura no la exige', function 
             return [
                 'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 1,
                 'proposal_number' => 'PR', 'policy_number' => 'P', 'emission_status' => 'emitida',
-                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'documents' => [], 'raw' => [],
+                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'documents' => [], 'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []], 'raw' => [],
             ];
         }
     };
@@ -350,6 +417,8 @@ it('es idempotente: no re-emite si el quote ya está poliza_emitida (D4.2)', fun
 
     $spy = new class implements EmissionProvider
     {
+        use StubsPendingDocuments;
+
         public int $emitCalls = 0;
 
         public function emit(array $request): array
@@ -359,7 +428,7 @@ it('es idempotente: no re-emite si el quote ya está poliza_emitida (D4.2)', fun
             return [
                 'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 1, 'proposal_number' => 'PR',
                 'policy_number' => 'P', 'emission_status' => 'emitida',
-                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'documents' => [], 'raw' => [],
+                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'documents' => [], 'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []], 'raw' => [],
             ];
         }
     };
@@ -378,13 +447,15 @@ it('lanza (para reintento del job) si la emisión no es exitosa', function () {
 
     app()->instance(EmissionProvider::class, new class implements EmissionProvider
     {
+        use StubsPendingDocuments;
+
         public function emit(array $request): array
         {
             return [
                 'task_id' => 't', 'status' => 'FAILURE', 'presale_id' => null,
                 'proposal_number' => null, 'policy_number' => null,
                 'emission_status' => null, 'requires_inspection_after_emission' => false,
-                'company_id' => null, 'documents' => [], 'raw' => [],
+                'company_id' => null, 'documents' => [], 'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []], 'raw' => [],
             ];
         }
     });

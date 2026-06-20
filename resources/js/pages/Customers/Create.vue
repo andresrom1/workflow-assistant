@@ -12,11 +12,19 @@
         class="rounded-[14px] p-5 space-y-4"
         style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
 
-        <div>
-          <label class="field-label">Nombre *</label>
-          <input v-model="form.name" type="text" class="field"
-            :class="{ 'field-error': form.errors.name }" placeholder="Ej: Juan Pérez" />
-          <p v-if="form.errors.name" class="field-error-text">{{ form.errors.name }}</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="field-label">Nombre</label>
+            <input v-model="form.first_name" type="text" class="field"
+              :class="{ 'field-error': form.errors.first_name }" placeholder="Juan" />
+            <p v-if="form.errors.first_name" class="field-error-text">{{ form.errors.first_name }}</p>
+          </div>
+          <div>
+            <label class="field-label">Apellido</label>
+            <input v-model="form.last_name" type="text" class="field"
+              :class="{ 'field-error': form.errors.last_name }" placeholder="Pérez" />
+            <p v-if="form.errors.last_name" class="field-error-text">{{ form.errors.last_name }}</p>
+          </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -42,7 +50,7 @@
         </div>
 
         <p class="text-xs" style="color: var(--text-3);">
-          Ingresá al menos un identificador: DNI, email o teléfono.
+          Ingresá al menos un identificador: DNI, email o teléfono. El resto del perfil del tomador se completa luego en la edición.
         </p>
 
         <div class="flex justify-end gap-2 pt-1">
@@ -62,7 +70,8 @@ import { Link, useForm } from '@inertiajs/vue3'
 import BackLink from '@/components/UI/BackLink.vue'
 
 const form = useForm({
-  name: '',
+  first_name: '',
+  last_name: '',
   dni: '',
   email: '',
   phone: '',

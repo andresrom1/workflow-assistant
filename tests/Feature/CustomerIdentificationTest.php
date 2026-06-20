@@ -78,7 +78,7 @@ it('creates customer with phone not anonymous', function () {
 });
 
 it('creates anonymous customer with patente only', function () {
-    // Patente is not a valid identifier type; the adapter validates email|phone|wbid.
+    // Patente is not a valid identifier type; the adapter validates email|phone|dni.
     // Expect a validation error response.
     $response = $this->postJson('/api/web-chat/v1/tools/identify-customer', [
         'identifier_type' => 'patente',

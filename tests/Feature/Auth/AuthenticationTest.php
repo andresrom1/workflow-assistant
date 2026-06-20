@@ -42,7 +42,7 @@ test('users can logout', function () {
 });
 
 test('unauthenticated requests are redirected to login', function () {
-    $this->get('/customers')->assertRedirect('/login');
+    $this->get('/conversations')->assertRedirect('/login');
     $this->get('/quotes')->assertRedirect('/login');
     $this->get('/admin/checkout-sessions')->assertRedirect('/login');
 });

@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useForm, usePage } from '@inertiajs/vue3'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 
 const props = defineProps({
   roles: { type: Array, required: true },
@@ -154,20 +155,18 @@ const submitConfirm = () => {
               <label class="block text-xs font-medium mb-1.5" style="color: var(--text-2);" for="role">
                 Rol
               </label>
-              <select
-                id="role"
-                v-model="form.role"
-                class="field"
-                :class="{ 'field-error': form.errors.role }"
-              >
-                <option
-                  v-for="role in roles"
-                  :key="role.value"
-                  :value="role.value"
-                >
-                  {{ role.label }}
-                </option>
-              </select>
+              <Select v-model="form.role">
+                <SelectTrigger id="role" class="w-full h-[38px]" :aria-invalid="!!form.errors.role || undefined">
+                  <SelectValue placeholder="Seleccionar rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem v-for="role in roles" :key="role.value" :value="role.value">
+                      {{ role.label }}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
               <p v-if="form.errors.role" class="mt-1 text-xs" style="color: #dc2626;">
                 {{ form.errors.role }}
               </p>

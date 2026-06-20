@@ -13,6 +13,7 @@ namespace App\Enums;
 enum PolicyDocumentKind: string
 {
     case Poliza = 'poliza';
+    case Certificado = 'certificado';
     case Endoso = 'endoso';
     case Cupon = 'cupon';
     case CirculationCard = 'circulation-card';
@@ -22,6 +23,7 @@ enum PolicyDocumentKind: string
     {
         return match ($this) {
             self::Poliza => 'Póliza',
+            self::Certificado => 'Certificado de cobertura',
             self::Endoso => 'Endoso',
             self::Cupon => 'Cupón de pago',
             self::CirculationCard => 'Cédula de circulación',

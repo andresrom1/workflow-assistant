@@ -22,6 +22,8 @@ class CustomerIdentificationService
         private readonly CustomerRepository $customerRepo,
         private readonly VehicleRepository $vehicleRepo,
         private readonly ConversationRepository $conversationRepo,
+        private readonly CustomerMergeService $merge,
+        private readonly CustomerConsolidationService $consolidation,
     ) {}
 
     /**
@@ -96,7 +98,44 @@ class CustomerIdentificationService
     }
 
     /**
-     * Buscar cliente según el tipo y valor
+     * Resuelve la identidad del tomador para una conversación, aplicando el árbol
+     * create / enrich / merge (ver docs/v2/12 §5.3). Es **agnóstico de canal**: recibe el
+     * customer ya linkeado (`$linked`, o null) y devuelve la fila canónica resultante; el
+     * llamador (adapter) se encarga de linkear la conversación al resultado.
+     *
+     * - Sin `$linked`: busca la fila dueña del identificador, o la crea.
+     * - Con `$linked` y el identificador pertenece a OTRA fila → fusiona esa fila en `$linked`.
+     * - Con `$linked` y NADIE posee el identificador → enriquece `$linked` (no crea una fila nueva).
+     * - Con `$linked` y el identificador ya es de `$linked` → no-op.
+     */
+    public function resolveForConversation(string $type, string $value, ?Customer $linked): Customer
+    {
+        $this->validateIdentifier($type, $value);
+
+        $existing = $this->findCustomer($type, $value);
+
+        if (! $linked instanceof Customer) {
+            return $existing ?? $this->createCustomer($type, $value);
+        }
+
+        if ($existing instanceof Customer && $existing->id !== $linked->id) {
+            // El identificador ya pertenece a otra fila → fusionar (survivor = fila linkeada).
+            return $this->merge->merge($linked, $existing);
+        }
+
+        if (! $existing instanceof Customer) {
+            // Nadie posee el identificador → escribirlo en la fila linkeada (no crear otra).
+            $this->consolidation->apply($linked, [$type => $value], 'chat');
+
+            return $linked->refresh();
+        }
+
+        return $linked; // $existing es la fila ya linkeada
+    }
+
+    /**
+     * Buscar cliente según el tipo y valor. Normaliza email/dni igual que el merge para que
+     * el match sea consistente (`findByPhone` ya normaliza internamente).
      */
     private function findCustomer(string $type, string $value): ?Customer
     {
@@ -104,9 +143,9 @@ class CustomerIdentificationService
 
         $customer = match ($type) {
             'phone' => $this->customerRepo->findByPhone($value),
-            'email' => $this->customerRepo->findByEmail($value),
-            'dni' => $this->customerRepo->findByDni($value),
-            default => $this->customerRepo->findByType($type, $value),
+            'email' => $this->customerRepo->findByEmail(mb_strtolower(trim($value))),
+            'dni' => $this->customerRepo->findByDni(trim($value)),
+            default => null,
         };
 
         $this->logCustomer('Cliente encontrado por tipo', ['customer' => $customer]);
@@ -126,6 +165,8 @@ class CustomerIdentificationService
         $customerData = match ($type) {
             'email' => ['email' => $value],
             'phone' => ['phone' => $value],
+            'dni' => ['dni' => $value],
+            default => throw new \InvalidArgumentException("Tipo de identificador no soportado: {$type}"),
         };
         $this->logCustomer('Service: Datos para nuevo cliente', $customerData);
 
@@ -148,20 +189,18 @@ class CustomerIdentificationService
     private function validateIdentifier(string $type, string $value): void
     {
         $ok = match ($type) {
-            'dni' => preg_match('/^\d{7,8}$/', $value),
-            'email' => filter_var($value, FILTER_VALIDATE_EMAIL),
+            'dni' => preg_match('/^\d{7,8}$/', $value) === 1,
+            'email' => filter_var($value, FILTER_VALIDATE_EMAIL) !== false,
             'phone' => $this->validatePhone($value),
-            'patente' => $this,
+            default => throw new \InvalidArgumentException("Tipo de identificador no soportado: {$type}"),
         };
 
         if (! $ok) {
-            throw new \InvalidArgumentException(
-                match ($type) {
-                    'dni' => 'DNI inválido',
-                    'email' => 'Email inválido',
-                    'patente' => 'Patente inválida (ej: ABC123)',
-                }
-            );
+            throw new \InvalidArgumentException(match ($type) {
+                'dni' => 'DNI inválido',
+                'email' => 'Email inválido',
+                'phone' => 'Teléfono inválido',
+            });
         }
     }
 

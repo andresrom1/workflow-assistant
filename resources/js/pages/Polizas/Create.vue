@@ -34,7 +34,7 @@
           </Link>
         </div>
         <p v-else-if="searched" class="text-sm text-center py-6" style="color: var(--text-3);">
-          No se encontraron clientes. <Link href="/customers/create" class="font-semibold" style="color: var(--accent-600);">Crear uno nuevo</Link>.
+          No se encontraron clientes. <Link href="/conversations/create" class="font-semibold" style="color: var(--accent-600);">Crear uno nuevo</Link>.
         </p>
       </div>
 
@@ -72,12 +72,18 @@
           <!-- existente -->
           <div v-if="riskMode === 'existing'">
             <label class="field-label">Vehículo del cliente *</label>
-            <select v-model="form.risk_id" class="field" :class="{ 'field-error': form.errors.risk_id }">
-              <option :value="null">Seleccionar...</option>
-              <option v-for="r in customer.risks" :key="r.id" :value="r.id">
-                {{ r.label }}{{ r.patente ? ` — ${r.patente}` : '' }}
-              </option>
-            </select>
+            <Select v-model="form.risk_id">
+              <SelectTrigger class="w-full h-[38px]" :aria-invalid="!!form.errors.risk_id || undefined">
+                <SelectValue placeholder="Seleccionar..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem v-for="r in customer.risks" :key="r.id" :value="r.id">
+                    {{ r.label }}{{ r.patente ? ` — ${r.patente}` : '' }}
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             <p v-if="form.errors.risk_id" class="field-error-text">{{ form.errors.risk_id }}</p>
           </div>
 
@@ -142,6 +148,7 @@ import { ref } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import BackLink from '@/components/UI/BackLink.vue'
 import PolizaFields from './PolizaFields.vue'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 
 interface CustomerProp {
   id: number

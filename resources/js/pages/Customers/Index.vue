@@ -29,12 +29,17 @@
               class="field pl-9" />
           </div>
           <div class="flex gap-2">
-            <select v-model="perPageInput" @change="buscar" class="field" style="width: auto;">
-              <option value="10">10 / pág</option>
-              <option value="15">15 / pág</option>
-              <option value="25">25 / pág</option>
-              <option value="50">50 / pág</option>
-            </select>
+            <Select v-model="perPageInput" @update:model-value="buscar">
+              <SelectTrigger class="h-[38px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="10">10 / pág</SelectItem>
+                  <SelectItem value="15">15 / pág</SelectItem>
+                  <SelectItem value="25">25 / pág</SelectItem>
+                  <SelectItem value="50">50 / pág</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             <button type="submit" class="btn btn-primary">Buscar</button>
           </div>
         </form>
@@ -54,6 +59,7 @@
             <thead>
               <tr style="background: var(--bg-raised); border-bottom: 1px solid var(--border);">
                 <th class="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Cliente</th>
+                <th class="px-5 py-3 text-center text-[11px] font-semibold uppercase tracking-wider w-24" style="color: var(--text-3);">Pólizas</th>
                 <th class="px-5 py-3 text-center text-[11px] font-semibold uppercase tracking-wider w-24" style="color: var(--text-3);">Vehículos</th>
                 <th class="px-5 py-3 text-center text-[11px] font-semibold uppercase tracking-wider w-24" style="color: var(--text-3);">Convs.</th>
                 <th class="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider w-32" style="color: var(--text-3);">Registro</th>
@@ -73,20 +79,31 @@
                   <div class="flex items-center gap-3">
                     <Avatar :name="c.name" />
                     <div class="min-w-0">
-                      <p class="text-sm font-semibold leading-tight" style="color: var(--text-1);">{{ c.name }}</p>
+                      <p class="text-sm font-semibold leading-tight flex items-center gap-2" style="color: var(--text-1);">
+                        {{ c.name ?? 'Sin nombre' }}
+                        <span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" :style="estadoBadge(c.is_anonymous)">
+                          {{ c.is_anonymous ? 'Anónimo' : 'Completo' }}
+                        </span>
+                      </p>
                       <p class="text-xs mt-0.5 truncate font-mono" style="color: var(--text-3);">
                         {{ c.dni }}<template v-if="c.email"> · {{ c.email }}</template><template v-if="c.phone"> · {{ c.phone }}</template>
                       </p>
                     </div>
                   </div>
                 </td>
-                <td class="px-5 py-3 text-center" @click.stop @click="irA(`/customers/${c.id}`)">
+                <td class="px-5 py-3 text-center">
+                  <span class="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full text-[11px] font-bold font-mono tabular-nums"
+                    :style="c.polizas_vigentes_count > 0 ? 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);' : 'background: var(--border-sub); color: var(--text-3);'">
+                    {{ c.polizas_vigentes_count }}
+                  </span>
+                </td>
+                <td class="px-5 py-3 text-center">
                   <span class="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full text-[11px] font-bold font-mono tabular-nums"
                     style="background: var(--accent-100); color: var(--accent-600);">
                     {{ c.vehicles_count }}
                   </span>
                 </td>
-                <td class="px-5 py-3 text-center" @click.stop @click="irA(`/customers/${c.id}`)">
+                <td class="px-5 py-3 text-center">
                   <span class="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full text-[11px] font-bold font-mono tabular-nums"
                     style="background: var(--border-sub); color: var(--text-2);">
                     {{ c.conversations_count }}
@@ -112,20 +129,20 @@
           >
             <Avatar :name="c.name" />
             <div class="flex-1 min-w-0">
-              <p class="text-sm font-semibold truncate" style="color: var(--text-1);">{{ c.name }}</p>
+              <p class="text-sm font-semibold truncate" style="color: var(--text-1);">{{ c.name ?? 'Sin nombre' }}</p>
               <p class="text-xs truncate mt-0.5 font-mono" style="color: var(--text-3);">
                 {{ c.dni }}<template v-if="c.email"> · {{ c.email }}</template>
               </p>
               <div class="flex gap-3 mt-1.5">
                 <span class="inline-flex items-center gap-1 text-xs" style="color: var(--text-3);">
                   <span class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold font-mono"
-                    style="background: var(--accent-100); color: var(--accent-600);">{{ c.vehicles_count }}</span>
-                  veh.
+                    style="background: var(--badge-ok-bg); color: var(--badge-ok-txt);">{{ c.polizas_vigentes_count }}</span>
+                  pól.
                 </span>
                 <span class="inline-flex items-center gap-1 text-xs" style="color: var(--text-3);">
                   <span class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold font-mono"
-                    style="background: var(--border-sub); color: var(--text-2);">{{ c.conversations_count }}</span>
-                  conv.
+                    style="background: var(--accent-100); color: var(--accent-600);">{{ c.vehicles_count }}</span>
+                  veh.
                 </span>
               </div>
             </div>
@@ -147,13 +164,15 @@ import Avatar from '@/components/UI/Avatar.vue'
 import RowActionMin from '@/components/UI/RowActionMin.vue'
 import ChevronRight from '@/components/UI/ChevronRight.vue'
 import Pagination from '@/components/UI/Pagination.vue'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 
 const props = defineProps<{
   customers: {
     data: Array<{
-      id: number; name: string; dni: string
+      id: number; name: string | null; dni: string
       email: string | null; phone: string | null
-      vehicles_count: number; conversations_count: number
+      is_anonymous: boolean
+      vehicles_count: number; conversations_count: number; polizas_vigentes_count: number
       created_at: string
     }>
     total: number; from: number; to: number; last_page: number
@@ -171,6 +190,9 @@ const buscar = () => {
 }
 
 const irA = (href: string) => router.visit(href)
+
+const estadoBadge = (anon: boolean): string =>
+  anon ? 'background: #fef3c7; color: #92400e;' : 'background: #dcfce7; color: #15803d;'
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleString('es-AR', { dateStyle: 'short' })

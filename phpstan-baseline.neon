@@ -7,40 +7,10 @@ parameters:
 			path: app/AI/InsuranceOrchestrator.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Adapters/AIProviders/WhatsAppAdapter.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$vehicles\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Adapters/AIProviders/WhatsAppAdapter.php
-
-		-
 			message: '#^Negated boolean expression is always false\.$#'
 			identifier: booleanNot.alwaysFalse
 			count: 1
 			path: app/Adapters/AIProviders/WhatsAppAdapter.php
-
-		-
-			message: '#^Parameter \#1 \$quote of method App\\Services\\QuoteService\:\:updateSnapshotPreference\(\) expects App\\Models\\Quote, Illuminate\\Database\\Eloquent\\Model given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Adapters/AIProviders/WhatsAppAdapter.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Adapters/OpenAI/AgentToolAdapter.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$vehicles\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Adapters/OpenAI/AgentToolAdapter.php
 
 		-
 			message: '#^Method App\\Adapters\\OpenAI\\AgentToolAdapter\:\:validateCommonFields\(\) has InvalidArgumentException in PHPDoc @throws tag but it''s not thrown\.$#'
@@ -59,18 +29,6 @@ parameters:
 			identifier: parameter.notFound
 			count: 1
 			path: app/Adapters/OpenAI/AgentToolAdapter.php
-
-		-
-			message: '#^Parameter \#1 \$quote of method App\\Services\\QuoteService\:\:updateSnapshotPreference\(\) expects App\\Models\\Quote, Illuminate\\Database\\Eloquent\\Model given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Adapters/OpenAI/AgentToolAdapter.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$external_conversation_id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Events/QuoteProcessed.php
 
 		-
 			message: '#^Method App\\Http\\Controllers\\Admin\\AgentPromptController\:\:buildPromptList\(\) should return Illuminate\\Support\\Collection\<int, array\{key\: string, label\: string, version\: int\|null, updated_at\: string\|null, preview\: string\|null, has_prompt\: bool\}\> but returns Illuminate\\Support\\Collection\<int, array\{key\: string, label\: string, version\: int\|null, updated_at\: string\|null, preview\: string\|null, has_prompt\: bool\}\>\.$#'
@@ -121,30 +79,6 @@ parameters:
 			path: app/Http/Controllers/Admin/CheckoutAuditController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/ConversationController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/ConversationController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$phone\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/ConversationController.php
-
-		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Pagination\\AbstractPaginator\<int,App\\Models\\Conversation\>\:\:through\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
-			count: 1
-			path: app/Http/Controllers/Admin/ConversationController.php
-
-		-
 			message: '#^Anonymous function should return array\{key\: \(int\|string\), label\: string, items\: Illuminate\\Support\\Collection\<int, array\{key\: string, label\: string, description\: string\|null, type\: string, is_secret\: bool, value\: string\|null, updated_at\: string\|null\}\>\} but returns array\{key\: \(int\|string\), label\: string, items\: Illuminate\\Support\\Collection\<int, array\{key\: string, label\: string, description\: string\|null, type\: string, is_secret\: bool, value\: string\|null, updated_at\: string\|null\}\>\}\.$#'
 			identifier: return.type
 			count: 1
@@ -163,98 +97,8 @@ parameters:
 			path: app/Http/Controllers/CheckoutController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$created_at\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CustomerController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$external_conversation_id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CustomerController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/CustomerController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$is_complete\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CustomerController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$last_message_at\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CustomerController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$marca\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CustomerController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$modelo\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CustomerController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$patente\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CustomerController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$uso\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CustomerController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$year\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CustomerController.php
-
-		-
-			message: '#^Call to an undefined method Illuminate\\Contracts\\Pagination\\LengthAwarePaginator\:\:through\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: app/Http/Controllers/CustomerController.php
-
-		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
-			count: 2
-			path: app/Http/Controllers/CustomerController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$customer\.$#'
-			identifier: property.notFound
-			count: 9
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$ext_user_id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
 			message: '#^Call to an undefined method App\\Services\\QuoteService\:\:create\(\)\.$#'
 			identifier: method.notFound
-			count: 1
-			path: app/Http/Controllers/QuoteController.php
-
-		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Pagination\\AbstractPaginator\<int,App\\Models\\Quote\>\:\:through\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
 			count: 1
 			path: app/Http/Controllers/QuoteController.php
 
@@ -283,74 +127,20 @@ parameters:
 			path: app/Http/Controllers/ToolsController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Jobs/ProcessConversationInbox.php
-
-		-
 			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\Message\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Jobs/ProcessConversationInbox.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Jobs/ProcessWhatsAppMessage.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$año\.$#'
+			message: '#^Access to an undefined property App\\Models\\Conversation\:\:\$thread_id\.$#'
 			identifier: property.notFound
 			count: 1
 			path: app/Repositories/CustomerRepository.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$created_at\.$#'
+			message: '#^Access to an undefined property App\\Models\\Vehicle\:\:\$año\.$#'
 			identifier: property.notFound
-			count: 1
-			path: app/Repositories/CustomerRepository.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Repositories/CustomerRepository.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$marca\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Repositories/CustomerRepository.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$modelo\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Repositories/CustomerRepository.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$patente\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Repositories/CustomerRepository.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$status\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Repositories/CustomerRepository.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$thread_id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Repositories/CustomerRepository.php
-
-		-
-			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:vehicles\(\)\.$#'
-			identifier: method.notFound
 			count: 1
 			path: app/Repositories/CustomerRepository.php
 
@@ -361,28 +151,28 @@ parameters:
 			path: app/Repositories/CustomerRepository.php
 
 		-
-			message: '#^Method App\\Repositories\\CustomerRepository\:\:getConversations\(\) should return Illuminate\\Support\\Collection\<int, array\{thread_id\: string, date\: string, status\: string, vehicle_count\: int\}\> but returns Illuminate\\Support\\Collection\<int, array\{thread_id\: mixed, date\: mixed, status\: mixed, vehicle_count\: mixed\}\>\.$#'
+			message: '#^Method App\\Repositories\\CustomerRepository\:\:getConversations\(\) should return Illuminate\\Support\\Collection\<int, array\{thread_id\: string, date\: string, status\: string, vehicle_count\: int\}\> but returns Illuminate\\Support\\Collection\<int, array\{thread_id\: mixed, date\: string, status\: string, vehicle_count\: int\}\>\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Repositories/CustomerRepository.php
 
 		-
-			message: '#^Method App\\Repositories\\CustomerRepository\:\:getVehicles\(\) should return Illuminate\\Support\\Collection\<int, array\{id\: int, patente\: string, marca\: string, modelo\: string, año\: int, is_identified\: bool\}\> but returns Illuminate\\Support\\Collection\<int, array\{id\: mixed, patente\: mixed, marca\: mixed, modelo\: mixed, año\: mixed, is_identified\: bool\}\>\.$#'
+			message: '#^Method App\\Repositories\\CustomerRepository\:\:getVehicles\(\) should return Illuminate\\Support\\Collection\<int, array\{id\: int, patente\: string, marca\: string, modelo\: string, año\: int, is_identified\: bool\}\> but returns Illuminate\\Support\\Collection\<int, array\{id\: int, patente\: string\|null, marca\: string\|null, modelo\: string\|null, año\: mixed, is_identified\: bool\}\>\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Repositories/CustomerRepository.php
 
 		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) contains unresolvable type\.$#'
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\Conversation\>\:\:map\(\) contains unresolvable type\.$#'
 			identifier: argument.unresolvableType
-			count: 2
+			count: 1
 			path: app/Repositories/CustomerRepository.php
 
 		-
-			message: '#^Match expression does not handle remaining value\: string$#'
-			identifier: match.unhandled
-			count: 3
-			path: app/Services/CustomerIdentificationService.php
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\Vehicle\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Repositories/CustomerRepository.php
 
 		-
 			message: '#^Property App\\Services\\CustomerIdentificationService\:\:\$conversationRepo is never read, only written\.$#'
@@ -401,18 +191,6 @@ parameters:
 			identifier: classConstant.unused
 			count: 1
 			path: app/Services/Message/ContentClassifier.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$channel\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Services/Quote/Strategies/ApiQuoteResolution.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Services/Quote/Strategies/ApiQuoteResolution.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$external_quote_id\.$#'

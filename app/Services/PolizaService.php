@@ -19,7 +19,7 @@ use Illuminate\Validation\ValidationException;
 class PolizaService
 {
     /**
-     * @param  array<string, mixed>|null  $riskData     Datos de un Risk nuevo (vehículo) cuando no se reusa uno existente.
+     * @param  array<string, mixed>|null  $riskData  Datos de un Risk nuevo (vehículo) cuando no se reusa uno existente.
      * @param  array<string, mixed>  $polizaData
      */
     public function createManual(

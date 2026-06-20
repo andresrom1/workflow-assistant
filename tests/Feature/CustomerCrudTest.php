@@ -32,10 +32,27 @@ it('crea un cliente y normaliza teléfono y email vía el repositorio', function
 
     $customer = Customer::firstOrFail();
     expect($customer->name)->toBe('Juan Pérez')
+        ->and($customer->first_name)->toBe('Juan')
+        ->and($customer->last_name)->toBe('Pérez')
         ->and($customer->dni)->toBe('30123456')
         ->and($customer->email)->toBe('juan@email.com')
         ->and($customer->phone)->toBe('+5493512345678')
         ->and($customer->is_anonymous)->toBeFalse();
+});
+
+it('crea un cliente desde nombre y apellido separados', function (): void {
+    $this->actingAs($this->user)
+        ->post(route('customers.store'), [
+            'first_name' => 'Ana',
+            'last_name' => 'García',
+            'email' => 'ana@example.com',
+        ])
+        ->assertRedirect();
+
+    $customer = Customer::firstOrFail();
+    expect($customer->first_name)->toBe('Ana')
+        ->and($customer->last_name)->toBe('García')
+        ->and($customer->name)->toBe('Ana García');
 });
 
 it('exige al menos un identificador', function (): void {
@@ -55,16 +72,33 @@ it('rechaza DNI duplicado', function (): void {
 });
 
 it('actualiza un cliente', function (): void {
-    $customer = Customer::factory()->create(['name' => 'Viejo Nombre']);
+    $customer = Customer::factory()->create(['name' => 'Viejo Nombre', 'first_name' => 'Viejo', 'last_name' => 'Nombre']);
 
     $this->actingAs($this->user)
         ->put(route('customers.update', $customer), [
-            'name' => 'Nuevo Nombre',
+            'first_name' => 'Nuevo',
+            'last_name' => 'Nombre',
             'dni' => $customer->dni,
         ])
         ->assertRedirect();
 
-    expect($customer->refresh()->name)->toBe('Nuevo Nombre');
+    expect($customer->refresh()->name)->toBe('Nuevo Nombre')
+        ->and($customer->first_name)->toBe('Nuevo');
+});
+
+it('muestra el detalle con sus pólizas', function (): void {
+    $customer = Customer::factory()->create();
+    $risk = Risk::factory()->create(['customer_id' => $customer->id]);
+    Poliza::factory()->create(['risk_id' => $risk->id, 'numero' => 'POL-001', 'estado' => PolizaEstado::Vigente]);
+
+    $this->actingAs($this->user)
+        ->get(route('customers.show', $customer))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Customers/Show')
+            ->where('customer.polizas.0.numero', 'POL-001')
+            ->where('customer.resumen.polizas_vigentes', 1)
+        );
 });
 
 it('elimina un cliente sin póliza vigente con soft-delete', function (): void {

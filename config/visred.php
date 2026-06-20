@@ -115,13 +115,41 @@ return [
     | adapter descarga dentro de `emit()` (con el `presale_id` vivo) y persiste en
     | R2. El catálogo de task-type es global (no por póliza); que una compañía/
     | producto no tenga uno disponible se maneja best-effort (se loggea, no rompe).
-    | `download-poliza` es el documento base; sumar `download-cupon`/`-certificate`/
-    | etc. acá cuando producto lo pida. Ver hallazgos-visred-task-type.md.
+    | Los `kind` del lado derecho DEBEN existir en {@see App\Enums\PolicyDocumentKind}.
+    | Los `task_type_id` salen del `tasks_list` de la emisión (verificado live Triunfo
+    | 2026-06-19: download-poliza / download-certificate / download-circulation-card).
     |
     */
     'document_task_types' => [
         'download-poliza' => 'poliza',
+        'download-certificate' => 'certificado',
+        'download-circulation-card' => 'circulation-card',
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Reintento de descarga de documentos
+    |--------------------------------------------------------------------------
+    |
+    | `POST /v1/documents/` dispara la generación del PDF del lado de la compañía y
+    | es ASÍNCRONO: recién emitida la póliza el documento todavía se está generando,
+    | así que `result.url` viene vacío (warning histórico "[VisredDocument] documento
+    | sin result.url"). La captura hace UN intento por llamada; la cadencia de reintento
+    | la maneja el job `CapturePendingPolicyDocuments`, que re-pide los documentos con el
+    | token opaco (presale_id) guardado en `poliza_provider_refs`.
+    |
+    | Cadencia por defecto: 1 intento por minuto durante ~10 minutos. `document_retry_delay`
+    | es la espera ANTES del primer intento (dale tiempo a la compañía a generar el PDF);
+    | `document_retry_backoff` separa los intentos siguientes; la cantidad la fija
+    | `CapturePendingPolicyDocuments::$tries` (10). El job se re-encola con delay (no bloquea
+    | un worker esperando).
+    |
+    | Ventana acotada A PROPÓSITO: el `presale_id` caduca, así que el reintento NO es
+    | eterno. Agotada la ventana, los documentos faltantes van por carga manual del admin.
+    |
+    */
+    'document_retry_delay' => (int) env('VISRED_DOCUMENT_RETRY_DELAY', 60),
+    'document_retry_backoff' => (int) env('VISRED_DOCUMENT_RETRY_BACKOFF', 60),
 
     /*
     |--------------------------------------------------------------------------

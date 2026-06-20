@@ -43,6 +43,7 @@ class VisredEmissionProvider implements EmissionProvider
      *     requires_inspection_after_emission: bool,
      *     company_id: string|null,
      *     documents: list<array{kind: string, filename: string, mime: string, contents: string}>,
+     *     pending_documents: array{token: string, product_id: string, kinds: list<string>},
      *     raw: array<string, mixed>
      * }
      */
@@ -63,9 +64,38 @@ class VisredEmissionProvider implements EmissionProvider
             $this->uploadPostEmissionInspection($presaleId, $request);
         }
 
-        $neutral['documents'] = $this->documents->capture($presaleId, 'auto');
+        // Captura los documentos listos dentro de la ventana corta; los que la compañía
+        // todavía genera quedan en `pending` y los retoma el dominio (job de reintento)
+        // re-entrando con el token opaco (= presale_id, que no se expone como tal).
+        $productId = 'auto';
+        $captured = $this->documents->capture($presaleId, $productId);
+        $neutral['documents'] = $captured['documents'];
+        $neutral['pending_documents'] = [
+            'token' => (string) $presaleId,
+            'product_id' => $productId,
+            'kinds' => $captured['pending'],
+        ];
 
         return $neutral;
+    }
+
+    /**
+     * Captura DIFERIDA de los documentos pendientes (reintento del dominio fuera del
+     * request de emisión). Decodifica el token opaco al `presale_id` y delega al
+     * servicio de documentos; devuelve los blobs neutros que ya estén listos. El
+     * `presale_id` no se expone.
+     *
+     * @param  list<string>  $kinds
+     * @return list<array{kind: string, filename: string, mime: string, contents: string}>
+     */
+    public function capturePendingDocuments(string $documentToken, string $productId, array $kinds): array
+    {
+        $presaleId = ctype_digit($documentToken) ? (int) $documentToken : 0;
+        if ($presaleId === 0 || $kinds === []) {
+            return [];
+        }
+
+        return $this->documents->captureKinds($presaleId, $productId, $kinds);
     }
 
     /**
@@ -201,13 +231,20 @@ class VisredEmissionProvider implements EmissionProvider
     }
 
     /**
+     * Visred toma un único `address`. Mapeo del adapter (regla de negocio confinada acá,
+     * el dominio no la conoce): el `zip_code` que viaja es el **CP de guarda del riesgo**
+     * (`risk_zip_code`) — el que tarifó la cotización —, no el del domicilio del tomador
+     * (de ahí salen calle/número). Si no hay CP de guarda, cae al del tomador.
+     *
      * @param  array<string, mixed>  $address
      * @return array<string, mixed>
      */
     private function buildAddress(array $address): array
     {
+        $zip = $address['risk_zip_code'] ?? $address['zip_code'] ?? null;
+
         return array_filter([
-            'zip_code' => isset($address['zip_code']) ? (int) $address['zip_code'] : null,
+            'zip_code' => ($zip !== null && $zip !== '') ? (int) $zip : null,
             'street_name' => $address['street_name'] ?? null,
             'street_number' => $address['street_number'] ?? null,
             'floor' => $address['floor'] ?? null,
@@ -340,6 +377,7 @@ class VisredEmissionProvider implements EmissionProvider
      *     requires_inspection_after_emission: bool,
      *     company_id: string|null,
      *     documents: list<array{kind: string, filename: string, mime: string, contents: string}>,
+     *     pending_documents: array{token: string, product_id: string, kinds: list<string>},
      *     raw: array<string, mixed>
      * }
      */
@@ -356,7 +394,10 @@ class VisredEmissionProvider implements EmissionProvider
             'requires_inspection_after_emission' => ($result['require_inspection_after_emission'] ?? false) === true,
             // company_id sale del TaskItem de emitir (lo usa la inspección post-emisión).
             'company_id' => is_scalar($taskItem['company_id'] ?? null) ? (string) $taskItem['company_id'] : null,
+            // `documents`/`pending_documents` los rellena emit() tras la captura; en
+            // FAILURE (sin presale) quedan vacíos.
             'documents' => [],
+            'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []],
             'raw' => ['source' => 'Visred', 'emitir' => $taskItem, 'task' => $result],
         ];
     }

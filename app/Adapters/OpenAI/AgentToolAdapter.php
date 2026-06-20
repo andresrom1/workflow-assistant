@@ -87,24 +87,19 @@ class AgentToolAdapter implements AIProviderAdapterInterface
     public function identifyCustomer(array $data, Conversation $conversation): array
     {
         $data = $this->validatePayload($data, [
-            'identifier_type' => 'required|string|in:email,phone,wbid',
+            'identifier_type' => 'required|string|in:email,phone,dni',
             'identifier_value' => 'required|string',
             'external_conversation_id' => 'required|string',
             'ext_user_id' => 'nullable|string',
         ]);
 
-        $customer = $this->customerService->findOrCreate(
+        // Árbol create/enrich/merge (docs/v2/12 §5.3): enriquece o fusiona la fila linkeada en
+        // vez de crear una nueva y re-apuntar (que dejaba la anterior huérfana).
+        $customer = $this->customerService->resolveForConversation(
             $data['identifier_type'],
-            $data['identifier_value']
+            $data['identifier_value'],
+            $conversation->customer,
         );
-
-        if ($conversation->customer_id && $conversation->customer_id !== $customer->id) {
-            $this->logCustomer('Cambio de titularidad en conversación', [
-                'conversation_id' => $conversation->id,
-                'from' => $conversation->customer_id,
-                'to' => $customer->id,
-            ]);
-        }
 
         $this->conversationRepo->linkCustomer($conversation->id, $customer->id);
 

@@ -8,7 +8,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property int $id
+ * @property int|null $customer_id
+ * @property string $external_conversation_id
+ * @property Carbon|null $last_message_at
+ * @property Carbon $created_at
+ */
 class Conversation extends Model
 {
     use HasFactory, SoftDeletes;
@@ -44,6 +52,7 @@ class Conversation extends Model
         'semantic_analysis_turn_count' => 'integer',
     ];
 
+    /** @return BelongsTo<Customer, $this> */
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
@@ -56,6 +65,7 @@ class Conversation extends Model
             ->withTimestamps();
     }
 
+    /** @return HasMany<Quote, $this> */
     public function quotes(): HasMany
     {
         return $this->hasMany(Quote::class);

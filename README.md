@@ -9,7 +9,7 @@ Este proyecto es un asistente inteligente diseñado para automatizar y agilizar 
 - **Orquestación de Herramientas**: Capacidad de la IA para ejecutar acciones como identificar clientes, vehículos y registrar preferencias de forma autónoma durante la conversación.
 
 ### 2. Gestión de Clientes
-- **Identificación Multi-canal**: Soporte para identificar clientes mediante Email, Teléfono o IDs externos (`wbid`).
+- **Identificación Multi-canal**: Soporte para identificar clientes mediante Email, Teléfono o DNI/CUIT. (El BSUID de WhatsApp es un identificador de conversación, no del tomador — vive en `conversations.ext_user_id`.)
 - **Persistencia y Vinculación**: Creación automática de perfiles de clientes y vinculación con la sesión de conversación actual.
 
 ### 3. Gestión de Vehículos

@@ -16,4 +16,5 @@ enum PolizaEstado: string
     case Vigente = 'vigente';
     case Emitida = 'emitida';
     case Vencida = 'vencida';
+    case Anulada = 'anulada';
 }

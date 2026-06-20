@@ -34,8 +34,12 @@ interface EmissionProvider
      * para llamadas que ya las tengan.
      *
      * Documentos: el adapter captura los documentos oficiales dentro de la ventana
-     * de emisión (con el `presale_id` vivo, internamente) y los devuelve como blobs
-     * NEUTROS en `documents` para que el dominio los persista. No expone `presale_id`.
+     * de emisión (con el `presale_id` vivo, internamente) y devuelve como blobs
+     * NEUTROS en `documents` los que ya estaban listos. Los que la compañía todavía
+     * estaba generando (descarga async) NO se pierden: el adapter los reporta en
+     * `pending_documents` con un `token` OPACO (el dominio no lo interpreta) y los
+     * `kinds` faltantes, para que el dominio reintente la captura fuera del request
+     * vía {@see self::capturePendingDocuments()}. No expone `presale_id`.
      *
      * @param  array{
      *     quotation_result_ref: string,
@@ -56,8 +60,26 @@ interface EmissionProvider
      *     requires_inspection_after_emission: bool,
      *     company_id: string|null,
      *     documents: list<array{kind: string, filename: string, mime: string, contents: string}>,
+     *     pending_documents: array{token: string, product_id: string, kinds: list<string>},
      *     raw: array<string, mixed>
      * }
      */
     public function emit(array $request): array;
+
+    /**
+     * Captura DIFERIDA de los documentos que no estuvieron listos al emitir.
+     *
+     * El dominio re-entra con el `token` opaco y los `kinds` que reportó `emit()` en
+     * `pending_documents` (persistidos en `poliza_provider_refs`). El adapter decodifica
+     * el token (para Visred = `presale_id`), re-pide cada documento al proveedor y
+     * devuelve como blobs NEUTROS los que YA estén listos. Los que sigan generándose se
+     * omiten (lista incompleta), para que el job los vuelva a pedir en otro intento. El
+     * `presale_id` no se expone ni se devuelve.
+     *
+     * @param  string  $documentToken  Token opaco del proveedor (de `emit().pending_documents.token`).
+     * @param  string  $productId  Producto del catálogo del proveedor (auto/...).
+     * @param  list<string>  $kinds  `kind` de dominio pendientes (PolicyDocumentKind).
+     * @return list<array{kind: string, filename: string, mime: string, contents: string}>
+     */
+    public function capturePendingDocuments(string $documentToken, string $productId, array $kinds): array;
 }

@@ -32,7 +32,7 @@ Canal: `workflow-assistant`.
 
 | Controller | Responsabilidad |
 |---|---|
-| `CustomerController` | Listado/detalle de clientes. |
+| `ConversationController` | Vista "Conversaciones": listado/detalle/CRUD de clientes (modelo `Customer`). No confundir con `Admin\ConversationController`. |
 | `ProfileController` | Perfil del operador. |
 | `Admin\CheckoutAuditController` | Auditoría de checkout sessions + manejo de datos de tarjeta (mark-processed/clear). |
 | `Admin\SettingsController` | Edición de `system_settings` por grupo. |
@@ -69,5 +69,5 @@ Canal: `mango-mobile`. Namespace `App\Http\Controllers\Mobile\*` (guard `auth:mo
 |---|---|
 | `openai_chatkit` | `ToolsController`, `QuoteController@store` |
 | `mango-mobile` | `Mobile\*`, `TrackingController` |
-| `workflow-assistant` | `CheckoutController`, `CoverageDocumentController`, `CustomerController`, `ProfileController`, `ChatController`, `Admin\*`, `Auth\*`, `TestingController`, `AI\WhatsAppWebhookController`, `QuoteController` (admin) |
+| `workflow-assistant` | `CheckoutController`, `CoverageDocumentController`, `ConversationController`, `ProfileController`, `ChatController`, `Admin\*`, `Auth\*`, `TestingController`, `AI\WhatsAppWebhookController`, `QuoteController` (admin) |
 | `pas_mobile` (legacy, extirpado) | `Api\QuoteWebhookController` |

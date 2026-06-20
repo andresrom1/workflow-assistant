@@ -121,6 +121,23 @@ it('mapea el request neutro a PreSaleVehicleRequest (defaults física/dni, pago 
         && $r['payment']['credit_card_expire_year'] === 2027);
 });
 
+it('emite con el CP de guarda del riesgo, no el del domicilio del tomador', function () {
+    Http::fake([
+        EMITIR_URL => Http::response(['task_id' => 't-zip']),
+        'https://visred.test/v1/tasks/t-zip/' => taskPresaleSuccess(['presale_id' => 1]),
+    ]);
+
+    app(VisredEmissionProvider::class)->emit(neutralRequest([
+        'address' => [
+            'zip_code' => 5000,       // domicilio del tomador (no tarifa)
+            'risk_zip_code' => 1414,  // CP de guarda del vehículo (el que tarifó)
+        ],
+    ]));
+
+    Http::assertSent(fn (Request $r) => $r->url() === EMITIR_URL
+        && $r['address']['zip_code'] === 1414);
+});
+
 it('propaga require_inspection_after_emission cuando la compañía lo exige', function () {
     Http::fake([
         EMITIR_URL => Http::response(['task_id' => 't-insp-after']),
@@ -208,6 +225,85 @@ it('captura los documentos oficiales al emitir y los devuelve como blobs neutros
     Http::assertSent(fn (Request $r) => $r->url() === 'https://visred.test/v1/documents/'
         && $r['presale_id'] === 77
         && $r['task_type_id'] === 'download-poliza');
+});
+
+it('deja en pending los documentos que la compañía todavía genera (un intento, sin result.url)', function () {
+    config()->set('visred.document_task_types', ['download-poliza' => 'poliza']);
+
+    Http::fake([
+        EMITIR_URL => Http::response(['task_id' => 't-doc', 'company_id' => 'triunfo']),
+        'https://visred.test/v1/tasks/t-doc/' => taskPresaleSuccess(['presale_id' => 77, 'policy_number' => 'POL-77']),
+        // El documento todavía no está listo: result sin url. La captura hace UN intento
+        // (no poll-ea inline); el reintento por minuto lo maneja el job.
+        'https://visred.test/v1/documents/' => Http::response(['result' => null]),
+    ]);
+
+    $result = app(VisredEmissionProvider::class)->emit(neutralRequest());
+
+    expect($result['status'])->toBe('SUCCESS')
+        ->and($result['documents'])->toBe([])
+        ->and($result['pending_documents']['token'])->toBe('77') // token opaco = presale
+        ->and($result['pending_documents']['product_id'])->toBe('auto')
+        ->and($result['pending_documents']['kinds'])->toBe(['poliza']);
+
+    // Un solo POST a documentos (sin loop de polling inline).
+    Http::assertSentCount(3); // emitir + task + documents
+});
+
+it('separa los documentos listos de los pendientes en una misma emisión', function () {
+    config()->set('visred.document_task_types', [
+        'download-poliza' => 'poliza',
+        'download-certificate' => 'certificado',
+    ]);
+
+    Http::fake([
+        EMITIR_URL => Http::response(['task_id' => 't-mix', 'company_id' => 'triunfo']),
+        'https://visred.test/v1/tasks/t-mix/' => taskPresaleSuccess(['presale_id' => 77, 'policy_number' => 'POL-77']),
+        'https://visred.test/v1/documents/' => function (Request $request) {
+            return $request['task_type_id'] === 'download-poliza'
+                ? Http::response(['result' => ['url' => 'https://files.visred.test/poliza.pdf']])
+                : Http::response(['result' => null]); // certificado todavía generándose
+        },
+        'https://files.visred.test/poliza.pdf' => Http::response('PDFBYTES'),
+    ]);
+
+    $result = app(VisredEmissionProvider::class)->emit(neutralRequest());
+
+    expect($result['documents'])->toHaveCount(1)
+        ->and($result['documents'][0]['kind'])->toBe('poliza')
+        ->and($result['pending_documents']['kinds'])->toBe(['certificado']);
+});
+
+it('capturePendingDocuments re-pide solo los kinds pedidos y devuelve los que ya están listos (presale no se expone)', function () {
+    config()->set('visred.document_task_types', [
+        'download-poliza' => 'poliza',
+        'download-certificate' => 'certificado',
+    ]);
+
+    Http::fake([
+        'https://visred.test/v1/documents/' => function (Request $request) {
+            expect($request['presale_id'])->toBe(77); // decodifica el token opaco
+            expect($request['task_type_id'])->toBe('download-certificate'); // solo el pedido
+
+            return Http::response(['result' => ['url' => 'https://files.visred.test/cert.pdf']]);
+        },
+        'https://files.visred.test/cert.pdf' => Http::response('CERTBYTES'),
+    ]);
+
+    $documents = app(VisredEmissionProvider::class)->capturePendingDocuments('77', 'auto', ['certificado']);
+
+    expect($documents)->toHaveCount(1)
+        ->and($documents[0]['kind'])->toBe('certificado')
+        ->and($documents[0]['contents'])->toBe('CERTBYTES');
+});
+
+it('capturePendingDocuments es no-op con token inválido o sin kinds', function () {
+    Http::fake();
+
+    expect(app(VisredEmissionProvider::class)->capturePendingDocuments('', 'auto', ['poliza']))->toBe([])
+        ->and(app(VisredEmissionProvider::class)->capturePendingDocuments('77', 'auto', []))->toBe([]);
+
+    Http::assertNothingSent();
 });
 
 it('sube la inspección post-emisión internamente con el presale cuando la compañía la exige', function () {

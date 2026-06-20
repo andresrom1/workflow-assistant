@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Contracts\EmissionProvider;
 use App\Enums\InspectionPhotoStatus;
+use App\Jobs\CapturePendingPolicyDocuments;
 use App\Models\CheckoutSession;
 use App\Models\InspectionPhoto;
 use App\Models\Poliza;
@@ -77,7 +78,45 @@ class PolizaEmisionService
         // presale vivo y sin que salga de él): se persisten en cartera. Best-effort.
         $this->policyDocuments->storeFromEmission($poliza, $result['documents']);
 
+        // Documentos que la compañía todavía estaba generando (descarga async): se
+        // persiste la referencia opaca del proveedor y se difiere la captura a un job
+        // con reintentos. El token es opaco para el dominio (su valor es el presale_id,
+        // pero acá no se interpreta). Ver docs/v2/08 §6.
+        $this->scheduleDocumentRetry($poliza, $result['pending_documents']);
+
         return $result;
+    }
+
+    /**
+     * Difiere la captura de los documentos que no estuvieron listos al emitir: persiste
+     * la referencia opaca del proveedor (token + `kind` pendientes) y encola el job de
+     * reintento. No-op si no quedó nada pendiente.
+     *
+     * @param  array<string, mixed>  $pending  Shape `pending_documents` de la emisión.
+     */
+    private function scheduleDocumentRetry(Poliza $poliza, array $pending): void
+    {
+        $token = is_scalar($pending['token'] ?? null) ? (string) $pending['token'] : '';
+        $kinds = array_values(array_filter(
+            (array) ($pending['kinds'] ?? []),
+            static fn ($kind): bool => is_string($kind) && $kind !== '',
+        ));
+
+        if ($token === '' || $kinds === []) {
+            return;
+        }
+
+        $poliza->providerRef()->updateOrCreate(
+            ['poliza_id' => $poliza->id],
+            [
+                'document_token' => $token,
+                'product_id' => is_scalar($pending['product_id'] ?? null) ? (string) $pending['product_id'] : 'auto',
+                'pending_document_kinds' => $kinds,
+            ],
+        );
+
+        CapturePendingPolicyDocuments::dispatch($poliza->id)
+            ->delay(now()->addSeconds((int) config('visred.document_retry_delay', 60)));
     }
 
     /**
@@ -101,8 +140,10 @@ class PolizaEmisionService
             'requires_inspection_after_emission' => $meta['requires_inspection_after_emission'] ?? false,
             'company_id' => $poliza?->company_id,
             // Re-entrada idempotente: la captura de documentos ya corrió en la 1ª
-            // emisión; no se re-captura (el presale ya no vive).
+            // emisión; no se re-captura (el presale ya no vive). El reintento diferido,
+            // si quedó algo pendiente, lo lleva el job desde la `poliza_provider_refs`.
             'documents' => [],
+            'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []],
             'raw' => ['source' => 'stash (idempotencia)'],
         ];
     }
@@ -151,10 +192,14 @@ class PolizaEmisionService
                 'phone_prefix' => $session->phone_prefix,
                 'phone_number' => $session->phone_number,
             ],
+            // Domicilio del tomador (calle/nro/cp legal). El CP que TARIFA es el de
+            // guarda del riesgo (`risk_zip_code`), no éste: qué `zip_code` viaja al
+            // proveedor lo decide el adapter (regla de negocio confinada ahí). Ver docs/v2/11.
             'address' => [
                 'zip_code' => $session->domicilio_cp,
                 'street_name' => $session->domicilio_calle,
                 'street_number' => $session->domicilio_numero,
+                'risk_zip_code' => $snapshot?->codigo_postal,
             ],
             'vehicle' => [
                 'plate' => $snapshot?->vehicle->patente,

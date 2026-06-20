@@ -7,7 +7,7 @@ namespace App\Repositories;
 use App\Models\Customer;
 use App\Models\Vehicle;
 use App\Traits\ConditionalLogger;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
@@ -34,16 +34,6 @@ class CustomerRepository
         $normalized = $this->normalizePhone($phone);
 
         return Customer::where('phone', $normalized)->first();
-    }
-
-    /**
-     * Summary of findByType
-     */
-    public function findByType(string $type, string $value): ?Customer
-    {
-        $this->logCustomer(' Buscando customer por ', [$type => $value]);
-
-        return Customer::where($type, $value)->first();
     }
 
     /**
@@ -121,7 +111,7 @@ class CustomerRepository
     /**
      * Normalizar teléfono argentino
      */
-    private function normalizePhone(string $phone): string
+    public function normalizePhone(string $phone): string
     {
         // Quitar todo excepto números y +
         $phone = preg_replace('/[^\d+]/', '', $phone);
@@ -186,7 +176,7 @@ class CustomerRepository
     /**
      * Obtener todos los customers con relaciones, búsqueda y paginación
      *
-     * @return LengthAwarePaginator
+     * @return LengthAwarePaginator<int, Customer>
      */
     public function getAllWithRelations(array $relations = [], string $search = '', int $perPage = 15)
     {

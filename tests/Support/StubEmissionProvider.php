@@ -24,7 +24,13 @@ class StubEmissionProvider implements EmissionProvider
             'requires_inspection_after_emission' => false,
             'company_id' => 'stub-company',
             'documents' => [],
+            'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []],
             'raw' => ['source' => 'StubEmissionProvider'],
         ];
+    }
+
+    public function capturePendingDocuments(string $documentToken, string $productId, array $kinds): array
+    {
+        return [];
     }
 }

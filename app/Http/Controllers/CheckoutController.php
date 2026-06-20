@@ -9,6 +9,8 @@ use App\Mail\CheckoutCompletadoMail;
 use App\Models\CheckoutSession;
 use App\Models\InspectionPhoto;
 use App\Models\Quote;
+use App\Services\CustomerConsolidationService;
+use App\Services\CustomerMergeService;
 use App\Services\SettingsService;
 use App\Services\Visred\VisredCatalogService;
 use Illuminate\Http\JsonResponse;
@@ -163,7 +165,7 @@ class CheckoutController extends Controller
      * Procesa el envío del formulario de checkout.
      * Recibe los datos del formulario + photo_ids (public_ids de Cloudinary ya subidos).
      */
-    public function submit(Request $request): JsonResponse
+    public function submit(Request $request, CustomerConsolidationService $consolidation, CustomerMergeService $merge): JsonResponse
     {
         $token = $request->input('checkout_token');
 
@@ -224,7 +226,7 @@ class CheckoutController extends Controller
         abort_if($tempPhotosCount < $requiredPhotoCount, 422, 'Faltan fotos de inspección o no fueron procesadas correctamente.');
 
         // Ejecutar las mutaciones de BD en una transacción atómica
-        DB::transaction(function () use ($quote, $alternative, $validated): void {
+        DB::transaction(function () use ($quote, $alternative, $validated, $consolidation, $merge): void {
 
             // 1. Guardar CheckoutSession
             $session = CheckoutSession::updateOrCreate(
@@ -273,6 +275,42 @@ class CheckoutController extends Controller
 
             // 3. Actualizar status del quote
             $quote->update(['status' => 'checkout_submitted']);
+
+            // 3b. Sync-back al Customer canónico (declaración jurada del checkout). El
+            // domicilio del tomador queda en el Customer; la ubicación de guarda del
+            // riesgo (que tarifa) se siembra en el vehículo SOLO si está vacía.
+            $customer = $quote->conversation?->customer;
+            if ($customer !== null) {
+                // Convergencia de identidad: el DNI/email declarados pueden pertenecer a
+                // otra fila creada por otra puerta (WhatsApp por teléfono, app por email).
+                // Se fusionan en el customer de la conversación antes de consolidar. Solo se
+                // reconcilia por claves fuertes (dni/email), nunca por teléfono. Ver docs/v2/12 §5.
+                $customer = $merge->reconcile($customer, [
+                    'dni' => $validated['dni'],
+                    'email' => $validated['email'],
+                ]);
+
+                $consolidation->apply($customer, [
+                    'first_name' => $validated['first_name'],
+                    'last_name' => $validated['last_name'],
+                    'dni' => $validated['dni'],
+                    'birthdate' => $validated['birthdate'],
+                    'sex_id' => $validated['sex_id'],
+                    'tax_condition_id' => $validated['tax_condition_id'],
+                    'email' => $validated['email'],
+                    'phone' => '+549'.$validated['phone_prefix'].$validated['phone_number'],
+                    'domicilio_calle' => $validated['domicilio_calle'],
+                    'domicilio_numero' => $validated['domicilio_numero'],
+                    'domicilio_cp' => $validated['domicilio_cp'],
+                    'domicilio_provincia' => $validated['domicilio_provincia'],
+                    'domicilio_localidad' => $validated['domicilio_localidad'],
+                ], 'checkout');
+            }
+
+            $vehicle = $quote->riskSnapshot?->vehicle;
+            if ($vehicle !== null && $vehicle->exists && empty($vehicle->codigo_postal)) {
+                $vehicle->update(['codigo_postal' => $validated['domicilio_cp']]);
+            }
 
             // Despachar emisión de póliza (skeleton — cuando API esté lista, solo
             // hay que implementar PolizaEmisionService::emitir())

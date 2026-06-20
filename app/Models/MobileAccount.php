@@ -58,11 +58,15 @@ class MobileAccount extends Authenticatable implements MustVerifyEmail
      * certificado de la cadena). El match es por email contra `customers.email`,
      * que es `unique`: un email mapea a lo sumo a un tomador. No hay paso de DNI.
      *
+     * Match case-insensitive: `customers.email` se guarda en minúscula (consolidación) pero
+     * el email de OAuth puede venir con otro casing — comparar con `LOWER()` evita falsos
+     * negativos que dejarían al titular sin ver sus pólizas.
+     *
      * Seam único: todos los controllers pasan por acá para chequear propiedad,
      * nunca matchean directo.
      */
     public function resolveCustomer(): ?Customer
     {
-        return Customer::where('email', $this->email)->first();
+        return Customer::whereRaw('LOWER(email) = ?', [mb_strtolower(trim($this->email))])->first();
     }
 }

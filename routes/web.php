@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\StudioController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\ConversationController as CustomerConversationController;
 use App\Http\Controllers\CoverageDocumentController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\PolicyDocumentController;
@@ -52,12 +53,22 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/chat', [ChatController::class, 'index'])->name('chat.index');
 
+    Route::get('/conversations', [CustomerConversationController::class, 'index'])->name('conversations.index');
+    Route::get('/conversations/create', [CustomerConversationController::class, 'create'])->name('conversations.create');
+    Route::post('/conversations', [CustomerConversationController::class, 'store'])->name('conversations.store');
+    Route::get('/conversations/{customer}', [CustomerConversationController::class, 'show'])->name('conversations.show');
+    Route::get('/conversations/{customer}/edit', [CustomerConversationController::class, 'edit'])->name('conversations.edit');
+    Route::put('/conversations/{customer}', [CustomerConversationController::class, 'update'])->name('conversations.update');
+    Route::delete('/conversations/{customer}', [CustomerConversationController::class, 'destroy'])->name('conversations.destroy');
+
+    // Clientes — registro canónico del cliente (consolida datos de chat + checkout).
     Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
     Route::get('/customers/create', [CustomerController::class, 'create'])->name('customers.create');
     Route::post('/customers', [CustomerController::class, 'store'])->name('customers.store');
     Route::get('/customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
     Route::get('/customers/{customer}/edit', [CustomerController::class, 'edit'])->name('customers.edit');
     Route::put('/customers/{customer}', [CustomerController::class, 'update'])->name('customers.update');
+    Route::post('/customers/{customer}/resolve-divergence', [CustomerController::class, 'resolveDivergence'])->name('customers.resolve-divergence');
     Route::delete('/customers/{customer}', [CustomerController::class, 'destroy'])->name('customers.destroy');
 
     // Pólizas — alta/edición/baja manual desde el panel (la carga de documentos vive en policy-documents).
