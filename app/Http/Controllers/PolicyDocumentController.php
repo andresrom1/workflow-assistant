@@ -37,7 +37,7 @@ class PolicyDocumentController extends Controller
             : 'all';
 
         $polizas = Poliza::query()
-            ->with(['risk.customer', 'latestDocument'])
+            ->with(['risk.customer', 'latestDocument', 'documents:id,poliza_id,kind'])
             ->withCount('documents')
             ->withCount(['documents as visible_documents_count' => fn ($q) => $q->where('visible_to_client', true)])
             ->when($search !== '', function ($query) use ($search): void {
@@ -54,18 +54,26 @@ class PolicyDocumentController extends Controller
             ->orderByDesc('updated_at')
             ->paginate($perPage)
             ->withQueryString()
-            ->through(fn (Poliza $poliza): array => [
-                'id' => $poliza->id,
-                'numero' => $poliza->numero,
-                'company' => $poliza->company,
-                'patente' => $poliza->risk->metadata['patente'] ?? null,
-                'label' => $poliza->risk->label,
-                'cliente' => $poliza->risk->customer?->name,
-                'documents_count' => $poliza->documents_count,
-                'visible_count' => $poliza->visible_documents_count,
-                'last_kind' => $poliza->latestDocument?->kind->label(),
-                'last_document_at' => $poliza->latestDocument?->captured_at?->toIso8601String(),
-            ]);
+            ->through(function (Poliza $poliza): array {
+                $present = $poliza->documents->map(fn (PolicyDocument $d): PolicyDocumentKind => $d->kind)->unique();
+                $expected = PolicyDocumentKind::expectedForActivePolicy();
+
+                return [
+                    'id' => $poliza->id,
+                    'numero' => $poliza->numero,
+                    'company' => $poliza->company,
+                    'estado' => $poliza->estado->value,
+                    'patente' => $poliza->risk->metadata['patente'] ?? null,
+                    'label' => $poliza->risk->label,
+                    'cliente' => $poliza->risk->customer?->name,
+                    'documents_count' => $poliza->documents_count,
+                    'visible_count' => $poliza->visible_documents_count,
+                    'doc_presentes' => count(array_filter($expected, fn (PolicyDocumentKind $k): bool => $present->contains($k))),
+                    'doc_esperados' => count($expected),
+                    'last_kind' => $poliza->latestDocument?->kind->label(),
+                    'last_document_at' => $poliza->latestDocument?->captured_at?->toIso8601String(),
+                ];
+            });
 
         return Inertia::render('PolicyDocuments/Index', [
             'polizas' => $polizas,
@@ -77,10 +85,24 @@ class PolicyDocumentController extends Controller
     {
         $poliza->load('risk.customer');
 
-        $documents = $poliza->documents()
+        $docs = $poliza->documents()
             ->orderByDesc('captured_at')
             ->orderByDesc('id')
-            ->get()
+            ->get();
+
+        // Checklist de completitud: qué documentos esperados de una vigente están y
+        // cuáles faltan (guía al operador sobre qué cargar).
+        $presentKinds = $docs->map(fn (PolicyDocument $doc): PolicyDocumentKind => $doc->kind)->unique();
+        $checklist = array_map(
+            fn (PolicyDocumentKind $k): array => [
+                'kind' => $k->value,
+                'label' => $k->label(),
+                'presente' => $presentKinds->contains($k),
+            ],
+            PolicyDocumentKind::expectedForActivePolicy(),
+        );
+
+        $documents = $docs
             ->map(fn (PolicyDocument $doc): array => [
                 'id' => $doc->id,
                 'kind' => $doc->kind->value,
@@ -106,6 +128,7 @@ class PolicyDocumentController extends Controller
                 'estado' => $poliza->estado->value,
             ],
             'documents' => $documents,
+            'checklist' => $checklist,
             'kinds' => collect(PolicyDocumentKind::cases())
                 ->map(fn (PolicyDocumentKind $k): array => ['value' => $k->value, 'label' => $k->label()])
                 ->all(),
@@ -118,29 +141,19 @@ class PolicyDocumentController extends Controller
             'file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:51200',
             'kind' => ['required', Rule::enum(PolicyDocumentKind::class)],
             'label' => 'nullable|string|max:120',
-            'visible_to_client' => 'boolean',
         ]);
 
+        // Regla "todo lo de la vigente": ya no hay visibilidad por documento — los de la
+        // póliza vigente se entregan todos. Se persiste visible=true por consistencia.
         $this->policyDocumentService->storeAdminUpload(
             $poliza,
             $request->file('file'),
             PolicyDocumentKind::from($validated['kind']),
-            (bool) ($validated['visible_to_client'] ?? false),
+            true,
             $validated['label'] ?? null,
         );
 
         return back()->with('flash', ['success' => 'Documento subido a la póliza.']);
-    }
-
-    public function toggleVisibility(PolicyDocument $policyDocument): RedirectResponse
-    {
-        $policyDocument->update(['visible_to_client' => ! $policyDocument->visible_to_client]);
-
-        $message = $policyDocument->visible_to_client
-            ? 'Documento visible para el cliente.'
-            : 'Documento oculto para el cliente.';
-
-        return back()->with('flash', ['success' => $message]);
     }
 
     public function destroy(PolicyDocument $policyDocument): RedirectResponse

@@ -52,6 +52,10 @@ class PolicyReferenceService
                     'sum_asegurada' => $alternative->sum_asegurada,
                     'cuota' => $alternative->precio,
                     'emitida_en' => now(),
+                    // Seed de vigencia (emisión + 1 año): la compañía no expone el término real
+                    // y no hay read-path. Da una fecha tentativa para la detección de vencimientos
+                    // (Fase 3); la carga manual del documento la corrige si difiere.
+                    'vigencia' => now()->addYear(),
                     'last_synced_at' => now(),
                     // Extras de la emisión (no son columnas de referencia): permiten
                     // reconstruir el resultado neutro sin volver a emitir (idempotencia).

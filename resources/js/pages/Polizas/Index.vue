@@ -11,6 +11,7 @@
           <span class="text-xs font-medium" style="color: var(--text-3);">
             Total: <span class="font-semibold" style="color: var(--text-2);">{{ polizas.total }}</span>
           </span>
+          <Link href="/polizas/vencimientos" class="btn btn-secondary text-sm">Vencimientos</Link>
           <Link href="/polizas/create" class="btn btn-primary text-sm">Nueva póliza</Link>
         </div>
       </div>

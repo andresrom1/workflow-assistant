@@ -27,6 +27,8 @@ La decisión estructural que ordena todo el modelo:
 - **No construimos un store autoritativo de endosos** ni una proyección de póliza "viva". Sería reimplementar el core de la compañía y garantiza *drift*. (Espíritu de [ADR-001](../v1/adr/001-quote-provider-refs.md).)
 - Una **"solicitud de cambio"** del cliente (p.ej. "cambié de CP") es una acción comercial **nuestra** que se forwardea; el **endoso** resultante es de la compañía.
 
+> **Corrección v3 (2026-06-20).** El acceso **on-demand** a la compañía (esta fila y la consecuencia "no construimos store de endosos / estado vivo") quedó **invertido** para el **post-emisión**: no existe endpoint de consulta por `policy_number` ni webhook de eventos de póliza, así que el on-demand es imposible. El estado/endosos/renovación se mantienen **manualmente** en MANGO (fuente de verdad de cartera), asistidos por extracción de documentos. Detalle en §5 y en [`../v3/`](../v3/01-modelo-mantenimiento-cartera-endosos.md). Lo de esta sección sigue valiendo como intención de diseño para **cotización/emisión**.
+
 ---
 
 ## 2. Los puertos (provider-agnostic)
@@ -88,6 +90,8 @@ risk_snapshot        Risk                       referencia de póliza           
 | Referencia de póliza | Append (una por emisión) | MANGO | **Solo identificadores** para consultar a Visred. |
 | `Poliza` / `endoso` / estado / documentos | Vive en la compañía | **Visred** | On-demand, siempre la última versión. **No los modelamos como autoritativos.** |
 
+> **Corrección v3 (2026-06-20).** La columna "on-demand" de la última fila **no aplica** al post-emisión: sin endpoint de consulta ni webhook, MANGO **sí** modela el estado/endosos de la cartera (como hechos materializados y mantenidos a mano, no como proyección autoritativa de la compañía). Modelo en [`../v3/01-modelo-mantenimiento-cartera-endosos.md`](../v3/01-modelo-mantenimiento-cartera-endosos.md). Ver §5.
+
 ### Decisión (a) — el `Risk` **no** lleva estados versionados
 
 > *Reabre la idea de "estados inmutables versionados" que charlamos: queda descartada por las decisiones de límite de contexto + referencia mínima. Confirmar en §9.*
@@ -105,6 +109,8 @@ risk_snapshot        Risk                       referencia de póliza           
 **Qué persistimos al emitir:** `policy_number`, `company_id`, `product_id`, ligados a `Risk` + `Quote` (`Quote.status='poliza_emitida'`). En las tablas **de dominio** (`polizas`) **NO persistimos `presale_id`** — es un dato de Visred acotado al ciclo de emisión que **no sale del adapter**. Nada más del contrato. (Única excepción acotada: la captura diferida de documentos guarda el `presale_id` como **token opaco aislado** en `poliza_provider_refs`, efímero y borrado al terminar — ver §5, "Captura diferida".)
 
 > **Corrección (2026-06-15).** Originalmente `presale_id` se eligió como la referencia durable persistida en `polizas` (decisión (b) abajo) y como clave de cache/descarga de documentos. Es un **error**: `presale_id` solo vive durante la emisión. Se revirtió — la referencia durable es `policy_number`; ver Bitácora del ROADMAP.
+
+> **Corrección v3 (2026-06-20) — la cartera NO es on-demand.** El modelo de "cache-aside que refresca desde Visred" descrito abajo **no se materializó y no es posible**: **no existe endpoint de consulta por `policy_number` ni webhook** de eventos de póliza. En los hechos, `PolicyReferenceService::materialize` **congela** los valores en la emisión y no hay read-path de vuelta a la compañía. La cartera es por lo tanto **estática** y se mantiene **manualmente** (renovación = póliza nueva; refacturación/anulación/endosos cargados a mano), asistida por extracción de documentos. **MANGO pasa a ser la fuente de verdad del estado de cartera**, no una proyección on-demand. Diseño post-emisión en [`../v3/01-modelo-mantenimiento-cartera-endosos.md`](../v3/01-modelo-mantenimiento-cartera-endosos.md) (+ extractor en [`../v3/02-extractor-documentos-poliza.md`](../v3/02-extractor-documentos-poliza.md)). Lo de abajo se conserva como intención original de diseño.
 
 **Cartera (lectura frecuente) = on-demand con cache-aside de TTL corto:**
 - El **backend** (único que habla con Visred) cachea el estado/resumen de póliza por `policy_number` (Laravel `Cache`, TTL ~**2h** configurable).

@@ -154,6 +154,68 @@ it('al actualizar respeta el constraint de única vigente por Risk', function ()
     expect($segunda->refresh()->estado)->toBe(PolizaEstado::Emitida);
 });
 
+it('renderiza el formulario de renovación con los datos de la anterior', function (): void {
+    $poliza = Poliza::factory()->create(['estado' => PolizaEstado::Vigente, 'numero' => 'POL-OLD']);
+
+    $this->actingAs($this->user)
+        ->get(route('polizas.renovar.form', $poliza))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('Polizas/Renovar')
+            ->where('anterior.numero', 'POL-OLD'));
+});
+
+it('renueva una póliza: abre una nueva con back-ref y marca la anterior vencida', function (): void {
+    $risk = Risk::factory()->create();
+    $anterior = Poliza::factory()->create([
+        'risk_id' => $risk->id,
+        'estado' => PolizaEstado::Vigente,
+        'numero' => 'POL-2025',
+    ]);
+
+    $this->actingAs($this->user)
+        ->post(route('polizas.renovar', $anterior), [
+            'numero' => 'POL-2026',
+            'company' => 'La Caja Seguros',
+            'vigencia' => '2027-04-30',
+        ])
+        ->assertRedirect();
+
+    expect($anterior->refresh()->estado)->toBe(PolizaEstado::Vencida);
+
+    $nueva = Poliza::where('numero', 'POL-2026')->firstOrFail();
+    expect($nueva->risk_id)->toBe($risk->id)
+        ->and($nueva->estado)->toBe(PolizaEstado::Vigente)
+        ->and($nueva->contrato_anterior_ref)->toBe('POL-2025')
+        ->and($nueva->vigencia?->toDateString())->toBe('2027-04-30');
+});
+
+it('rechaza renovar una póliza que no está vigente', function (): void {
+    $anterior = Poliza::factory()->create(['estado' => PolizaEstado::Vencida]);
+
+    $this->actingAs($this->user)
+        ->post(route('polizas.renovar', $anterior), ['numero' => 'POL-NUEVA'])
+        ->assertSessionHasErrors('poliza');
+
+    expect(Poliza::where('numero', 'POL-NUEVA')->exists())->toBeFalse();
+});
+
+it('la cola de vencimientos lista solo vigentes que vencen dentro de la ventana', function (): void {
+    Poliza::factory()->create(['estado' => PolizaEstado::Vigente, 'vigencia' => now()->addDays(10), 'numero' => 'POL-PRONTO']);
+    // Fuera de ventana (vence en 200 días).
+    Poliza::factory()->create(['estado' => PolizaEstado::Vigente, 'vigencia' => now()->addDays(200), 'numero' => 'POL-LEJOS']);
+    // Vencida (no vigente): no entra aunque la fecha caiga dentro.
+    Poliza::factory()->create(['estado' => PolizaEstado::Vencida, 'vigencia' => now()->addDays(5), 'numero' => 'POL-VENCIDA']);
+    // Vigente sin vigencia: no entra (default conservador, no se inventa fecha).
+    Poliza::factory()->create(['estado' => PolizaEstado::Vigente, 'vigencia' => null, 'numero' => 'POL-SINVIG']);
+
+    $this->actingAs($this->user)
+        ->get(route('polizas.vencimientos', ['dias' => 30]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('Polizas/Vencimientos')
+            ->has('polizas', 1)
+            ->where('polizas.0.numero', 'POL-PRONTO'));
+});
+
 it('elimina una póliza con soft-delete', function (): void {
     $poliza = Poliza::factory()->create();
 

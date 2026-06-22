@@ -30,4 +30,16 @@ enum PolicyDocumentKind: string
             self::Otro => 'Otro',
         };
     }
+
+    /**
+     * Documentos que una póliza vigente "completa" debería tener (checklist de
+     * mantenimiento). Supuesto de dominio a confirmar: hoy es un set fijo, no varía
+     * por compañía/producto.
+     *
+     * @return list<self>
+     */
+    public static function expectedForActivePolicy(): array
+    {
+        return [self::Poliza, self::CirculationCard, self::Certificado];
+    }
 }

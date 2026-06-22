@@ -63,7 +63,9 @@ it('crea un Risk nuevo y la Poliza-referencia ligada al Quote', function () {
         ->and((float) $poliza->sum_asegurada)->toBe(9_600_000.0)  // congelado de la cotización
         ->and((float) $poliza->cuota)->toBe(1000.0)
         ->and($poliza->company_id)->toBe('sancor')
-        ->and($poliza->metadata['proposal_number'])->toBe('PR-1');
+        ->and($poliza->metadata['proposal_number'])->toBe('PR-1')
+        // Seed de vigencia (emisión + 1 año) para la detección de vencimientos.
+        ->and($poliza->vigencia?->toDateString())->toBe(now()->addYear()->toDateString());
 
     expect(Risk::count())->toBe(1)
         ->and($poliza->risk->customer_id)->toBe($snapshot->customer_id);

@@ -40,6 +40,25 @@ Canales consumidores que se usan como etiqueta en toda la doc:
 
 **Orden de lectura sugerido para la cirugía:** 01 (datos) → 05/03/04 (capas) → 02 (superficie HTTP) → 06 + 08 (el seam de Visred, donde más va a doler el cambio) → 10 (modelo agnóstico de cotización/emisión, gate de implementación) → 07 (historia y deltas).
 
+> **Nota:** `docs/v2/10` §4/§5 asumía cartera **on-demand** (compañía consultable por `policy_number`).
+> Esa premisa quedó **invertida** en v3 (no existe ese endpoint → cartera manual asistida por extracción).
+> Ver `docs/v3/`.
+
+---
+
+## Diseño v3 (post-emisión — mantenimiento de cartera)
+
+> **OJO — el diseño 01/02 se DESCARTÓ en implementación.** Lo construido (Fases 1–5, 2026-06-21,
+> ver `ROADMAP.md`) es **mantenimiento de documentación de póliza** (doc **03**): el modelo de
+> transacciones/fold/extractor de 01/02 no se implementó (sin consumidor; la historia ya vive en
+> Visred + la compañía + la pila de PDFs). 01/02 quedan como **diseño histórico**.
+
+| # | Documento | Qué cubre |
+|---|---|---|
+| 01 | [01-modelo-mantenimiento-cartera-endosos.md](v3/01-modelo-mantenimiento-cartera-endosos.md) | **(Histórico, descartado)** Modelo de dominio: `Risk → Poliza → Transacción (corriente)`, fold, jerarquía temporal, ejes de estado, taxonomía de endosos, frontera invariante/variable. |
+| 02 | [02-extractor-documentos-poliza.md](v3/02-extractor-documentos-poliza.md) | **(Histórico, descartado)** El extractor de documentos → hechos de dominio: pipeline clasificar→extraer→confirmar, mapeo por compañía, agnóstico de canal. |
+| 03 | [03-entrega-documentacion-app.md](v3/03-entrega-documentacion-app.md) | **(Implementado)** El feature real: cargar/mantener la documentación (PDFs) y entregarla a la app. Contrato backend↔Flutter — API mobile (`tiene_documentos`, `/documentos`, `user.id`), push FCM `account-{id}`, y qué falta en Flutter. |
+
 ---
 
 ## Capas de la arquitectura (recordatorio)

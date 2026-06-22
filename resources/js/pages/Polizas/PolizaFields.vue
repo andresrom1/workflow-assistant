@@ -44,7 +44,7 @@
       <label class="field-label">Emitida en</label>
       <input v-model="form.emitida_en" type="date" class="field" />
     </div>
-    <div>
+    <div v-if="showEstado">
       <label class="field-label">Estado *</label>
       <Select v-model="form.estado">
         <SelectTrigger class="w-full h-[38px]" :aria-invalid="!!form.errors.estado || undefined">
@@ -65,9 +65,13 @@
 import type { InertiaForm } from '@inertiajs/vue3'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 
-defineProps<{
+withDefaults(defineProps<{
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: InertiaForm<any>
-  estados: Array<{ value: string; label: string }>
-}>()
+  estados?: Array<{ value: string; label: string }>
+  showEstado?: boolean
+}>(), {
+  estados: () => [],
+  showEstado: true,
+})
 </script>

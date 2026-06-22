@@ -2,11 +2,17 @@
 
 use App\Enums\PolicyDocumentKind;
 use App\Enums\PolicyDocumentSource;
+use App\Enums\PolizaEstado;
+use App\Jobs\PublishDocumentAvailable;
+use App\Models\Customer;
+use App\Models\MobileAccount;
 use App\Models\PolicyDocument;
 use App\Models\Poliza;
+use App\Models\Risk;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
@@ -73,6 +79,41 @@ it('filtra el index por pólizas sin documentos', function (): void {
             ->where('polizas.data.0.documents_count', 0));
 });
 
+it('el gestor expone el checklist de completitud (presentes vs faltantes)', function (): void {
+    $poliza = Poliza::factory()->create();
+    // Tiene la Póliza; faltan Cédula de circulación y Certificado.
+    PolicyDocument::factory()->adminUpload()->create([
+        'poliza_id' => $poliza->id,
+        'kind' => PolicyDocumentKind::Poliza,
+    ]);
+
+    $this->actingAs($this->user)
+        ->get(route('policy-documents.show', $poliza))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('PolicyDocuments/Show')
+            ->has('checklist', 3)
+            ->where('checklist.0.kind', 'poliza')
+            ->where('checklist.0.presente', true)
+            ->where('checklist.1.presente', false)
+            ->where('checklist.2.presente', false));
+});
+
+it('el index expone la completitud de documentación esperada', function (): void {
+    $poliza = Poliza::factory()->create(['numero' => 'POL-CHK']);
+    PolicyDocument::factory()->adminUpload()->create([
+        'poliza_id' => $poliza->id,
+        'kind' => PolicyDocumentKind::Poliza,
+    ]);
+
+    $this->actingAs($this->user)
+        ->get(route('policy-documents.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('polizas.data.0.doc_presentes', 1)
+            ->where('polizas.data.0.doc_esperados', 3));
+});
+
 it('sube un documento manual y lo persiste en R2 como admin_upload', function (): void {
     $poliza = Poliza::factory()->create();
     $file = UploadedFile::fake()->create('endoso-junio.pdf', 200, 'application/pdf');
@@ -82,7 +123,6 @@ it('sube un documento manual y lo persiste en R2 como admin_upload', function ()
             'file' => $file,
             'kind' => PolicyDocumentKind::Endoso->value,
             'label' => 'Endoso cambio de uso',
-            'visible_to_client' => true,
         ])
         ->assertRedirect();
 
@@ -97,6 +137,56 @@ it('sube un documento manual y lo persiste en R2 como admin_upload', function ()
 
     expect($doc->storage_path)->toStartWith("policy-documents/{$poliza->id}/endoso-");
     Storage::disk('r2')->assertExists($doc->storage_path);
+});
+
+it('encola el aviso push al titular con cuenta al cargar un documento a una póliza vigente', function (): void {
+    Queue::fake();
+    $customer = Customer::factory()->create(['email' => 'asegurado@example.com']);
+    $risk = Risk::factory()->create(['customer_id' => $customer->id]);
+    $poliza = Poliza::factory()->create(['risk_id' => $risk->id, 'estado' => PolizaEstado::Vigente]);
+    $account = MobileAccount::factory()->create(['email' => 'asegurado@example.com']);
+
+    $this->actingAs($this->user)
+        ->post(route('policy-documents.store', $poliza), [
+            'file' => UploadedFile::fake()->create('poliza.pdf', 100, 'application/pdf'),
+            'kind' => PolicyDocumentKind::Poliza->value,
+        ])
+        ->assertRedirect();
+
+    Queue::assertPushed(PublishDocumentAvailable::class, fn (PublishDocumentAvailable $job): bool => $job->mobileAccountId === $account->id
+        && $job->polizaId === $poliza->id
+        && $job->kind === 'poliza');
+});
+
+it('no encola el aviso si la póliza no está vigente', function (): void {
+    Queue::fake();
+    $customer = Customer::factory()->create(['email' => 'asegurado@example.com']);
+    $risk = Risk::factory()->create(['customer_id' => $customer->id]);
+    $poliza = Poliza::factory()->create(['risk_id' => $risk->id, 'estado' => PolizaEstado::Vencida]);
+    MobileAccount::factory()->create(['email' => 'asegurado@example.com']);
+
+    $this->actingAs($this->user)
+        ->post(route('policy-documents.store', $poliza), [
+            'file' => UploadedFile::fake()->create('poliza.pdf', 100, 'application/pdf'),
+            'kind' => PolicyDocumentKind::Poliza->value,
+        ])->assertRedirect();
+
+    Queue::assertNotPushed(PublishDocumentAvailable::class);
+});
+
+it('no encola el aviso si el titular no tiene cuenta en la app', function (): void {
+    Queue::fake();
+    $customer = Customer::factory()->create(['email' => 'sincuenta@example.com']);
+    $risk = Risk::factory()->create(['customer_id' => $customer->id]);
+    $poliza = Poliza::factory()->create(['risk_id' => $risk->id, 'estado' => PolizaEstado::Vigente]);
+
+    $this->actingAs($this->user)
+        ->post(route('policy-documents.store', $poliza), [
+            'file' => UploadedFile::fake()->create('poliza.pdf', 100, 'application/pdf'),
+            'kind' => PolicyDocumentKind::Poliza->value,
+        ])->assertRedirect();
+
+    Queue::assertNotPushed(PublishDocumentAvailable::class);
 });
 
 it('rechaza un archivo de tipo no permitido', function (): void {
@@ -125,22 +215,6 @@ it('rechaza un kind inválido', function (): void {
         ->assertSessionHasErrors('kind');
 
     expect(PolicyDocument::count())->toBe(0);
-});
-
-it('togglea la visibilidad de un documento', function (): void {
-    $doc = PolicyDocument::factory()->adminUpload()->create(['visible_to_client' => false]);
-
-    $this->actingAs($this->user)
-        ->patch(route('policy-documents.toggle-visibility', $doc))
-        ->assertRedirect();
-
-    expect($doc->fresh()->visible_to_client)->toBeTrue();
-
-    $this->actingAs($this->user)
-        ->patch(route('policy-documents.toggle-visibility', $doc))
-        ->assertRedirect();
-
-    expect($doc->fresh()->visible_to_client)->toBeFalse();
 });
 
 it('elimina el documento y borra el archivo en R2', function (): void {

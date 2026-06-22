@@ -85,7 +85,15 @@
                 @click="irA(`/policy-documents/${p.id}`)"
               >
                 <td class="px-5 py-3">
-                  <p class="text-sm font-semibold leading-tight" style="color: var(--text-1);">{{ p.numero ?? '—' }}</p>
+                  <div class="flex items-center gap-2">
+                    <p class="text-sm font-semibold leading-tight" style="color: var(--text-1);">{{ p.numero ?? '—' }}</p>
+                    <span v-if="p.estado" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                      :style="p.estado === 'vigente'
+                        ? 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);'
+                        : 'background: var(--border-sub); color: var(--text-3);'">
+                      {{ estadoLabel(p.estado) }}
+                    </span>
+                  </div>
                   <p class="text-xs mt-0.5 font-mono" style="color: var(--text-3);">
                     {{ p.patente ?? '—' }} · {{ p.label }}
                   </p>
@@ -108,8 +116,9 @@
                       : 'background: var(--border-sub); color: var(--text-3);'">
                     {{ p.documents_count }}
                   </span>
-                  <p v-if="p.documents_count > 0" class="text-[10px] mt-1" style="color: var(--text-3);">
-                    {{ p.visible_count }} visible{{ p.visible_count === 1 ? '' : 's' }}
+                  <p class="text-[10px] mt-1 font-mono tabular-nums"
+                    :style="p.doc_presentes === p.doc_esperados ? 'color: var(--badge-ok-txt);' : 'color: var(--text-3);'">
+                    {{ p.doc_presentes }}/{{ p.doc_esperados }} esperados
                   </p>
                 </td>
                 <td class="px-5 py-3" @click.stop>
@@ -127,7 +136,15 @@
             class="flex items-center gap-3 rounded-[14px] px-4 py-3 transition-all"
             style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
             <div class="flex-1 min-w-0">
-              <p class="text-sm font-semibold truncate" style="color: var(--text-1);">{{ p.numero ?? '—' }}</p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-semibold truncate" style="color: var(--text-1);">{{ p.numero ?? '—' }}</p>
+                <span v-if="p.estado" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0"
+                  :style="p.estado === 'vigente'
+                    ? 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);'
+                    : 'background: var(--border-sub); color: var(--text-3);'">
+                  {{ estadoLabel(p.estado) }}
+                </span>
+              </div>
               <p class="text-xs truncate mt-0.5 font-mono" style="color: var(--text-3);">
                 {{ p.patente ?? '—' }} · {{ p.cliente ?? '—' }}
               </p>
@@ -167,11 +184,14 @@ interface PolizaItem {
   id: number
   numero: string | null
   company: string | null
+  estado: string | null
   patente: string | null
   label: string
   cliente: string | null
   documents_count: number
   visible_count: number
+  doc_presentes: number
+  doc_esperados: number
   last_kind: string | null
   last_document_at: string | null
 }
@@ -220,5 +240,10 @@ const irA = (href: string) => router.visit(href)
 const formatDate = (iso: string | null): string => {
   if (!iso) { return '—' }
   return new Date(iso).toLocaleDateString('es-AR', { dateStyle: 'medium' })
+}
+
+const estadoLabel = (estado: string): string => {
+  if (estado === 'vigente') { return 'Vigente' }
+  return estado.charAt(0).toUpperCase() + estado.slice(1)
 }
 </script>

@@ -60,6 +60,40 @@ class PolizaController extends Controller
         ]);
     }
 
+    /**
+     * Cola de vencimientos: pólizas vigentes cuyo término vence dentro de `dias` (o ya
+     * venció, por término sin actualizar) — la señal para cargar la renovación. Derivada
+     * de `vigencia`, sin persistir nada. Las legacy sin `vigencia` no aparecen (default
+     * conservador: no inventar fecha).
+     */
+    public function vencimientos(Request $request): Response
+    {
+        $dias = max(1, min(365, (int) $request->input('dias', 30)));
+        $limite = now()->addDays($dias)->endOfDay();
+
+        $polizas = Poliza::query()
+            ->with('risk.customer')
+            ->where('estado', PolizaEstado::Vigente)
+            ->whereNotNull('vigencia')
+            ->where('vigencia', '<=', $limite)
+            ->orderBy('vigencia')
+            ->get()
+            ->map(fn (Poliza $p): array => [
+                'id' => $p->id,
+                'numero' => $p->numero,
+                'company' => $p->company,
+                'patente' => $p->risk->metadata['patente'] ?? null,
+                'label' => $p->risk->label,
+                'cliente' => $p->risk->customer?->name,
+                'vigencia' => $p->vigencia?->toDateString(),
+            ])->all();
+
+        return Inertia::render('Polizas/Vencimientos', [
+            'polizas' => $polizas,
+            'dias' => $dias,
+        ]);
+    }
+
     public function create(Request $request): Response
     {
         $customerId = $request->integer('customer');
@@ -185,6 +219,47 @@ class PolizaController extends Controller
     }
 
     /**
+     * Formulario de renovación: prellena los datos de la póliza vigente para que el
+     * operador cargue la renovada (número nuevo). El estado lo fuerza el servicio.
+     */
+    public function renovarForm(Poliza $poliza): Response
+    {
+        $poliza->load('risk.customer');
+
+        return Inertia::render('Polizas/Renovar', [
+            'anterior' => [
+                'id' => $poliza->id,
+                'numero' => $poliza->numero,
+                'company' => $poliza->company,
+                'coverage' => $poliza->coverage,
+                'coverage_detail' => $poliza->coverage_detail,
+                'sum_asegurada' => $poliza->sum_asegurada,
+                'cuota' => $poliza->cuota,
+                'vigencia' => $poliza->vigencia?->toDateString(),
+                'estado' => $poliza->estado->value,
+            ],
+            'vehicle' => [
+                'label' => $poliza->risk->label,
+                'patente' => $poliza->risk->metadata['patente'] ?? null,
+                'cliente' => $poliza->risk->customer?->name,
+            ],
+        ]);
+    }
+
+    public function renovar(Request $request, Poliza $poliza): RedirectResponse
+    {
+        // La renovada nace `vigente` (lo fuerza el servicio) — el form no manda estado.
+        $rules = $this->polizaRules();
+        unset($rules['estado']);
+        $validated = $request->validate($rules);
+
+        $nueva = $this->polizaService->renovar($poliza, $this->polizaFields($validated));
+
+        return redirect()->route('polizas.edit', $nueva)
+            ->with('flash', ['success' => 'Póliza renovada. La anterior quedó marcada como vencida.']);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function polizaRules(): array
@@ -204,10 +279,12 @@ class PolizaController extends Controller
     }
 
     /**
+     * Campos de la póliza sin `estado` (compartidos por alta/edición/renovación).
+     *
      * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
-    private function polizaPayload(array $validated): array
+    private function polizaFields(array $validated): array
     {
         return [
             'numero' => $validated['numero'] ?? null,
@@ -219,6 +296,17 @@ class PolizaController extends Controller
             'cuota_due' => $validated['cuota_due'] ?? null,
             'vigencia' => $validated['vigencia'] ?? null,
             'emitida_en' => $validated['emitida_en'] ?? null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function polizaPayload(array $validated): array
+    {
+        return [
+            ...$this->polizaFields($validated),
             'estado' => PolizaEstado::from($validated['estado']),
         ];
     }

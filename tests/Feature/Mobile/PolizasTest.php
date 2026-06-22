@@ -264,7 +264,34 @@ it('GET /polizas/{id} devuelve 404 si la póliza no existe', function (): void {
         ->assertJson(['code' => 'POLIZA_NOT_FOUND']);
 });
 
-it('GET /polizas/{id}/documentos devuelve los documentos visibles con URL firmada', function (): void {
+it('expone tiene_documentos en las pólizas propias', function (): void {
+    $pas = makePas();
+    $customer = makeCustomer($pas);
+    $conDoc = makeVehicleRiskWithPoliza($customer, 20_000_000);
+    $sinDoc = makeVehicleRiskWithPoliza($customer, 5_000_000);
+
+    PolicyDocument::create([
+        'poliza_id' => $conDoc->id,
+        'kind' => 'poliza',
+        'storage_path' => "policy-documents/{$conDoc->id}/poliza.pdf",
+        'source' => 'admin_upload',
+        'visible_to_client' => true,
+        'captured_at' => now(),
+    ]);
+
+    $account = MobileAccount::factory()->create(['email' => $customer->email, 'customer_id' => $customer->id]);
+    Sanctum::actingAs($account, ['*'], 'mobile');
+
+    // Orden por sum_asegurada desc: el de 20M (con doc) primero, el de 5M (sin doc) después.
+    $this->getJson('/api/mobile/v1/polizas')
+        ->assertOk()
+        ->assertJson(['polizas_propias' => [
+            ['id' => $conDoc->id, 'tiene_documentos' => true],
+            ['id' => $sinDoc->id, 'tiene_documentos' => false],
+        ]]);
+});
+
+it('GET /polizas/{id}/documentos entrega TODOS los documentos de la póliza vigente', function (): void {
     Storage::fake('r2');
     Storage::disk('r2')->buildTemporaryUrlsUsing(
         fn (string $path, $expiration): string => "https://signed.test/{$path}"
@@ -282,7 +309,8 @@ it('GET /polizas/{id}/documentos devuelve los documentos visibles con URL firmad
         'visible_to_client' => true,
         'captured_at' => now(),
     ]);
-    // No visible para el cliente (p. ej. carga interna del admin): no debe aparecer.
+    // Regla "todo lo de la vigente": aunque tenga visible_to_client=false (legacy), se
+    // entrega igual porque la póliza está vigente. La visibilidad por documento se retiró.
     PolicyDocument::create([
         'poliza_id' => $poliza->id,
         'kind' => 'endoso',
@@ -296,11 +324,41 @@ it('GET /polizas/{id}/documentos devuelve los documentos visibles con URL firmad
 
     $this->getJson("/api/mobile/v1/polizas/{$poliza->id}/documentos")
         ->assertOk()
-        ->assertJsonCount(1, 'documentos')
-        ->assertJson(['documentos' => [[
-            'kind' => 'poliza',
-            'url' => "https://signed.test/policy-documents/{$poliza->id}/poliza.pdf",
-        ]]]);
+        ->assertJsonCount(2, 'documentos')
+        // Orden por kind: 'endoso' antes que 'poliza'.
+        ->assertJson(['documentos' => [
+            ['kind' => 'endoso', 'url' => "https://signed.test/policy-documents/{$poliza->id}/endoso.pdf"],
+            ['kind' => 'poliza', 'url' => "https://signed.test/policy-documents/{$poliza->id}/poliza.pdf"],
+        ]]);
+});
+
+it('GET /polizas/{id}/documentos no entrega documentos de una póliza vencida', function (): void {
+    Storage::fake('r2');
+    Storage::disk('r2')->buildTemporaryUrlsUsing(
+        fn (string $path, $expiration): string => "https://signed.test/{$path}"
+    );
+
+    $pas = makePas();
+    $customer = makeCustomer($pas);
+    $poliza = makeVehicleRiskWithPoliza($customer);
+    $poliza->update(['estado' => PolizaEstado::Vencida]);
+
+    PolicyDocument::create([
+        'poliza_id' => $poliza->id,
+        'kind' => 'poliza',
+        'storage_path' => "policy-documents/{$poliza->id}/poliza.pdf",
+        'source' => 'admin_upload',
+        'visible_to_client' => true,
+        'captured_at' => now(),
+    ]);
+
+    $account = MobileAccount::factory()->create(['email' => $customer->email, 'customer_id' => $customer->id]);
+    Sanctum::actingAs($account, ['*'], 'mobile');
+
+    // La documentación de una póliza vencida (renovada) ya no se sirve al cliente.
+    $this->getJson("/api/mobile/v1/polizas/{$poliza->id}/documentos")
+        ->assertOk()
+        ->assertJsonCount(0, 'documentos');
 });
 
 it('GET /polizas/{id}/documentos incluye un documento de carga manual visible para el cliente', function (): void {
