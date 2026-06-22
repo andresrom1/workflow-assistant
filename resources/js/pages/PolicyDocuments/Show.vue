@@ -15,10 +15,18 @@
             <span v-if="poliza.cliente"> · {{ poliza.cliente }}</span>
           </p>
         </div>
-        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold self-start"
-          style="background: var(--accent-100); color: var(--accent-600);">
-          {{ poliza.company ?? '—' }}
-        </span>
+        <div class="flex items-center gap-2 self-start">
+          <span v-if="poliza.estado" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold"
+            :style="poliza.estado === 'vigente'
+              ? 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);'
+              : 'background: var(--border-sub); color: var(--text-3);'">
+            {{ poliza.estado === 'vigente' ? 'Vigente' : 'Histórica' }}
+          </span>
+          <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold"
+            style="background: var(--accent-100); color: var(--accent-600);">
+            {{ poliza.company ?? '—' }}
+          </span>
+        </div>
       </div>
 
       <!-- Upload form -->
@@ -56,17 +64,9 @@
             </div>
           </div>
 
-          <label class="flex items-center gap-2.5 cursor-pointer mt-4">
-            <div class="relative w-9 h-5 rounded-full transition-colors"
-              :style="uploadForm.visible_to_client ? 'background: #5b5ef6;' : 'background: var(--border);'">
-              <div class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform"
-                :class="uploadForm.visible_to_client ? 'translate-x-4 left-0.5' : 'left-0.5'"></div>
-            </div>
-            <input type="checkbox" v-model="uploadForm.visible_to_client" class="sr-only" />
-            <span class="text-sm" style="color: var(--text-1);">
-              {{ uploadForm.visible_to_client ? 'Visible para el cliente' : 'Oculto para el cliente' }}
-            </span>
-          </label>
+          <p class="text-xs mt-4" style="color: var(--text-3);">
+            Los documentos de la póliza vigente se entregan automáticamente al cliente en la app.
+          </p>
 
           <div class="flex justify-end mt-4">
             <button type="submit" class="btn btn-primary text-sm" :disabled="uploadForm.processing">
@@ -74,6 +74,32 @@
             </button>
           </div>
         </form>
+      </div>
+
+      <!-- Checklist de completitud -->
+      <div class="rounded-[14px] p-5 mb-5"
+        style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold" style="color: var(--text-1);">Documentación esperada</h2>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold font-mono tabular-nums"
+            :style="completos === checklist.length
+              ? 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);'
+              : 'background: var(--accent-100); color: var(--accent-600);'">
+            {{ completos }}/{{ checklist.length }}
+          </span>
+        </div>
+        <ul class="space-y-2">
+          <li v-for="item in checklist" :key="item.kind" class="flex items-center gap-2.5 text-sm">
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold flex-shrink-0"
+              :style="item.presente
+                ? 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);'
+                : 'background: var(--border-sub); color: var(--text-3);'">
+              {{ item.presente ? '✓' : '–' }}
+            </span>
+            <span :style="item.presente ? 'color: var(--text-1);' : 'color: var(--text-3);'">{{ item.label }}</span>
+            <span v-if="!item.presente" class="ml-auto text-[11px] font-semibold" style="color: var(--accent-600);">Falta</span>
+          </li>
+        </ul>
       </div>
 
       <!-- Documents list -->
@@ -104,12 +130,6 @@
                   : 'background: var(--border-sub); color: var(--text-2);'">
                 {{ doc.source_label }}
               </span>
-              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold"
-                :style="doc.visible_to_client
-                  ? 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);'
-                  : 'background: var(--border-sub); color: var(--text-3);'">
-                {{ doc.visible_to_client ? 'Visible' : 'Oculto' }}
-              </span>
             </div>
             <p class="text-sm mt-1.5 truncate" style="color: var(--text-1);">
               {{ doc.label ?? doc.original_filename ?? doc.kind_label }}
@@ -124,9 +144,6 @@
               class="btn btn-secondary text-xs py-1.5 px-3">
               Ver
             </a>
-            <button @click="toggleVisibility(doc)" class="btn btn-secondary text-xs py-1.5 px-3">
-              {{ doc.visible_to_client ? 'Ocultar' : 'Mostrar' }}
-            </button>
             <button @click="confirmDelete(doc)" class="btn btn-danger text-xs py-1.5 px-3">
               Eliminar
             </button>
@@ -172,7 +189,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import BackLink from '@/components/UI/BackLink.vue'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
@@ -204,14 +221,16 @@ interface Poliza {
 const props = defineProps<{
   poliza: Poliza
   documents: DocumentItem[]
+  checklist: Array<{ kind: string; label: string; presente: boolean }>
   kinds: Array<{ value: string; label: string }>
 }>()
+
+const completos = computed(() => props.checklist.filter((i) => i.presente).length)
 
 const uploadForm = useForm({
   kind: '',
   file: null as File | null,
   label: '',
-  visible_to_client: true,
 })
 
 const onFileSelect = (e: Event) => {
@@ -225,10 +244,6 @@ const submitUpload = () => {
     preserveScroll: true,
     onSuccess: () => uploadForm.reset(),
   })
-}
-
-const toggleVisibility = (doc: DocumentItem) => {
-  router.patch(`/policy-documents/documents/${doc.id}/visibility`, {}, { preserveScroll: true })
 }
 
 const docToDelete = ref<DocumentItem | null>(null)

@@ -59,7 +59,7 @@ class PolizasController extends Controller
         /** @var MobileAccount $account */
         $account = $request->user();
 
-        $poliza = Poliza::with('risk.customer.pas')->find($id);
+        $poliza = Poliza::with('risk.customer.pas')->withCount('documents')->find($id);
 
         if (! $poliza) {
             throw new ApiException('No encontramos esa póliza.', 'POLIZA_NOT_FOUND', 404);
@@ -95,16 +95,20 @@ class PolizasController extends Controller
             throw new ApiException('No tenés acceso a esa póliza.', 'POLIZA_FORBIDDEN', 403);
         }
 
-        $documentos = PolicyDocument::query()
-            ->where('poliza_id', $poliza->id)
-            ->where('visible_to_client', true)
-            ->orderBy('kind')
-            ->get()
-            ->map(fn (PolicyDocument $doc): array => [
-                'kind' => $doc->kind->value,
-                'url' => Storage::disk('r2')->temporaryUrl($doc->storage_path, now()->addMinutes(15)),
-                'captured_at' => $doc->captured_at?->toIso8601String(),
-            ])->all();
+        // Regla "todo lo de la vigente": se entregan TODOS los documentos de la póliza
+        // vigente; los de una póliza vencida (renovada) ya no se sirven al cliente — su
+        // documentación vive en la póliza que la renovó. Ver docs/v3 y ROADMAP.
+        $documentos = $poliza->estado === PolizaEstado::Vigente
+            ? PolicyDocument::query()
+                ->where('poliza_id', $poliza->id)
+                ->orderBy('kind')
+                ->get()
+                ->map(fn (PolicyDocument $doc): array => [
+                    'kind' => $doc->kind->value,
+                    'url' => Storage::disk('r2')->temporaryUrl($doc->storage_path, now()->addMinutes(15)),
+                    'captured_at' => $doc->captured_at?->toIso8601String(),
+                ])->all()
+            : [];
 
         return response()->json(['documentos' => $documentos]);
     }
@@ -117,6 +121,7 @@ class PolizasController extends Controller
         }
 
         $polizas = Poliza::with('risk')
+            ->withCount('documents')
             ->whereHas('risk', fn ($q) => $q->where('customer_id', $customer->id))
             ->where('estado', PolizaEstado::Vigente)
             ->get()
@@ -173,6 +178,8 @@ class PolizasController extends Controller
             'sum_asegurada' => $p->sum_asegurada,
             'cuota' => $p->cuota,
             'estado' => $p->estado->value,
+            // La app ofrece la descarga de documentación solo si hay algo que bajar.
+            'tiene_documentos' => ($p->documents_count ?? 0) > 0,
             'metadata' => $risk->metadata,
         ];
     }

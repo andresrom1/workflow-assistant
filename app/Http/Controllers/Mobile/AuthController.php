@@ -119,6 +119,10 @@ class AuthController extends Controller
     private function accountPayload(MobileAccount $account): array
     {
         return [
+            // `id` lo usa la app para suscribirse a su topic FCM `account-{id}` (avisos
+            // de documentación nueva). El push es data-only (solo dispara un refresco); el
+            // contenido sigue detrás de la API autenticada. Ver docs/v3/03.
+            'id' => $account->id,
             'name' => $account->name,
             'email' => $account->email,
             'avatar_url' => $account->avatar_url,

@@ -16,6 +16,8 @@
           </p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
+          <Link v-if="poliza.estado === 'vigente'" :href="`/polizas/${poliza.id}/renovar`"
+            class="btn btn-secondary text-sm">Renovar</Link>
           <Link :href="`/policy-documents/${poliza.id}`" class="btn btn-secondary text-sm">Gestionar documentos →</Link>
           <button @click="showDelete = true" class="btn btn-danger text-sm">Eliminar</button>
         </div>

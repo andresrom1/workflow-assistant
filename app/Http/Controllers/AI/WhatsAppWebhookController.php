@@ -70,8 +70,10 @@ class WhatsAppWebhookController extends Controller
             $extUserId = data_get($contact, 'user_id');
             $extUsername = data_get($contact, 'profile.username');
 
-            // Ignorar mensajes del mismo número emisor (evitar bucles).
-            if ($waId && $messageId && $waId !== $phoneNumberId) {
+            // Procesar si hay un identificador del usuario (teléfono o BSUID) y un message id.
+            // Desde abril 2026 el wa_id (teléfono) puede faltar, pero el user_id (BSUID) siempre llega.
+            // La comparación con phoneNumberId evita bucles con el propio número emisor.
+            if ($messageId && ($waId || $extUserId) && $waId !== $phoneNumberId) {
                 $messageType = data_get($message, 'type', 'text');
 
                 ProcessWhatsAppMessage::dispatch(

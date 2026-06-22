@@ -7,6 +7,7 @@ use App\Enums\RiskType;
 use App\Models\Customer;
 use App\Models\Poliza;
 use App\Models\Risk;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -55,6 +56,35 @@ class PolizaService
         $poliza->update($polizaData);
 
         return $poliza->refresh();
+    }
+
+    /**
+     * Renueva una póliza: abre una Poliza NUEVA sobre el MISMO Risk (número nuevo),
+     * con `contrato_anterior_ref` apuntando a la anterior, y marca la anterior como
+     * `vencida` — en una sola transacción. Preserva el constraint "una vigente por
+     * Risk" por construcción (la anterior deja de serlo antes de crear la nueva). La
+     * documentación de la nueva se carga aparte; el `SharedRisk` cuelga del Risk y
+     * sobrevive solo.
+     *
+     * @param  array<string, mixed>  $nuevaData  Payload de la póliza nueva (sin `estado`/`contrato_anterior_ref`).
+     */
+    public function renovar(Poliza $anterior, array $nuevaData): Poliza
+    {
+        if ($anterior->estado !== PolizaEstado::Vigente) {
+            throw ValidationException::withMessages([
+                'poliza' => 'Solo se puede renovar una póliza vigente.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($anterior, $nuevaData): Poliza {
+            $anterior->update(['estado' => PolizaEstado::Vencida]);
+
+            return $anterior->risk->polizas()->create([
+                ...$nuevaData,
+                'estado' => PolizaEstado::Vigente,
+                'contrato_anterior_ref' => $anterior->numero,
+            ]);
+        });
     }
 
     private function resolveExistingRisk(Customer $customer, int $riskId): Risk

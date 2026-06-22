@@ -33,6 +33,7 @@ class Poliza extends Model
         'quote_id',
         'estado',
         'numero',
+        'contrato_anterior_ref',
         'company',
         'company_id',
         'product_id',

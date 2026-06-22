@@ -75,6 +75,16 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('polizas', PolizaController::class)
         ->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
 
+    // Cola de vencimientos: pólizas vigentes que vencen pronto (señal para renovar).
+    Route::get('/polizas/vencimientos', [PolizaController::class, 'vencimientos'])
+        ->name('polizas.vencimientos');
+
+    // Renovación: abre una póliza NUEVA sobre el mismo Risk (back-ref a la anterior, que pasa a vencida).
+    Route::get('/polizas/{poliza}/renovar', [PolizaController::class, 'renovarForm'])
+        ->whereNumber('poliza')->name('polizas.renovar.form');
+    Route::post('/polizas/{poliza}/renovar', [PolizaController::class, 'renovar'])
+        ->whereNumber('poliza')->name('polizas.renovar');
+
     Route::resource('quotes', QuoteController::class)->only(['index', 'show']);
 
     Route::resource('coverage-documents', CoverageDocumentController::class)
@@ -88,8 +98,6 @@ Route::middleware(['auth'])->group(function () {
         ->whereNumber('poliza')->name('policy-documents.show');
     Route::post('/policy-documents/{poliza}/documents', [PolicyDocumentController::class, 'store'])
         ->whereNumber('poliza')->name('policy-documents.store');
-    Route::patch('/policy-documents/documents/{policyDocument}/visibility', [PolicyDocumentController::class, 'toggleVisibility'])
-        ->name('policy-documents.toggle-visibility');
     Route::delete('/policy-documents/documents/{policyDocument}', [PolicyDocumentController::class, 'destroy'])
         ->name('policy-documents.destroy');
 

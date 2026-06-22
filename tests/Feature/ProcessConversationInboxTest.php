@@ -12,6 +12,7 @@ uses(RefreshDatabase::class);
 
 beforeEach(function () {
     $this->waId = '5491112345678';
+    $this->bsuid = 'US.13491208655302741918';
     $this->phoneNumberId = '123456789';
 });
 
@@ -43,6 +44,41 @@ it('processes single message and dispatches outbound', function () {
 
     Bus::assertDispatched(SendWhatsAppMessage::class, function ($job) {
         return $job->queue === 'whatsapp-outbound';
+    });
+});
+
+it('dispatches outbound with the bsuid as recipient when there is no phone', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
+
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldReceive('handle')
+        ->once()
+        ->andReturn(['text' => 'Hola, ¿en qué te ayudo?', 'agent' => 'CustomerIdentifierAgent', 'execution_log_ids' => []]);
+
+    // Conversación solo-BSUID: external_conversation_id == ext_user_id == BSUID.
+    $conversation = Conversation::factory()->create([
+        'external_conversation_id' => $this->bsuid,
+        'ext_user_id' => $this->bsuid,
+    ]);
+
+    Message::create([
+        'conversation_id' => $conversation->id,
+        'direction' => 'inbound',
+        'content' => 'Hola',
+        'external_message_id' => 'wamid.bsuid001',
+        'sender_name' => 'Test User',
+        'sender_phone' => null,
+    ]);
+
+    // Sin teléfono fresco del webhook.
+    ProcessConversationInbox::dispatchSync($conversation->id, null, $this->phoneNumberId);
+
+    Bus::assertDispatched(SendWhatsAppMessage::class, function ($job) {
+        $ref = new ReflectionClass($job);
+        $phone = tap($ref->getProperty('phone'), fn ($p) => $p->setAccessible(true))->getValue($job);
+        $bsuid = tap($ref->getProperty('bsuid'), fn ($p) => $p->setAccessible(true))->getValue($job);
+
+        return $phone === null && $bsuid === $this->bsuid;
     });
 });
 

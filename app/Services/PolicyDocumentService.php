@@ -24,6 +24,10 @@ use Throwable;
  */
 class PolicyDocumentService
 {
+    public function __construct(
+        private readonly PolicyDocumentNotifier $notifier,
+    ) {}
+
     /**
      * @param  list<array{kind: string, filename?: string, mime?: string, contents: string}>  $documents
      */
@@ -57,7 +61,7 @@ class PolicyDocumentService
             throw new RuntimeException("No se pudo guardar el documento en R2 (póliza {$poliza->id}).");
         }
 
-        return PolicyDocument::create([
+        $document = PolicyDocument::create([
             'poliza_id' => $poliza->id,
             'kind' => $kind,
             'storage_path' => $path,
@@ -68,6 +72,19 @@ class PolicyDocumentService
             'visible_to_client' => $visibleToClient,
             'captured_at' => now(),
         ]);
+
+        // Best-effort: avisar al asegurado que hay documentación nueva (si la póliza está
+        // vigente y el titular tiene la app). Un fallo del aviso no debe romper la carga.
+        try {
+            $this->notifier->notifyNewDocument($poliza, $kind);
+        } catch (Throwable $e) {
+            Log::warning('PolicyDocumentService: no se pudo encolar el aviso de documento nuevo', [
+                'poliza_id' => $poliza->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $document;
     }
 
     /**

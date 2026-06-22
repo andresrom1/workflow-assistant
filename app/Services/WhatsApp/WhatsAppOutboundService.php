@@ -21,19 +21,20 @@ class WhatsAppOutboundService
     }
 
     /**
-     * Envía un mensaje de texto al número indicado.
+     * Envía un mensaje de texto al destinatario indicado (teléfono o BSUID).
      *
      * Solo válido dentro de la ventana de 24 horas posterior al último mensaje del usuario.
      *
-     * @param  string  $to  Número en formato E.164 SIN el "+" (ej: "5491112345678")
+     * @param  string|null  $phone  Número en formato E.164 SIN el "+" (ej: "5491112345678"), o null
+     * @param  string|null  $bsuid  Business-Scoped User ID, usado cuando no hay teléfono
      * @param  string  $phoneNumberId  ID del número emisor (no el E.164)
      */
-    public function sendMessage(string $to, string $text, string $phoneNumberId, ?int $conversationId = null, ?string $agentName = null, bool $audioEligible = false, ?string $aiProvider = null): array
+    public function sendMessage(?string $phone, ?string $bsuid, string $text, string $phoneNumberId, ?int $conversationId = null, ?string $agentName = null, bool $audioEligible = false, ?string $aiProvider = null): array
     {
         $response = $this->post($phoneNumberId, [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
-            'to' => $to,
+            ...$this->recipientPayload($phone, $bsuid),
             'type' => 'text',
             'text' => [
                 'preview_url' => false,
@@ -102,16 +103,17 @@ class WhatsAppOutboundService
      *
      * Uses the WhatsApp Cloud API typing indicator feature.
      *
-     * @param  string  $to  Recipient wa_id (E.164 without "+")
+     * @param  string|null  $phone  Recipient wa_id (E.164 without "+"), or null
+     * @param  string|null  $bsuid  Business-Scoped User ID, used when there is no phone
      * @param  string  $phoneNumberId  Sender phone number ID
      */
-    public function sendTypingIndicator(string $to, string $phoneNumberId): void
+    public function sendTypingIndicator(?string $phone, ?string $bsuid, string $phoneNumberId): void
     {
         try {
             $this->post($phoneNumberId, [
                 'messaging_product' => 'whatsapp',
                 'recipient_type' => 'individual',
-                'to' => $to,
+                ...$this->recipientPayload($phone, $bsuid),
                 'type' => 'reaction',
                 'reaction' => [
                     'message_id' => '',
@@ -160,16 +162,17 @@ class WhatsAppOutboundService
      * Returns the persisted outbound Message (nullable when no conversationId),
      * so the caller can attach a MessageAttachment without a secondary DB lookup.
      *
-     * @param  string  $to  Recipient wa_id (E.164 without "+")
+     * @param  string|null  $phone  Recipient wa_id (E.164 without "+"), or null
+     * @param  string|null  $bsuid  Business-Scoped User ID, used when there is no phone
      * @param  string  $mediaId  Meta media_id from uploadMedia()
      * @param  string  $phoneNumberId  Sender phone number ID
      */
-    public function sendAudioMessage(string $to, string $mediaId, string $phoneNumberId, ?int $conversationId = null, ?string $agentName = null, ?string $content = null, ?string $aiProvider = null): ?Message
+    public function sendAudioMessage(?string $phone, ?string $bsuid, string $mediaId, string $phoneNumberId, ?int $conversationId = null, ?string $agentName = null, ?string $content = null, ?string $aiProvider = null): ?Message
     {
         $response = $this->post($phoneNumberId, [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
-            'to' => $to,
+            ...$this->recipientPayload($phone, $bsuid),
             'type' => 'audio',
             'audio' => [
                 'id' => $mediaId,
@@ -191,6 +194,20 @@ class WhatsAppOutboundService
         }
 
         return null;
+    }
+
+    /**
+     * Decide el campo de destinatario del payload de Meta: `to` con el teléfono cuando está
+     * disponible, o `recipient` con el BSUID cuando no hay teléfono (doc §10). El teléfono tiene
+     * prioridad; el BSUID es la alternativa para usuarios sin número visible.
+     *
+     * @return array<string, string>
+     */
+    private function recipientPayload(?string $phone, ?string $bsuid): array
+    {
+        return ($phone !== null && $phone !== '')
+            ? ['to' => $phone]
+            : ['recipient' => (string) $bsuid];
     }
 
     private function post(string $phoneNumberId, array $payload): array
