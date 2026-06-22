@@ -15,6 +15,7 @@ uses(RefreshDatabase::class);
 
 beforeEach(function () {
     $this->waId = '5491112345678';
+    $this->bsuid = 'US.13491208655302741918';
     $this->phoneNumberId = '123456789';
     $this->text = 'Perfecto, ya tengo todos tus datos. ¿Hay algo más en lo que te pueda ayudar hoy con tu cotización?';
 });
@@ -29,7 +30,7 @@ it('always sends typing indicator before delivering any message', function () {
     $waService = $this->mock(WhatsAppOutboundService::class);
     $waService->shouldReceive('sendTypingIndicator')
         ->once()
-        ->with($this->waId, $this->phoneNumberId);
+        ->with($this->waId, $this->bsuid, $this->phoneNumberId);
     $waService->shouldReceive('sendMessage')
         ->once()
         ->andReturn(['messages' => [['id' => 'wamid.out001']]]);
@@ -39,7 +40,7 @@ it('always sends typing indicator before delivering any message', function () {
         ->once()
         ->andReturn(['modality' => Modality::Text, 'eligible' => false, 'reason' => 'hard_gate', 'ratio' => null, 'p' => null, 'window_size' => null]);
 
-    SendWhatsAppMessage::dispatchSync($this->waId, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent');
+    SendWhatsAppMessage::dispatchSync($this->waId, $this->bsuid, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent');
 });
 
 // ---------------------------------------------------------------------------
@@ -53,7 +54,7 @@ it('sends text and persists message with eligible flag', function () {
     $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendMessage')
         ->once()
-        ->with($this->waId, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent', true, config('ai.default'))
+        ->with($this->waId, $this->bsuid, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent', true, config('ai.default'))
         ->andReturn(['messages' => [['id' => 'wamid.out001']]]);
 
     $decider = $this->mock(MessageModalityDecider::class);
@@ -61,7 +62,7 @@ it('sends text and persists message with eligible flag', function () {
         'modality' => Modality::Text, 'eligible' => true, 'reason' => 'band_ceiling', 'ratio' => 0.40, 'p' => null, 'window_size' => 5,
     ]);
 
-    SendWhatsAppMessage::dispatchSync($this->waId, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent');
+    SendWhatsAppMessage::dispatchSync($this->waId, $this->bsuid, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent');
 });
 
 // ---------------------------------------------------------------------------
@@ -89,7 +90,7 @@ it('generates TTS, stores in R2, uploads to Meta and sends audio message', funct
 
     $waService->shouldReceive('sendAudioMessage')
         ->once()
-        ->with($this->waId, 'meta_media_id_abc', $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent', $this->text, config('ai.default'))
+        ->with($this->waId, $this->bsuid, 'meta_media_id_abc', $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent', $this->text, config('ai.default'))
         ->andReturn($outboundMessage);
 
     $tts = $this->mock(TextToSpeechService::class);
@@ -109,7 +110,7 @@ it('generates TTS, stores in R2, uploads to Meta and sends audio message', funct
         'modality' => Modality::Audio, 'eligible' => true, 'reason' => 'band_floor', 'ratio' => 0.20, 'p' => null, 'window_size' => 5,
     ]);
 
-    SendWhatsAppMessage::dispatchSync($this->waId, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent');
+    SendWhatsAppMessage::dispatchSync($this->waId, $this->bsuid, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent');
 
     $this->assertDatabaseHas('message_attachments', [
         'attachment_type' => 'audio',
@@ -142,7 +143,7 @@ it('falls back silently to text when TTS generation fails', function () {
     ]);
 
     // Should not throw — fallback is silent
-    SendWhatsAppMessage::dispatchSync($this->waId, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent');
+    SendWhatsAppMessage::dispatchSync($this->waId, $this->bsuid, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent');
 });
 
 // ---------------------------------------------------------------------------
@@ -163,7 +164,7 @@ it('does not retry on WhatsApp spam limit exception', function () {
         'modality' => Modality::Text, 'eligible' => false, 'reason' => 'hard_gate', 'ratio' => null, 'p' => null, 'window_size' => null,
     ]);
 
-    SendWhatsAppMessage::dispatchSync($this->waId, $this->text, $this->phoneNumberId, $conversation->id);
+    SendWhatsAppMessage::dispatchSync($this->waId, $this->bsuid, $this->text, $this->phoneNumberId, $conversation->id);
 });
 
 // ---------------------------------------------------------------------------
@@ -181,5 +182,5 @@ it('sends text without modality decision when conversation id is null', function
     $decider = $this->mock(MessageModalityDecider::class);
     $decider->shouldNotReceive('decide');
 
-    SendWhatsAppMessage::dispatchSync($this->waId, $this->text, $this->phoneNumberId);
+    SendWhatsAppMessage::dispatchSync($this->waId, $this->bsuid, $this->text, $this->phoneNumberId);
 });

@@ -52,11 +52,16 @@ class NotifyClientQuoteReady implements ShouldQueue
             return;
         }
 
-        $waId = $conversation->external_conversation_id;
+        // Destinatario: teléfono si la conversación lo tiene; si es solo-BSUID,
+        // external_conversation_id == ext_user_id (ambos el BSUID) → no hay teléfono.
+        $bsuid = $conversation->ext_user_id;
+        $phone = $conversation->external_conversation_id === $bsuid
+            ? null
+            : $conversation->external_conversation_id;
         $phoneNumberId = config('services.whatsapp.phone_number_id');
 
-        if (! $waId || ! $phoneNumberId) {
-            Log::error('NotifyClientQuoteReady: waId o phoneNumberId no disponibles', [
+        if ((! $phone && ! $bsuid) || ! $phoneNumberId) {
+            Log::error('NotifyClientQuoteReady: destinatario o phoneNumberId no disponibles', [
                 'conversation_id' => $this->conversationId,
             ]);
 
@@ -69,7 +74,7 @@ class NotifyClientQuoteReady implements ShouldQueue
 
         $reply = $orchestrator->handle($trigger, $conversation);
 
-        SendWhatsAppMessage::dispatch($waId, $reply['text'], $phoneNumberId, $this->conversationId, $reply['agent'])
+        SendWhatsAppMessage::dispatch($phone, $bsuid, $reply['text'], $phoneNumberId, $this->conversationId, $reply['agent'])
             ->onQueue('whatsapp-outbound');
     }
 

@@ -24,7 +24,7 @@ class ProcessWhatsAppMessage implements ShouldQueue
     public int $backoff = 30;
 
     public function __construct(
-        private readonly string $waId,
+        private readonly ?string $waId,
         private readonly string $messageBody,
         private readonly string $messageId,
         private readonly string $phoneNumberId,
@@ -70,12 +70,21 @@ class ProcessWhatsAppMessage implements ShouldQueue
             : null;
 
         if ($conversation instanceof Conversation) {
-            // Si el usuario migró de número, actualizar el teléfono de la conversación.
-            if ($conversation->external_conversation_id !== $this->waId) {
+            // Si el usuario migró de número, actualizar el teléfono de la conversación (solo si llegó uno).
+            if ($this->waId && $conversation->external_conversation_id !== $this->waId) {
                 $conversation->update(['external_conversation_id' => $this->waId]);
             }
         } else {
-            $conversation = $conversationRepo->findOrCreateByExternalId($this->waId, 'whatsapp');
+            // Clave de creación: el teléfono si llegó; si no, el BSUID (siempre presente desde abril 2026).
+            $externalId = $this->waId ?? $this->extUserId;
+
+            if (! $externalId) {
+                Log::warning('WhatsApp: mensaje sin wa_id ni user_id, se ignora', ['wamid' => $this->messageId]);
+
+                return;
+            }
+
+            $conversation = $conversationRepo->findOrCreateByExternalId($externalId, 'whatsapp');
         }
 
         // Guardar ext_user_id y ext_username si aún no están (sin sobreescribir valores existentes).

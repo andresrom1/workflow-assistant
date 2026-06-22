@@ -24,7 +24,7 @@ class ProcessConversationInbox implements ShouldQueue
 
     public function __construct(
         private readonly int $conversationId,
-        private readonly string $waId,
+        private readonly ?string $waId,
         private readonly string $phoneNumberId,
     ) {
         // Usa la conexión con retry_after extendido (200s) para tolerar llamadas largas al LLM.
@@ -74,7 +74,8 @@ class ProcessConversationInbox implements ShouldQueue
         AgentExecutionLog::whereIn('id', $reply['execution_log_ids'])
             ->update(['inbound_message_ids' => json_encode($inboundIds)]);
 
-        SendWhatsAppMessage::dispatch($this->waId, $reply['text'], $this->phoneNumberId, $this->conversationId, $reply['agent'], $lastLogId)
+        // Destinatario: el teléfono del webhook si llegó; si no, el BSUID de la conversación.
+        SendWhatsAppMessage::dispatch($this->waId, $conversation->ext_user_id, $reply['text'], $this->phoneNumberId, $this->conversationId, $reply['agent'], $lastLogId)
             ->onQueue('whatsapp-outbound');
 
         $contactName = $messages->first()?->sender_name;

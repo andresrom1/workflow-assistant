@@ -28,7 +28,8 @@ class SendWhatsAppMessage implements ShouldQueue
     public int $backoff = 10;
 
     public function __construct(
-        private readonly string $waId,
+        private readonly ?string $phone,
+        private readonly ?string $bsuid,
         private readonly string $text,
         private readonly string $phoneNumberId,
         private readonly ?int $conversationId = null,
@@ -43,7 +44,7 @@ class SendWhatsAppMessage implements ShouldQueue
         MediaStorageService $storage,
     ): void {
         // Always send typing indicator before any response.
-        $waService->sendTypingIndicator($this->waId, $this->phoneNumberId);
+        $waService->sendTypingIndicator($this->phone, $this->bsuid, $this->phoneNumberId);
 
         $conversation = $this->conversationId
             ? Conversation::find($this->conversationId)
@@ -54,7 +55,8 @@ class SendWhatsAppMessage implements ShouldQueue
             : ['modality' => Modality::Text, 'eligible' => false, 'reason' => 'no_conversation'];
 
         Log::info('WhatsApp: modality decision', [
-            'waId' => $this->waId,
+            'phone' => $this->phone,
+            'bsuid' => $this->bsuid,
             'conversationId' => $this->conversationId,
             'agentName' => $this->agentName,
             'modality' => $decision['modality']->value,
@@ -73,7 +75,8 @@ class SendWhatsAppMessage implements ShouldQueue
             }
         } catch (\Throwable $e) {
             Log::warning('WhatsApp: TTS/audio failed, falling back to text', [
-                'waId' => $this->waId,
+                'phone' => $this->phone,
+                'bsuid' => $this->bsuid,
                 'conversationId' => $this->conversationId,
                 'error' => $e->getMessage(),
             ]);
@@ -101,7 +104,8 @@ class SendWhatsAppMessage implements ShouldQueue
 
         // sendAudioMessage returns the persisted Message (or null) directly.
         $message = $waService->sendAudioMessage(
-            $this->waId,
+            $this->phone,
+            $this->bsuid,
             $mediaId,
             $this->phoneNumberId,
             $this->conversationId,
@@ -137,7 +141,8 @@ class SendWhatsAppMessage implements ShouldQueue
     {
         try {
             $waService->sendMessage(
-                $this->waId,
+                $this->phone,
+                $this->bsuid,
                 $this->text,
                 $this->phoneNumberId,
                 $this->conversationId,
@@ -189,7 +194,8 @@ class SendWhatsAppMessage implements ShouldQueue
     public function failed(\Throwable $exception): void
     {
         Log::error('WhatsApp: SendWhatsAppMessage falló definitivamente', [
-            'waId' => $this->waId,
+            'phone' => $this->phone,
+            'bsuid' => $this->bsuid,
             'conversationId' => $this->conversationId,
             'error' => $exception->getMessage(),
         ]);

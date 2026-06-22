@@ -26,7 +26,7 @@ class ProcessMediaAttachment implements ShouldQueue
     public function __construct(
         private readonly int $attachmentId,
         private readonly int $conversationId,
-        private readonly string $waId,
+        private readonly ?string $waId,
         private readonly string $phoneNumberId,
     ) {
         $this->onConnection('database_media');
