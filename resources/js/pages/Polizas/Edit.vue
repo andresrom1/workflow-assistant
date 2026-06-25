@@ -16,7 +16,7 @@
           </p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
-          <Link v-if="poliza.estado === 'vigente'" :href="`/polizas/${poliza.id}/renovar`"
+          <Link v-if="poliza.es_renovable" :href="`/polizas/${poliza.id}/renovar`"
             class="btn btn-secondary text-sm">Renovar</Link>
           <Link :href="`/policy-documents/${poliza.id}`" class="btn btn-secondary text-sm">Gestionar documentos →</Link>
           <button @click="showDelete = true" class="btn btn-danger text-sm">Eliminar</button>
@@ -33,6 +33,16 @@
         <Link :href="`/conversations/${vehicle.customer_id}`" class="text-xs font-semibold" style="color: var(--accent-600);">
           Ver cliente →
         </Link>
+      </div>
+
+      <!-- Marcada como no renovable -->
+      <div v-if="poliza.no_renovar_at"
+        class="rounded-[14px] p-4 mb-5 flex items-center justify-between gap-3"
+        style="background: var(--badge-danger-bg); border: 1px solid var(--border);">
+        <p class="text-sm font-medium" style="color: var(--badge-danger-txt);">
+          Marcada como no renovable — no figura en la cola de mantenimiento.
+        </p>
+        <button @click="reactivar" class="btn btn-secondary text-xs py-1.5 px-3 flex-shrink-0">Reactivar</button>
       </div>
 
       <!-- Form -->
@@ -90,6 +100,7 @@ interface Poliza {
   sum_asegurada: string | null; cuota: string | null
   cuota_due: string | null; vigencia: string | null; emitida_en: string | null
   estado: string
+  periodo_corto: boolean; no_renovar_at: string | null; es_renovable: boolean
 }
 
 const props = defineProps<{
@@ -109,6 +120,7 @@ const form = useForm({
   vigencia: props.poliza.vigencia ?? '',
   emitida_en: props.poliza.emitida_en ?? '',
   estado: props.poliza.estado,
+  periodo_corto: props.poliza.periodo_corto,
 })
 
 const submit = () => {
@@ -120,6 +132,10 @@ const showDelete = ref(false)
 const submitDelete = () => {
   showDelete.value = false
   router.delete(`/polizas/${props.poliza.id}`)
+}
+
+const reactivar = () => {
+  router.delete(`/polizas/${props.poliza.id}/descartar-renovacion`, { preserveScroll: true })
 }
 </script>
 

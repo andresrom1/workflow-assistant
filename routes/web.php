@@ -13,6 +13,8 @@ use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\ConversationController as CustomerConversationController;
 use App\Http\Controllers\CoverageDocumentController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\IngestaPendientesController;
+use App\Http\Controllers\MantenimientoCarteraController;
 use App\Http\Controllers\PolicyDocumentController;
 use App\Http\Controllers\PolizaController;
 use App\Http\Controllers\ProfileController;
@@ -85,6 +87,16 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/polizas/{poliza}/renovar', [PolizaController::class, 'renovar'])
         ->whereNumber('poliza')->name('polizas.renovar');
 
+    // Descarte honesto de renovación: la póliza sale de la cola sin anularse.
+    Route::post('/polizas/{poliza}/descartar-renovacion', [PolizaController::class, 'descartarRenovacion'])
+        ->whereNumber('poliza')->name('polizas.descartar-renovacion');
+    Route::delete('/polizas/{poliza}/descartar-renovacion', [PolizaController::class, 'reactivarRenovacion'])
+        ->whereNumber('poliza')->name('polizas.descartar-renovacion.undo');
+
+    // Centro de mantenimiento de cartera: cola fusionada (renovaciones + documentación).
+    Route::get('/mantenimiento-cartera', MantenimientoCarteraController::class)
+        ->name('mantenimiento-cartera');
+
     Route::resource('quotes', QuoteController::class)->only(['index', 'show']);
 
     Route::resource('coverage-documents', CoverageDocumentController::class)
@@ -92,6 +104,18 @@ Route::middleware(['auth'])->group(function () {
 
     // Documentos de póliza — carga manual post-emisión (renovaciones/endosos/correcciones).
     // El admin busca una póliza (index) y entra a su gestor de documentos (show).
+    // Panel de desviaciones: pólizas activas con documentación incompleta (vistazo diario).
+    Route::get('/documentacion-pendiente', [PolicyDocumentController::class, 'pendientes'])
+        ->name('documentacion-pendiente');
+
+    // Pendientes del ingestor local: revisar y confirmar las altas que subió el script.
+    Route::get('/ingesta-pendientes', [IngestaPendientesController::class, 'index'])
+        ->name('ingesta-pendientes.index');
+    Route::post('/ingesta-pendientes/{ingestedDocument}/confirmar', [IngestaPendientesController::class, 'confirm'])
+        ->whereNumber('ingestedDocument')->name('ingesta-pendientes.confirm');
+    Route::delete('/ingesta-pendientes/{ingestedDocument}', [IngestaPendientesController::class, 'discard'])
+        ->whereNumber('ingestedDocument')->name('ingesta-pendientes.discard');
+
     Route::get('/policy-documents', [PolicyDocumentController::class, 'index'])
         ->name('policy-documents.index');
     Route::get('/policy-documents/{poliza}', [PolicyDocumentController::class, 'show'])

@@ -60,19 +60,22 @@ class PolizaService
 
     /**
      * Renueva una póliza: abre una Poliza NUEVA sobre el MISMO Risk (número nuevo),
-     * con `contrato_anterior_ref` apuntando a la anterior, y marca la anterior como
+     * con `contrato_anterior_id` apuntando a la anterior, y marca la anterior como
      * `vencida` — en una sola transacción. Preserva el constraint "una vigente por
      * Risk" por construcción (la anterior deja de serlo antes de crear la nueva). La
-     * documentación de la nueva se carga aparte; el `SharedRisk` cuelga del Risk y
-     * sobrevive solo.
+     * anterior queda vencida + con sucesora → excluida de la cola. La documentación de
+     * la nueva se carga aparte; el `SharedRisk` cuelga del Risk y sobrevive solo.
      *
-     * @param  array<string, mixed>  $nuevaData  Payload de la póliza nueva (sin `estado`/`contrato_anterior_ref`).
+     * El guard es `esRenovable()` (estructural): permite renovar una vencida sin
+     * sucesora (caso escalado) y bloquea la doble renovación (ya tiene sucesora).
+     *
+     * @param  array<string, mixed>  $nuevaData  Payload de la póliza nueva (sin `estado`/`contrato_anterior_id`).
      */
     public function renovar(Poliza $anterior, array $nuevaData): Poliza
     {
-        if ($anterior->estado !== PolizaEstado::Vigente) {
+        if (! $anterior->esRenovable()) {
             throw ValidationException::withMessages([
-                'poliza' => 'Solo se puede renovar una póliza vigente.',
+                'poliza' => 'Esta póliza no se puede renovar (período corto, ya renovada o descartada).',
             ]);
         }
 
@@ -82,7 +85,7 @@ class PolizaService
             return $anterior->risk->polizas()->create([
                 ...$nuevaData,
                 'estado' => PolizaEstado::Vigente,
-                'contrato_anterior_ref' => $anterior->numero,
+                'contrato_anterior_id' => $anterior->id,
             ]);
         });
     }

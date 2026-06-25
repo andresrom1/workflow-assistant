@@ -58,6 +58,16 @@
       </Select>
       <p v-if="form.errors.estado" class="field-error-text">{{ form.errors.estado }}</p>
     </div>
+    <label class="sm:col-span-2 flex items-start gap-2 cursor-pointer select-none mt-1">
+      <input v-model="form.periodo_corto" type="checkbox"
+        class="mt-0.5 w-4 h-4 rounded" style="accent-color: var(--accent-600);" />
+      <span>
+        <span class="text-sm font-medium" style="color: var(--text-1);">Período corto (no se renueva)</span>
+        <span class="block text-xs" style="color: var(--text-3);">
+          Marca la excepción que no entra en la cola de renovación (p. ej. AP por días).
+        </span>
+      </span>
+    </label>
   </div>
 </template>
 
