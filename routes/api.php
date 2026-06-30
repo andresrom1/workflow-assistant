@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AI\WhatsAppWebhookController;
+use App\Http\Controllers\PolicyDocumentIngestaController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\TestingController;
 use App\Http\Controllers\ToolsController;
@@ -24,6 +25,13 @@ Route::post('/tools/test', function (Request $request) {
 });
 
 Route::post('v1/quotes/', [QuoteController::class, 'store']);
+
+// Ingesta local de documentos de póliza: el ingestor (repo `ingestor/`, Python sin
+// LLM) sube JSON (metadata) + PDF (file) por multipart. Token Sanctum del productor.
+// Idempotente por `archivo.hash_sha256`. Ver docs/v3/04-ingesta-local-documentos.md.
+Route::post('ingesta/documentos', [PolicyDocumentIngestaController::class, 'store'])
+    ->middleware('auth:sanctum')
+    ->name('ingesta.documentos');
 
 Route::prefix('web-chat/v1/tools')->group(function () {
     Route::post('/identify-customer', [ToolsController::class, 'identifyCustomer']);

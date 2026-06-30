@@ -99,6 +99,62 @@ it('el gestor expone el checklist de completitud (presentes vs faltantes)', func
             ->where('checklist.2.presente', false));
 });
 
+it('el gestor preselecciona el kind cuando se entra con ?kind=', function (): void {
+    $poliza = Poliza::factory()->create();
+
+    $this->actingAs($this->user)
+        ->get(route('policy-documents.show', [$poliza, 'kind' => PolicyDocumentKind::CirculationCard->value]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('PolicyDocuments/Show')
+            ->where('preselectKind', 'circulation-card'));
+
+    // Un kind inválido no preselecciona nada.
+    $this->actingAs($this->user)
+        ->get(route('policy-documents.show', [$poliza, 'kind' => 'inexistente']))
+        ->assertInertia(fn ($page) => $page->where('preselectKind', null));
+});
+
+it('el panel de pendientes lista vigentes y emitidas incompletas, excluye completas y vencidas', function (): void {
+    // Vigente incompleta (solo Póliza, faltan 2) → aparece.
+    $incompleta = Poliza::factory()->create(['estado' => PolizaEstado::Vigente, 'numero' => 'POL-INC']);
+    PolicyDocument::factory()->adminUpload()->create(['poliza_id' => $incompleta->id, 'kind' => PolicyDocumentKind::Poliza]);
+
+    // Emitida sin documentos → aparece.
+    Poliza::factory()->create(['estado' => PolizaEstado::Emitida, 'numero' => 'POL-EMI']);
+
+    // Vigente COMPLETA (los 3 esperados) → NO aparece.
+    $completa = Poliza::factory()->create(['estado' => PolizaEstado::Vigente, 'numero' => 'POL-OK']);
+    foreach ([PolicyDocumentKind::Poliza, PolicyDocumentKind::CirculationCard, PolicyDocumentKind::Certificado] as $k) {
+        PolicyDocument::factory()->adminUpload()->create(['poliza_id' => $completa->id, 'kind' => $k]);
+    }
+
+    // Vencida incompleta → fuera de alcance, NO aparece.
+    Poliza::factory()->create(['estado' => PolizaEstado::Vencida, 'numero' => 'POL-VEN']);
+
+    $this->actingAs($this->user)
+        ->get(route('documentacion-pendiente'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('PolicyDocuments/Pendientes')
+            ->where('polizas.total', 2)
+            ->has('polizas.data', 2));
+});
+
+it('el panel de pendientes pagina', function (): void {
+    // 3 vigentes sin documentos → todas pendientes.
+    Poliza::factory()->count(3)->create(['estado' => PolizaEstado::Vigente]);
+
+    $this->actingAs($this->user)
+        ->get(route('documentacion-pendiente', ['per_page' => 2]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('PolicyDocuments/Pendientes')
+            ->where('polizas.total', 3)
+            ->where('polizas.last_page', 2)
+            ->has('polizas.data', 2));
+});
+
 it('el index expone la completitud de documentación esperada', function (): void {
     $poliza = Poliza::factory()->create(['numero' => 'POL-CHK']);
     PolicyDocument::factory()->adminUpload()->create([

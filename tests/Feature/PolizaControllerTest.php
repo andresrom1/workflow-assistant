@@ -185,12 +185,39 @@ it('renueva una póliza: abre una nueva con back-ref y marca la anterior vencida
     $nueva = Poliza::where('numero', 'POL-2026')->firstOrFail();
     expect($nueva->risk_id)->toBe($risk->id)
         ->and($nueva->estado)->toBe(PolizaEstado::Vigente)
-        ->and($nueva->contrato_anterior_ref)->toBe('POL-2025')
+        ->and($nueva->contrato_anterior_id)->toBe($anterior->id)
         ->and($nueva->vigencia?->toDateString())->toBe('2027-04-30');
 });
 
-it('rechaza renovar una póliza que no está vigente', function (): void {
-    $anterior = Poliza::factory()->create(['estado' => PolizaEstado::Vencida]);
+it('renueva una vencida sin sucesora (caso escalado)', function (): void {
+    $anterior = Poliza::factory()->create(['estado' => PolizaEstado::Vencida, 'numero' => 'POL-VIEJA']);
+
+    $this->actingAs($this->user)
+        ->post(route('polizas.renovar', $anterior), ['numero' => 'POL-RENOV'])
+        ->assertRedirect();
+
+    $nueva = Poliza::where('numero', 'POL-RENOV')->firstOrFail();
+    expect($nueva->contrato_anterior_id)->toBe($anterior->id)
+        ->and($nueva->estado)->toBe(PolizaEstado::Vigente);
+});
+
+it('rechaza renovar una póliza que ya tiene sucesora (doble renovación)', function (): void {
+    $anterior = Poliza::factory()->create(['estado' => PolizaEstado::Vencida, 'numero' => 'POL-YA']);
+    Poliza::factory()->create([
+        'risk_id' => $anterior->risk_id,
+        'estado' => PolizaEstado::Vigente,
+        'contrato_anterior_id' => $anterior->id,
+    ]);
+
+    $this->actingAs($this->user)
+        ->post(route('polizas.renovar', $anterior), ['numero' => 'POL-NUEVA'])
+        ->assertSessionHasErrors('poliza');
+
+    expect(Poliza::where('numero', 'POL-NUEVA')->exists())->toBeFalse();
+});
+
+it('rechaza renovar una póliza de período corto', function (): void {
+    $anterior = Poliza::factory()->create(['estado' => PolizaEstado::Vigente, 'periodo_corto' => true]);
 
     $this->actingAs($this->user)
         ->post(route('polizas.renovar', $anterior), ['numero' => 'POL-NUEVA'])
@@ -225,6 +252,29 @@ it('elimina una póliza con soft-delete', function (): void {
 
     expect(Poliza::count())->toBe(0)
         ->and(Poliza::withTrashed()->count())->toBe(1);
+});
+
+it('descartar renovación setea no_renovar_at y la saca de la cola; reactivar la devuelve', function (): void {
+    $poliza = Poliza::factory()->create([
+        'estado' => PolizaEstado::Vigente,
+        'vigencia' => now()->addDays(10),
+    ]);
+
+    expect(Poliza::aRenovar()->whereKey($poliza->id)->exists())->toBeTrue();
+
+    $this->actingAs($this->user)
+        ->post(route('polizas.descartar-renovacion', $poliza))
+        ->assertRedirect();
+
+    expect($poliza->refresh()->no_renovar_at)->not->toBeNull()
+        ->and(Poliza::aRenovar()->whereKey($poliza->id)->exists())->toBeFalse();
+
+    $this->actingAs($this->user)
+        ->delete(route('polizas.descartar-renovacion.undo', $poliza))
+        ->assertRedirect();
+
+    expect($poliza->refresh()->no_renovar_at)->toBeNull()
+        ->and(Poliza::aRenovar()->whereKey($poliza->id)->exists())->toBeTrue();
 });
 
 it('valida que el estado sea requerido al crear', function (): void {

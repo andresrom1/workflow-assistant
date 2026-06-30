@@ -223,12 +223,13 @@ const props = defineProps<{
   documents: DocumentItem[]
   checklist: Array<{ kind: string; label: string; presente: boolean }>
   kinds: Array<{ value: string; label: string }>
+  preselectKind: string | null
 }>()
 
 const completos = computed(() => props.checklist.filter((i) => i.presente).length)
 
 const uploadForm = useForm({
-  kind: '',
+  kind: props.preselectKind ?? '',
   file: null as File | null,
   label: '',
 })

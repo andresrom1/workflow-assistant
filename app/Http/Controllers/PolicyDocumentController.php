@@ -81,9 +81,59 @@ class PolicyDocumentController extends Controller
         ]);
     }
 
-    public function show(Poliza $poliza): Response
+    /**
+     * Panel de desviaciones: pólizas activas (vigentes + emitidas) a las que les falta
+     * al menos un documento esperado, con el detalle de qué falta. Herramienta de
+     * vistazo diario. Excluye las vencidas (de esas no se chasea documentación). El
+     * checklist esperado vive en {@see PolicyDocumentKind::expectedForActivePolicy()}.
+     */
+    public function pendientes(Request $request): Response
+    {
+        $perPage = (int) $request->input('per_page', 25);
+        $expected = PolicyDocumentKind::expectedForActivePolicy();
+
+        $polizas = Poliza::query()
+            ->with(['risk.customer', 'documents:id,poliza_id,kind'])
+            ->documentacionIncompleta()
+            ->orderByDesc('updated_at')
+            ->paginate($perPage)
+            ->withQueryString()
+            ->through(function (Poliza $poliza) use ($expected): array {
+                $present = $poliza->documents->map(fn (PolicyDocument $d): PolicyDocumentKind => $d->kind)->unique();
+                $faltantes = array_values(array_filter(
+                    $expected,
+                    fn (PolicyDocumentKind $k): bool => ! $present->contains($k),
+                ));
+
+                return [
+                    'id' => $poliza->id,
+                    'numero' => $poliza->numero,
+                    'company' => $poliza->company,
+                    'estado' => $poliza->estado->value,
+                    'patente' => $poliza->risk->metadata['patente'] ?? null,
+                    'label' => $poliza->risk->label,
+                    'cliente' => $poliza->risk->customer?->name,
+                    'presentes' => count($expected) - count($faltantes),
+                    'esperados' => count($expected),
+                    'faltantes' => array_map(
+                        fn (PolicyDocumentKind $k): array => ['kind' => $k->value, 'label' => $k->label()],
+                        $faltantes,
+                    ),
+                ];
+            });
+
+        return Inertia::render('PolicyDocuments/Pendientes', [
+            'polizas' => $polizas,
+            'filters' => ['per_page' => $perPage],
+        ]);
+    }
+
+    public function show(Request $request, Poliza $poliza): Response
     {
         $poliza->load('risk.customer');
+
+        // Preselección del tipo cuando se entra desde un ítem faltante del checklist.
+        $preselectKind = PolicyDocumentKind::tryFrom((string) $request->input('kind'))?->value;
 
         $docs = $poliza->documents()
             ->orderByDesc('captured_at')
@@ -132,6 +182,7 @@ class PolicyDocumentController extends Controller
             'kinds' => collect(PolicyDocumentKind::cases())
                 ->map(fn (PolicyDocumentKind $k): array => ['value' => $k->value, 'label' => $k->label()])
                 ->all(),
+            'preselectKind' => $preselectKind,
         ]);
     }
 

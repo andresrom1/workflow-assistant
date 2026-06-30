@@ -190,6 +190,9 @@ class PolizaController extends Controller
                 'vigencia' => $poliza->vigencia?->toDateString(),
                 'emitida_en' => $poliza->emitida_en?->toDateString(),
                 'estado' => $poliza->estado->value,
+                'periodo_corto' => $poliza->periodo_corto,
+                'no_renovar_at' => $poliza->no_renovar_at?->toIso8601String(),
+                'es_renovable' => $poliza->esRenovable(),
             ],
             'vehicle' => [
                 'label' => $poliza->risk->label,
@@ -260,6 +263,25 @@ class PolizaController extends Controller
     }
 
     /**
+     * Descarte honesto: la póliza sale de la cola de renovación sin anularse (queda
+     * vencida cuando llegue su término, pero no figura como pendiente). Derivado —
+     * setear `no_renovar_at` la excluye de `scopeARenovar()`.
+     */
+    public function descartarRenovacion(Poliza $poliza): RedirectResponse
+    {
+        $poliza->update(['no_renovar_at' => now()]);
+
+        return back()->with('flash', ['success' => 'Póliza marcada como no renovable.']);
+    }
+
+    public function reactivarRenovacion(Poliza $poliza): RedirectResponse
+    {
+        $poliza->update(['no_renovar_at' => null]);
+
+        return back()->with('flash', ['success' => 'Renovación reactivada.']);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function polizaRules(): array
@@ -274,6 +296,7 @@ class PolizaController extends Controller
             'cuota_due' => 'nullable|date',
             'vigencia' => 'nullable|date',
             'emitida_en' => 'nullable|date',
+            'periodo_corto' => 'boolean',
             'estado' => ['required', Rule::enum(PolizaEstado::class)],
         ];
     }
@@ -296,6 +319,7 @@ class PolizaController extends Controller
             'cuota_due' => $validated['cuota_due'] ?? null,
             'vigencia' => $validated['vigencia'] ?? null,
             'emitida_en' => $validated['emitida_en'] ?? null,
+            'periodo_corto' => $validated['periodo_corto'] ?? false,
         ];
     }
 
