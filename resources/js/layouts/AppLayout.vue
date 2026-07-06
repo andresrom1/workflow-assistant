@@ -148,9 +148,29 @@
               </svg>
             </template>
           </NavItem>
+
+          <NavItem :open="open" href="/reporte-cartera" :active="isActive('/reporte-cartera')" label="Reporte de cartera">
+            <template #icon>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
+              </svg>
+            </template>
+          </NavItem>
         </NavGroup>
 
         <NavGroup v-if="auth?.user?.role === 'admin'" :label="open ? 'Administración' : ''" :open="open">
+          <NavItem :open="open" href="/admin/facturacion" :active="isActive('/admin/facturacion')" label="Facturación">
+            <template #icon>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25
+                  2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m-6 0V6a3 3 0 1 1 6
+                  0v2.25m-6 0h6m-6 3.75h6m-6 3.75h3" />
+              </svg>
+            </template>
+          </NavItem>
+
           <NavItem :open="open" href="/coverage-documents" :active="isActive('/coverage-documents')" label="Documentacion">
             <template #icon>
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

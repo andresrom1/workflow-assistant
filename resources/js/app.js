@@ -7,8 +7,9 @@ import AppLayout from './layouts/AppLayout.vue';
  * Páginas que NO usan AppLayout (experiencias standalone sin navegación).
  * - Checkout/: flujo mobile-only de inspección fotográfica
  * - Auth/:     login/register (cuando se implemente)
+ * - Landing/:  landing pública de marca
  */
-const LAYOUT_EXCLUDED = ['Checkout/', 'Auth/'];
+const LAYOUT_EXCLUDED = ['Checkout/', 'Auth/', 'Landing/'];
 
 createInertiaApp({
     resolve: name => {

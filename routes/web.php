@@ -5,6 +5,8 @@ use App\Http\Controllers\Admin\AgentPromptController;
 use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Admin\CheckoutAuditController;
 use App\Http\Controllers\Admin\ConversationController;
+use App\Http\Controllers\Admin\FacturacionConfigController;
+use App\Http\Controllers\Admin\InvoiceBatchController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\StudioController;
 use App\Http\Controllers\Admin\UserController;
@@ -16,16 +18,25 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\IngestaPendientesController;
 use App\Http\Controllers\MantenimientoCarteraController;
 use App\Http\Controllers\PolicyDocumentController;
+use App\Http\Controllers\PolicyReportImportController;
 use App\Http\Controllers\PolizaController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\TrackingController;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
 // ─── Público ─────────────────────────────────────────────────────────────────
 Route::get('/', function () {
-    return view('welcome');
-});
+    $publicNumber = config('whatsapp.public_number');
+
+    return Inertia::render('Landing/Index', [
+        'waQuoteUrl' => $publicNumber
+            ? 'https://wa.me/'.$publicNumber.'?text='.rawurlencode('Hola, quiero cotizar el seguro de mi auto.')
+            : null,
+        'appDownloadUrl' => config('whatsapp.app_download_url'),
+    ]);
+})->name('landing');
 
 Route::get('/privacy', function () {
     return view('privacy');
@@ -111,10 +122,29 @@ Route::middleware(['auth'])->group(function () {
     // Pendientes del ingestor local: revisar y confirmar las altas que subió el script.
     Route::get('/ingesta-pendientes', [IngestaPendientesController::class, 'index'])
         ->name('ingesta-pendientes.index');
+    // Lookup del titular por clave de identidad: dice si el cliente ya existe o es nuevo.
+    Route::get('/ingesta-pendientes/buscar-cliente', [IngestaPendientesController::class, 'buscarCliente'])
+        ->name('ingesta-pendientes.buscar-cliente');
+    // Confirmar/descartar el contrato completo (unidad de trabajo del admin).
+    Route::post('/ingesta-pendientes/confirmar-contrato', [IngestaPendientesController::class, 'confirmContrato'])
+        ->name('ingesta-pendientes.confirmar-contrato');
+    Route::post('/ingesta-pendientes/descartar-contrato', [IngestaPendientesController::class, 'discardContrato'])
+        ->name('ingesta-pendientes.descartar-contrato');
     Route::post('/ingesta-pendientes/{ingestedDocument}/confirmar', [IngestaPendientesController::class, 'confirm'])
         ->whereNumber('ingestedDocument')->name('ingesta-pendientes.confirm');
+    // Descarte de un doc suelto (sacar basura de un contrato bueno).
     Route::delete('/ingesta-pendientes/{ingestedDocument}', [IngestaPendientesController::class, 'discard'])
         ->whereNumber('ingestedDocument')->name('ingesta-pendientes.discard');
+
+    // Import de reportes de cartera (snapshot de pólizas) subidos al panel: revisión por lote.
+    Route::get('/reporte-cartera', [PolicyReportImportController::class, 'index'])
+        ->name('reporte-cartera.index');
+    Route::post('/reporte-cartera', [PolicyReportImportController::class, 'store'])
+        ->name('reporte-cartera.store');
+    Route::post('/reporte-cartera/{policyReportBatch}/confirmar', [PolicyReportImportController::class, 'confirm'])
+        ->whereNumber('policyReportBatch')->name('reporte-cartera.confirm');
+    Route::delete('/reporte-cartera/{policyReportBatch}', [PolicyReportImportController::class, 'discard'])
+        ->whereNumber('policyReportBatch')->name('reporte-cartera.discard');
 
     Route::get('/policy-documents', [PolicyDocumentController::class, 'index'])
         ->name('policy-documents.index');
@@ -190,6 +220,26 @@ Route::middleware(['auth'])->group(function () {
             ->name('studio.show');
         Route::post('/studio/reevaluate', [StudioController::class, 'reevaluate'])
             ->name('studio.reevaluate');
+
+        // Facturación de comisiones (Facturas C contra AFIP).
+        Route::get('/facturacion', [InvoiceBatchController::class, 'index'])
+            ->name('facturacion.index');
+        Route::post('/facturacion', [InvoiceBatchController::class, 'store'])
+            ->name('facturacion.store');
+        Route::get('/facturacion/batches/{invoiceBatch}/download', [InvoiceBatchController::class, 'download'])
+            ->whereNumber('invoiceBatch')->name('facturacion.download');
+
+        // Configuración: datos del emisor + ABM de compañías facturables.
+        Route::get('/facturacion/configuracion', [FacturacionConfigController::class, 'edit'])
+            ->name('facturacion.configuracion');
+        Route::put('/facturacion/emisor', [FacturacionConfigController::class, 'updateEmisor'])
+            ->name('facturacion.emisor.update');
+        Route::post('/facturacion/companies', [FacturacionConfigController::class, 'storeCompany'])
+            ->name('facturacion.companies.store');
+        Route::put('/facturacion/companies/{company}', [FacturacionConfigController::class, 'updateCompany'])
+            ->whereNumber('company')->name('facturacion.companies.update');
+        Route::delete('/facturacion/companies/{company}', [FacturacionConfigController::class, 'destroyCompany'])
+            ->whereNumber('company')->name('facturacion.companies.destroy');
 
         // Gestión de usuarios
         Route::get('/users/create', [UserController::class, 'create'])->name('users.create');

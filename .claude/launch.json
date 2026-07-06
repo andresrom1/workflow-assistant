@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "workflow-assistant",
+      "runtimeExecutable": "php",
+      "runtimeArgs": ["artisan", "serve", "--port=8095"],
+      "port": 8095,
+      "autoPort": false,
+      "env": {
+        "PHP_CLI_SERVER_WORKERS": "8"
+      }
+    }
+  ]
+}

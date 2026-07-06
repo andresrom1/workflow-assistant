@@ -3,16 +3,16 @@
 namespace App\Services;
 
 use App\Enums\IngestaStatus;
+use App\Enums\PolicyDocumentKind;
 use App\Enums\PolicyDocumentSource;
 use App\Enums\PolizaEstado;
-use App\Enums\RiskType;
 use App\Models\Customer;
 use App\Models\IngestedDocument;
 use App\Models\PolicyDocument;
 use App\Models\Poliza;
 use App\Models\Risk;
-use App\Repositories\CustomerRepository;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -31,8 +31,7 @@ use Illuminate\Validation\ValidationException;
 class IngestaConfirmacionService
 {
     public function __construct(
-        private readonly CustomerRepository $customers,
-        private readonly CustomerMergeService $merge,
+        private readonly PolicyChainResolver $chain,
     ) {}
 
     /**
@@ -66,6 +65,44 @@ class IngestaConfirmacionService
     }
 
     /**
+     * Confirma un contrato completo: resuelve la póliza UNA sola vez y adjunta todos los
+     * documentos del grupo (cada uno preserva su `kind`). La unidad de trabajo del admin es
+     * el contrato, no el documento suelto.
+     *
+     * @param  list<int>  $docIds
+     * @param  array<string, mixed>  $overrides  campos clave corregidos por el admin
+     */
+    public function confirmContrato(array $docIds, array $overrides = []): Poliza
+    {
+        $docs = IngestedDocument::whereIn('id', $docIds)->get();
+
+        if ($docs->isEmpty()) {
+            throw ValidationException::withMessages(['ids' => 'No hay documentos para confirmar.']);
+        }
+
+        if ($docs->contains(fn (IngestedDocument $d): bool => $d->status !== IngestaStatus::Pendiente)) {
+            throw ValidationException::withMessages(['status' => 'Alguno de los documentos ya fue resuelto.']);
+        }
+
+        $principal = $this->pickPrincipal($docs);
+
+        return DB::transaction(function () use ($docs, $principal, $overrides): Poliza {
+            $poliza = $this->resolvePoliza($principal, $overrides);
+
+            foreach ($docs as $doc) {
+                $document = $this->attachDocument($poliza, $doc);
+                $doc->update([
+                    'status' => IngestaStatus::Confirmado,
+                    'poliza_id' => $poliza->id,
+                    'policy_document_id' => $document->id,
+                ]);
+            }
+
+            return $poliza;
+        });
+    }
+
+    /**
      * Descarta un documento estacionado sin materializar nada (el PDF queda en R2 para
      * auditoría; un job de limpieza puede recogerlo luego si se decide).
      */
@@ -80,6 +117,33 @@ class IngestaConfirmacionService
         $doc->update(['status' => IngestaStatus::Descartado]);
 
         return $doc->refresh();
+    }
+
+    /**
+     * Descarta un contrato completo (todos sus documentos) en una sola transacción.
+     *
+     * @param  list<int>  $docIds
+     */
+    public function discardContrato(array $docIds): void
+    {
+        DB::transaction(function () use ($docIds): void {
+            IngestedDocument::whereIn('id', $docIds)
+                ->where('status', IngestaStatus::Pendiente)
+                ->update(['status' => IngestaStatus::Descartado]);
+        });
+    }
+
+    /**
+     * Documento que aporta la identidad del contrato: preferentemente la póliza con número;
+     * si no, el primero con número; si ninguno, el primero del grupo.
+     *
+     * @param  Collection<int, IngestedDocument>  $docs
+     */
+    private function pickPrincipal($docs): IngestedDocument
+    {
+        return $docs->first(fn (IngestedDocument $d): bool => $d->kind === PolicyDocumentKind::Poliza && $d->numero_poliza !== null)
+            ?? $docs->first(fn (IngestedDocument $d): bool => $d->numero_poliza !== null)
+            ?? $docs->first();
     }
 
     /**
@@ -157,10 +221,10 @@ class IngestaConfirmacionService
             'company' => $company,
             'contrato_anterior_id' => $contratoAnteriorId,
             'emitida_en' => $this->dateOrNull(data_get($doc->payload, 'fechas.emision')),
-            'vigencia' => $this->dateOrNull(data_get($doc->payload, 'fechas.vigencia_hasta')),
+            'vigencia' => $this->dateOrNull($this->pick($overrides, 'vigencia_hasta', data_get($doc->payload, 'fechas.vigencia_hasta'))),
             'metadata' => array_filter([
                 'origen' => 'ingesta_local',
-                'vigencia_desde' => data_get($doc->payload, 'fechas.vigencia_desde'),
+                'vigencia_desde' => $this->pick($overrides, 'vigencia_desde', data_get($doc->payload, 'fechas.vigencia_desde')),
             ], fn ($v): bool => $v !== null),
         ]);
     }
@@ -192,53 +256,22 @@ class IngestaConfirmacionService
             ]);
         }
 
-        $existing = $this->customers->findByDni($dni);
-        if ($existing instanceof Customer) {
-            return $existing;
-        }
+        $documentType = $this->pick($overrides, 'document_type', strtolower((string) data_get($doc->payload, 'tomador.documento_tipo')));
+        $personType = $this->pick($overrides, 'person_type', data_get($doc->payload, 'tomador.tipo_persona'));
 
-        $firstName = $this->pick($overrides, 'first_name', data_get($doc->payload, 'tomador.first_name'));
-        $lastName = $this->pick($overrides, 'last_name', data_get($doc->payload, 'tomador.last_name'));
-        $razonSocial = data_get($doc->payload, 'tomador.razon_social');
-        $name = $razonSocial ?: trim((string) $firstName.' '.(string) $lastName);
-
-        $customer = $this->customers->create(array_filter([
-            'dni' => $dni,
-            'first_name' => $firstName,
-            'last_name' => $lastName,
-            'name' => $name !== '' ? $name : null,
-        ], fn ($v): bool => $v !== null && $v !== ''));
-
-        // Alta SIEMPRE vía dedup: colapsa cualquier fila que ya posea este DNI (no-op si
-        // recién lo creamos, load-bearing si convergen claves fuertes a futuro).
-        return $this->merge->reconcile($customer, ['dni' => $dni]);
+        return $this->chain->resolveCustomer($dni, [
+            'first_name' => $this->pick($overrides, 'first_name', data_get($doc->payload, 'tomador.first_name')),
+            'last_name' => $this->pick($overrides, 'last_name', data_get($doc->payload, 'tomador.last_name')),
+            'razon_social' => data_get($doc->payload, 'tomador.razon_social'),
+        ], $documentType, $personType);
     }
 
     private function resolveRisk(Customer $customer, ?string $patente, IngestedDocument $doc): Risk
     {
-        $patente = $patente !== null ? trim($patente) : '';
-
-        if ($patente !== '') {
-            $risk = $customer->risks()->where('metadata->patente', $patente)->first();
-            if ($risk instanceof Risk) {
-                return $risk;
-            }
-        }
-
         /** @var array<string, mixed> $riesgo */
         $riesgo = (array) data_get($doc->payload, 'riesgo', []);
-        $marca = trim((string) ($riesgo['marca'] ?? ''));
-        $modelo = trim((string) ($riesgo['modelo'] ?? ''));
-        $label = trim("{$marca} {$modelo}").($patente !== '' ? " ({$patente})" : '');
 
-        return $customer->risks()->create([
-            'type' => RiskType::Vehicle,
-            'label' => $label !== '' ? $label : 'Vehículo',
-            'metadata' => array_filter(
-                ['patente' => $patente !== '' ? $patente : null] + $riesgo,
-                fn ($v): bool => $v !== null && $v !== '' && $v !== 'vehicle',
-            ),
-        ]);
+        return $this->chain->resolveRisk($customer, (string) $patente, $riesgo);
     }
 
     private function polizaByPatente(?string $patente): ?Poliza
@@ -256,8 +289,13 @@ class IngestaConfirmacionService
     }
 
     /**
-     * Estado inicial: el que elige el admin, o inferido de las fechas (vigente si la
-     * vigencia no pasó, vencida si pasó, emitida si no hay fecha).
+     * Estado inicial: el que elige el admin, o inferido de las fechas. Comparación por
+     * FECHA (no instante), así el día del vencimiento la póliza sigue vigente:
+     *
+     * - sin `vigencia_hasta`      → Emitida (fecha de fin desconocida)
+     * - `vigencia_desde` futura   → Emitida (emitida pero aún no rige)
+     * - `vigencia_hasta` < hoy    → Vencida
+     * - si no                     → Vigente
      *
      * @param  array<string, mixed>  $overrides
      */
@@ -268,12 +306,17 @@ class IngestaConfirmacionService
             return PolizaEstado::from($override);
         }
 
-        $vigencia = $this->dateOrNull(data_get($doc->payload, 'fechas.vigencia_hasta'));
-        if (! $vigencia instanceof Carbon) {
+        $hasta = $this->dateOrNull($this->pick($overrides, 'vigencia_hasta', data_get($doc->payload, 'fechas.vigencia_hasta')));
+        if (! $hasta instanceof Carbon) {
             return PolizaEstado::Emitida;
         }
 
-        return $vigencia->isFuture() ? PolizaEstado::Vigente : PolizaEstado::Vencida;
+        $desde = $this->dateOrNull($this->pick($overrides, 'vigencia_desde', data_get($doc->payload, 'fechas.vigencia_desde')));
+        if ($desde instanceof Carbon && $desde->startOfDay()->greaterThan(Carbon::today())) {
+            return PolizaEstado::Emitida;
+        }
+
+        return $hasta->startOfDay()->lessThan(Carbon::today()) ? PolizaEstado::Vencida : PolizaEstado::Vigente;
     }
 
     private function assertNoOtherVigente(int $riskId, PolizaEstado $estado): void

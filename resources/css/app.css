@@ -238,6 +238,22 @@ body {
   .field-error { border-color: #dc2626 !important; }
   .field-error:focus { box-shadow: 0 0 0 3px rgba(220,38,38,.2) !important; }
 
+  .field[type="file"] {
+    @apply py-1.5 cursor-pointer text-sm;
+    color: var(--text-3);
+  }
+  .field[type="file"]::file-selector-button {
+    @apply mr-3 px-3 py-1 text-xs font-semibold rounded-[8px] cursor-pointer transition-colors;
+    background: var(--bg-subtle);
+    color: var(--text-2);
+    border: 1px solid var(--border);
+  }
+  .field[type="file"]::file-selector-button:hover {
+    background: var(--accent-100);
+    color: var(--accent-600);
+    border-color: var(--accent-600);
+  }
+
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 font-medium
            rounded-[10px] transition-all cursor-pointer outline-none select-none;

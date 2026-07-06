@@ -6,6 +6,7 @@ namespace App\Repositories;
 
 use App\Models\Customer;
 use App\Models\Vehicle;
+use App\Support\DocumentoIdentidad;
 use App\Traits\ConditionalLogger;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -20,6 +21,15 @@ class CustomerRepository
         Log::info(__METHOD__.' Buscando customer por DNI', ['dni' => $dni]);
 
         return Customer::where('dni', $dni)->first();
+    }
+
+    /**
+     * Busca por la clave de identidad canónica (DNI para físicas, CUIT para jurídicas). Colapsa
+     * las distintas formas del mismo documento; ver {@see DocumentoIdentidad}.
+     */
+    public function findByDocumentoKey(string $documentoKey): ?Customer
+    {
+        return Customer::where('documento_key', $documentoKey)->first();
     }
 
     public function findByEmail(string $email): ?Customer

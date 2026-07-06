@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\DocumentoIdentidad;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $first_name
  * @property string|null $last_name
  * @property string|null $dni
+ * @property string|null $documento_key
  * @property string|null $document_type_id
  * @property string|null $person_type_id
  * @property string|null $email
@@ -41,6 +43,7 @@ class Customer extends Model
     protected $fillable = [
         'pas_id',
         'dni',
+        'documento_key',
         'document_type_id',
         'person_type_id',
         'email',
@@ -69,6 +72,27 @@ class Customer extends Model
             'completed_at' => 'datetime',
             'birthdate' => 'date',
         ];
+    }
+
+    /**
+     * Mantiene la identidad canónica coherente en TODO alta/edición (checkout, chat, ingesta):
+     * normaliza `dni` a solo-dígitos y recalcula `documento_key` desde el documento + su tipo.
+     * Única fuente de verdad de la clave de dedup ({@see DocumentoIdentidad}).
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Customer $customer): void {
+            if ($customer->dni === null || $customer->dni === '') {
+                return;
+            }
+
+            $customer->dni = DocumentoIdentidad::normalizar($customer->dni) ?? $customer->dni;
+            $customer->documento_key = DocumentoIdentidad::clave(
+                $customer->dni,
+                $customer->document_type_id,
+                $customer->person_type_id,
+            );
+        });
     }
 
     /** @return HasMany<Vehicle, $this> */

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Customer;
 use App\Repositories\CustomerRepository;
+use App\Support\DocumentoIdentidad;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -39,13 +40,14 @@ class CustomerMergeService
      * identificadores **fuertes** declarados (DNI/email). Maneja el caso de que el DNI esté
      * en una fila y el email en otra: fusiona ambas. Devuelve el survivor canónico.
      *
-     * Reconcilia SOLO por claves únicas (dni, email): un match garantiza, por construcción,
-     * la misma identidad. El teléfono NO es único (un número puede quedar reasignado a otra
-     * persona) y queda deliberadamente fuera para no fusionar dos personas distintas. En el
-     * checkout dni y email son obligatorios, así que ya cubren todo duplicado real de la
-     * misma persona. Ver docs/v2/12 §5.
+     * Reconcilia SOLO por claves fuertes (documento_key, dni, email): un match garantiza, por
+     * construcción, la misma identidad. `documento_key` es la clave canónica del documento
+     * (colapsa DNI ↔ CUIL/CUIT de la misma persona, ver {@see DocumentoIdentidad}).
+     * El teléfono NO es único (un número puede quedar reasignado a otra persona) y queda
+     * deliberadamente fuera para no fusionar dos personas distintas. En el checkout dni y email
+     * son obligatorios, así que ya cubren todo duplicado real de la misma persona. Ver docs/v2/12 §5.
      *
-     * @param  array<string, string|null>  $identifiers  claves: dni, email
+     * @param  array<string, string|null>  $identifiers  claves: documento_key, dni, email
      */
     public function reconcile(Customer $survivor, array $identifiers): Customer
     {
@@ -58,6 +60,7 @@ class CustomerMergeService
             }
 
             $match = match ($type) {
+                'documento_key' => $this->customers->findByDocumentoKey(trim($value)),
                 'dni' => $this->customers->findByDni(trim($value)),
                 'email' => $this->customers->findByEmail(mb_strtolower(trim($value))),
                 default => null,

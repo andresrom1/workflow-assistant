@@ -7,6 +7,8 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "barryvdh/laravel-dompdf": "^3.1",
+        "endroid/qr-code": "^6.1",
         "inertiajs/inertia-laravel": "^3.0",
         "kreait/firebase-php": "^8.2",
         "laravel/ai": "^0.4.2",
@@ -15,7 +17,9 @@
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
         "league/flysystem-aws-s3-v3": "^3.0",
+        "openspout/openspout": "^5.7",
         "pgvector/pgvector": "^0.2.2",
+        "phenx/php-svg-lib": "^1.0",
         "tightenco/ziggy": "^2.0"
     },
     "require-dev": {

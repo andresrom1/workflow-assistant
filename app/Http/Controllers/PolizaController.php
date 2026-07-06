@@ -341,7 +341,7 @@ class PolizaController extends Controller
     private function estadoOptions(): array
     {
         return array_map(
-            fn (PolizaEstado $e): array => ['value' => $e->value, 'label' => ucfirst($e->value)],
+            fn (PolizaEstado $e): array => ['value' => $e->value, 'label' => $e->label()],
             PolizaEstado::cases(),
         );
     }

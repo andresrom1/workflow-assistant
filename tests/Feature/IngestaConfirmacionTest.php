@@ -104,6 +104,34 @@ it('reutiliza un cliente existente por DNI en vez de duplicarlo', function (): v
     expect(Poliza::first()->risk->customer_id)->toBe($existing->id);
 });
 
+it('reconoce al mismo cliente cargado por DNI y luego por CUIL (misma clave)', function (): void {
+    $existing = Customer::factory()->create([
+        'dni' => '21407965', 'document_type_id' => 'dni', 'person_type_id' => 'fisica',
+    ]);
+
+    // Ingesta con el CUIL de la misma persona: 20-21407965-4 → clave = DNI 21407965
+    $doc = stagedDoc([
+        'documento_numero' => '20214079654',
+        'payload' => ['tomador' => ['documento_tipo' => 'CUIL', 'tipo_persona' => 'fisica']],
+    ]);
+    confirmacion()->confirm($doc);
+
+    expect(Customer::count())->toBe(1)
+        ->and(Poliza::first()->risk->customer_id)->toBe($existing->id);
+});
+
+it('crea un cliente jurídico con clave = CUIT completo', function (): void {
+    $doc = stagedDoc([
+        'documento_numero' => '30717843181',
+        'payload' => ['tomador' => ['razon_social' => 'LJM INGENIERIA SAS', 'documento_tipo' => 'CUIT', 'tipo_persona' => 'juridica']],
+    ]);
+    confirmacion()->confirm($doc);
+
+    $customer = Customer::where('documento_key', '30717843181')->first();
+    expect($customer)->not->toBeNull()
+        ->and($customer->person_type_id)->toBe('juridica');
+});
+
 it('adjunta un documento sin número a la póliza existente del mismo Risk (fallback por patente)', function (): void {
     confirmacion()->confirm(stagedDoc());
 
@@ -141,6 +169,39 @@ it('infiere estado vencida cuando la vigencia ya pasó', function (): void {
     expect(Poliza::first()->estado)->toBe(PolizaEstado::Vencida);
 });
 
+it('marca vigente el mismo día del vencimiento (no vencida)', function (): void {
+    $doc = stagedDoc(['payload' => ['fechas' => [
+        'vigencia_desde' => now()->subMonths(6)->toDateString(),
+        'vigencia_hasta' => now()->toDateString(),
+    ]]]);
+
+    confirmacion()->confirm($doc);
+
+    expect(Poliza::first()->estado)->toBe(PolizaEstado::Vigente);
+});
+
+it('marca emitida cuando la vigencia aún no arrancó', function (): void {
+    $doc = stagedDoc(['payload' => ['fechas' => [
+        'vigencia_desde' => now()->addWeek()->toDateString(),
+        'vigencia_hasta' => now()->addYear()->toDateString(),
+    ]]]);
+
+    confirmacion()->confirm($doc);
+
+    expect(Poliza::first()->estado)->toBe(PolizaEstado::Emitida);
+});
+
+it('marca emitida cuando falta la fecha de fin', function (): void {
+    $doc = stagedDoc(['payload' => ['fechas' => [
+        'vigencia_desde' => now()->subMonth()->toDateString(),
+        'vigencia_hasta' => null,
+    ]]]);
+
+    confirmacion()->confirm($doc);
+
+    expect(Poliza::first()->estado)->toBe(PolizaEstado::Emitida);
+});
+
 it('vincula la renovación cuando se confirma el contrato_anterior_id', function (): void {
     confirmacion()->confirm(stagedDoc());
     $anterior = Poliza::first();
@@ -176,7 +237,7 @@ it('no permite confirmar dos veces el mismo documento', function (): void {
 
 // ─── Controller ───────────────────────────────────────────────────────────────
 
-it('el index agrupa los pendientes por contrato', function (): void {
+it('el index agrupa los pendientes por contrato y expone key/prefill/resumen', function (): void {
     stagedDoc();
     stagedDoc(['kind' => PolicyDocumentKind::CirculationCard, 'hash_sha256' => str_repeat('1', 64)]);
 
@@ -186,7 +247,11 @@ it('el index agrupa los pendientes por contrato', function (): void {
         ->assertInertia(fn ($page) => $page
             ->component('PolicyDocuments/PendientesIngesta')
             ->has('grupos', 1)
-            ->has('grupos.0.documentos', 2));
+            ->has('grupos.0.documentos', 2)
+            ->where('grupos.0.key', 'num:000031184413')
+            ->where('grupos.0.resumen.tomador', 'SICOT LEONARDO FABIO')
+            ->where('grupos.0.prefill.documento_numero', '21407965')
+            ->has('grupos.0.faltantes_count'));
 });
 
 it('confirmar desde el controller materializa la póliza', function (): void {
@@ -200,6 +265,26 @@ it('confirmar desde el controller materializa la póliza', function (): void {
         ->and($doc->refresh()->status)->toBe(IngestaStatus::Confirmado);
 });
 
+it('confirmar contrato materializa una póliza y adjunta todos los docs', function (): void {
+    $poliza = stagedDoc(['kind' => PolicyDocumentKind::Poliza]);
+    $cert = stagedDoc(['kind' => PolicyDocumentKind::Certificado, 'hash_sha256' => str_repeat('a', 64)]);
+    $tarjeta = stagedDoc(['kind' => PolicyDocumentKind::CirculationCard, 'hash_sha256' => str_repeat('b', 64)]);
+
+    $this->actingAs($this->user)
+        ->post(route('ingesta-pendientes.confirmar-contrato'), [
+            'ids' => [$poliza->id, $cert->id, $tarjeta->id],
+        ])
+        ->assertRedirect();
+
+    expect(Poliza::where('numero', '000031184413')->count())->toBe(1)
+        ->and(PolicyDocument::count())->toBe(3);
+
+    foreach ([$poliza, $cert, $tarjeta] as $doc) {
+        expect($doc->refresh()->status)->toBe(IngestaStatus::Confirmado)
+            ->and($doc->poliza_id)->not->toBeNull();
+    }
+});
+
 it('descartar desde el controller no crea nada', function (): void {
     $doc = stagedDoc();
 
@@ -208,5 +293,55 @@ it('descartar desde el controller no crea nada', function (): void {
         ->assertRedirect();
 
     expect($doc->refresh()->status)->toBe(IngestaStatus::Descartado)
+        ->and(Poliza::count())->toBe(0);
+});
+
+it('el lookup avisa cliente existente por la clave de identidad (CUIL → DNI)', function (): void {
+    Customer::factory()->create([
+        'dni' => '21407965', 'document_type_id' => 'dni', 'person_type_id' => 'fisica',
+        'first_name' => 'Juan', 'last_name' => 'Pérez',
+    ]);
+
+    $this->actingAs($this->user)
+        ->getJson(route('ingesta-pendientes.buscar-cliente', [
+            'documento' => '20-21407965-4', 'document_type' => 'cuil', 'person_type' => 'fisica',
+        ]))
+        ->assertOk()
+        ->assertJson(['existe' => true, 'cliente' => ['first_name' => 'Juan', 'last_name' => 'Pérez']]);
+});
+
+it('el lookup deriva nombre/apellido de name cuando el cliente no los tiene', function (): void {
+    Customer::factory()->create([
+        'dni' => '29034000', 'document_type_id' => 'dni', 'person_type_id' => 'fisica',
+        'name' => 'Luis Alberto Ochoa', 'first_name' => null, 'last_name' => null,
+    ]);
+
+    $this->actingAs($this->user)
+        ->getJson(route('ingesta-pendientes.buscar-cliente', [
+            'documento' => '29034000', 'document_type' => 'dni', 'person_type' => 'fisica',
+        ]))
+        ->assertOk()
+        ->assertJson(['existe' => true, 'cliente' => ['first_name' => 'Luis', 'last_name' => 'Alberto Ochoa']]);
+});
+
+it('el lookup avisa cliente nuevo cuando no existe', function (): void {
+    $this->actingAs($this->user)
+        ->getJson(route('ingesta-pendientes.buscar-cliente', [
+            'documento' => '99999999', 'document_type' => 'dni', 'person_type' => 'fisica',
+        ]))
+        ->assertOk()
+        ->assertJson(['existe' => false, 'cliente' => null]);
+});
+
+it('descartar contrato descarta todos sus docs', function (): void {
+    $a = stagedDoc();
+    $b = stagedDoc(['kind' => PolicyDocumentKind::CirculationCard, 'hash_sha256' => str_repeat('c', 64)]);
+
+    $this->actingAs($this->user)
+        ->post(route('ingesta-pendientes.descartar-contrato'), ['ids' => [$a->id, $b->id]])
+        ->assertRedirect();
+
+    expect($a->refresh()->status)->toBe(IngestaStatus::Descartado)
+        ->and($b->refresh()->status)->toBe(IngestaStatus::Descartado)
         ->and(Poliza::count())->toBe(0);
 });

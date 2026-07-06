@@ -15,6 +15,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Número público para wa.me (landing / marketing)
+    |--------------------------------------------------------------------------
+    |
+    | Número del asistente IA en formato internacional sin "+" (ej: 549351XXXXXXX).
+    | La landing arma con esto el link https://wa.me/{n}. Si es null, el CTA de
+    | cotización queda como placeholder (href="#").
+    |
+    */
+    'public_number' => env('WHATSAPP_PUBLIC_NUMBER'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Link de descarga de la app MANGO
+    |--------------------------------------------------------------------------
+    |
+    | URL a la store / APK de mango-mobile para el CTA de la landing.
+    | Si es null, el botón queda como placeholder (href="#").
+    |
+    */
+    'app_download_url' => env('MANGO_APP_DOWNLOAD_URL'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Message Templates (aprobados por Meta — los crea el equipo de MANGO)
     |--------------------------------------------------------------------------
     |
