@@ -226,8 +226,12 @@ Route::middleware(['auth'])->group(function () {
             ->name('facturacion.index');
         Route::post('/facturacion', [InvoiceBatchController::class, 'store'])
             ->name('facturacion.store');
+        Route::get('/facturacion/batches/{invoiceBatch}', [InvoiceBatchController::class, 'show'])
+            ->whereNumber('invoiceBatch')->name('facturacion.show');
         Route::get('/facturacion/batches/{invoiceBatch}/download', [InvoiceBatchController::class, 'download'])
             ->whereNumber('invoiceBatch')->name('facturacion.download');
+        Route::get('/facturacion/invoices/{invoice}/pdf', [InvoiceBatchController::class, 'downloadInvoice'])
+            ->whereNumber('invoice')->name('facturacion.invoices.pdf');
 
         // Configuración: datos del emisor + ABM de compañías facturables.
         Route::get('/facturacion/configuracion', [FacturacionConfigController::class, 'edit'])

@@ -31,7 +31,6 @@ use Illuminate\Support\Carbon;
  * @property string $receptor_cuit
  * @property string $receptor_condicion_iva
  * @property string|null $receptor_domicilio
- * @property string|null $pdf_path
  * @property InvoiceEstado $estado
  * @property string|null $observaciones
  */
@@ -57,7 +56,6 @@ class Invoice extends Model
         'receptor_cuit',
         'receptor_condicion_iva',
         'receptor_domicilio',
-        'pdf_path',
         'estado',
         'observaciones',
     ];

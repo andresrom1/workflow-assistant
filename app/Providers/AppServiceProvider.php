@@ -12,8 +12,6 @@ use App\Contracts\EmissionProvider;
 use App\Contracts\Quotability;
 use App\Contracts\QuotationProvider;
 use App\Contracts\WhatsAppDispatcher;
-use App\Events\InvoiceAuthorized;
-use App\Listeners\GenerateInvoicePdf;
 use App\Repositories\ConversationRepository;
 use App\Repositories\CustomerRepository;
 use App\Repositories\VehicleRepository;
@@ -28,7 +26,6 @@ use App\Services\Visred\VisredQuotationProvider;
 use App\Services\WhatsApp\CloudApiWhatsAppDispatcher;
 use App\Services\WhatsApp\LogWhatsAppDispatcher;
 use App\Services\WhatsApp\WhatsAppOutboundService;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -85,7 +82,6 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Facturación: el PDF se genera al autorizar (desacoplado de la emisión).
-        Event::listen(InvoiceAuthorized::class, GenerateInvoicePdf::class);
+        //
     }
 }

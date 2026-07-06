@@ -45,7 +45,6 @@ class InvoiceFactory extends Factory
             'numero_comprobante' => fake()->numberBetween(1, 9999),
             'cae' => (string) fake()->numerify('7###############'),
             'cae_vencimiento' => now()->addDays(10)->toDateString(),
-            'pdf_path' => 'invoices/'.now()->format('Y-m').'/factura-c-2-00000001.pdf',
         ]);
     }
 }

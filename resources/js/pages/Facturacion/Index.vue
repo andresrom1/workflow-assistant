@@ -152,14 +152,15 @@
           <div v-for="b in recientes" :key="b.id"
             class="rounded-[10px] p-3 flex items-center justify-between gap-3 text-xs"
             style="background: var(--bg-card); border: 1px solid var(--border);">
-            <div class="min-w-0">
+            <Link :href="`/admin/facturacion/batches/${b.id}`" class="min-w-0 hover:underline">
               <p class="font-semibold truncate" style="color: var(--text-1);">{{ b.codigo }} · {{ b.concepto }}</p>
               <p class="truncate" style="color: var(--text-3);">{{ b.finished_at }}</p>
-            </div>
+            </Link>
             <div class="flex items-center gap-3 whitespace-nowrap">
               <span v-if="b.summary" class="font-mono tabular-nums" style="color: var(--text-3);">
                 {{ b.summary.autorizadas }} ok · {{ b.summary.rechazadas }} rech.
               </span>
+              <Link :href="`/admin/facturacion/batches/${b.id}`" class="btn text-xs py-1 px-3" style="background: var(--bg-subtle); color: var(--text-2);">Detalle</Link>
               <a v-if="b.summary && b.summary.autorizadas > 0"
                 :href="`/admin/facturacion/batches/${b.id}/download`"
                 class="btn btn-primary text-xs py-1 px-3">ZIP</a>
@@ -197,7 +198,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { useForm, usePoll } from '@inertiajs/vue3'
+import { Link, useForm, usePoll } from '@inertiajs/vue3'
 
 interface Company { id: number; razon_social: string; cuit: string; condicion_iva: string }
 interface BatchInvoice {

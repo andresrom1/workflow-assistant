@@ -10,9 +10,10 @@ use App\Models\BillingCompany;
 use App\Models\Invoice;
 use App\Models\InvoiceBatch;
 use App\Services\Facturacion\Emisor;
+use App\Services\InvoicePdfService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -22,7 +23,8 @@ use ZipArchive;
  * Facturación de comisiones (Facturas C contra AFIP). Solo admin. El usuario arma un lote con
  * los datos comunes + las compañías tildadas y sus importes; se crean las {@see Invoice} en
  * `Pending` y un job las emite una por una ({@see EmitInvoiceBatch}). El front hace polling
- * hasta que el lote cierra y ofrece la descarga ZIP de los PDFs autorizados.
+ * hasta que el lote cierra. Los PDF NO se persisten: se generan al vuelo con
+ * {@see InvoicePdfService} (descarga individual o ZIP del lote).
  */
 class InvoiceBatchController extends Controller
 {
@@ -117,11 +119,33 @@ class InvoiceBatchController extends Controller
         return back()->with('flash', ['success' => 'Lote en emisión. Se irá actualizando a medida que AFIP responde.']);
     }
 
-    public function download(InvoiceBatch $invoiceBatch): BinaryFileResponse
+    public function show(InvoiceBatch $invoiceBatch): Response
+    {
+        return Inertia::render('Facturacion/BatchShow', [
+            'batch' => $this->presentBatch($invoiceBatch),
+        ]);
+    }
+
+    /**
+     * PDF de una factura autorizada, generado al vuelo (no persistido).
+     */
+    public function downloadInvoice(Invoice $invoice, InvoicePdfService $pdf): HttpResponse
+    {
+        abort_unless($invoice->estado === InvoiceEstado::Authorized, 404, 'La factura no está autorizada.');
+
+        return response($pdf->generar($invoice), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$pdf->filename($invoice).'"',
+        ]);
+    }
+
+    /**
+     * ZIP con los PDF de las facturas autorizadas del lote, generados al vuelo.
+     */
+    public function download(InvoiceBatch $invoiceBatch, InvoicePdfService $pdf): BinaryFileResponse
     {
         $autorizadas = $invoiceBatch->invoices()
             ->where('estado', InvoiceEstado::Authorized)
-            ->whereNotNull('pdf_path')
             ->get();
 
         abort_if($autorizadas->isEmpty(), 404, 'No hay comprobantes autorizados en este lote.');
@@ -131,9 +155,7 @@ class InvoiceBatchController extends Controller
         $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
 
         foreach ($autorizadas as $invoice) {
-            if (Storage::disk('local')->exists($invoice->pdf_path)) {
-                $zip->addFromString(basename($invoice->pdf_path), Storage::disk('local')->get($invoice->pdf_path));
-            }
+            $zip->addFromString($pdf->filename($invoice), $pdf->generar($invoice));
         }
 
         $zip->close();
@@ -152,6 +174,11 @@ class InvoiceBatchController extends Controller
             'id' => $batch->id,
             'codigo' => $batch->codigo,
             'concepto' => $batch->concepto,
+            'punto_venta' => $batch->punto_venta,
+            'fecha_comprobante' => $batch->fecha_comprobante->toDateString(),
+            'fecha_servicio_desde' => $batch->fecha_servicio_desde->toDateString(),
+            'fecha_servicio_hasta' => $batch->fecha_servicio_hasta->toDateString(),
+            'fecha_vto_pago' => $batch->fecha_vto_pago->toDateString(),
             'estado' => $batch->estado,
             'finished_at' => $batch->finished_at?->toDateTimeString(),
             'summary' => $batch->summary,
@@ -165,6 +192,7 @@ class InvoiceBatchController extends Controller
                     'importe' => $i->importe,
                     'numero_comprobante' => $i->numero_comprobante,
                     'cae' => $i->cae,
+                    'cae_vencimiento' => $i->cae_vencimiento?->toDateString(),
                     'estado' => $i->estado->value,
                     'estado_label' => $i->estado->label(),
                     'observaciones' => $i->observaciones,

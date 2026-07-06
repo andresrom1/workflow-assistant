@@ -3,10 +3,9 @@
 namespace App\Jobs;
 
 use App\Enums\InvoiceEstado;
-use App\Events\InvoiceAuthorized;
-use App\Events\InvoiceRejected;
 use App\Models\InvoiceBatch;
 use App\Services\Afip\AfipSoapService;
+use App\Services\InvoicePdfService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -16,8 +15,9 @@ use Throwable;
 
 /**
  * Emite un lote de Facturas C contra AFIP, una por una. Si AFIP rechaza una, la marca
- * `Rejected` con el error y CONTINÚA con la siguiente (no corta el lote). Por cada resultado
- * emite un evento de dominio ({@see InvoiceAuthorized}/{@see InvoiceRejected}).
+ * `Rejected` con el error y CONTINÚA con la siguiente (no corta el lote). El PDF de cada
+ * factura autorizada se genera al vuelo al descargarla (ver {@see InvoicePdfService}),
+ * no acá.
  *
  * Serializado por punto de venta ({@see WithoutOverlapping}): la numeración correlativa de AFIP
  * no tolera dos emisiones en paralelo sobre el mismo pto de venta.
@@ -78,15 +78,12 @@ class EmitInvoiceBatch implements ShouldQueue
                     'estado' => InvoiceEstado::Authorized,
                 ]);
 
-                InvoiceAuthorized::dispatch($invoice);
                 $offset++; // el número recién se consume si AFIP lo autorizó
             } catch (Throwable $e) {
                 $invoice->update([
                     'estado' => InvoiceEstado::Rejected,
                     'observaciones' => $e->getMessage(),
                 ]);
-
-                InvoiceRejected::dispatch($invoice);
 
                 Log::warning('EmitInvoiceBatch: factura rechazada', [
                     'invoice_id' => $invoice->id,

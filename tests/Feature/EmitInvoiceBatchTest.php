@@ -1,22 +1,17 @@
 <?php
 
 use App\Enums\InvoiceEstado;
-use App\Events\InvoiceAuthorized;
-use App\Events\InvoiceRejected;
 use App\Jobs\EmitInvoiceBatch;
 use App\Models\Invoice;
 use App\Models\InvoiceBatch;
 use App\Services\Afip\AfipEmisionException;
 use App\Services\Afip\AfipSoapService;
+use App\Services\InvoicePdfService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
 
 it('emite el lote: una autoriza, otra rechaza, y el lote NO se detiene', function (): void {
-    Event::fake([InvoiceAuthorized::class, InvoiceRejected::class]);
-
     $batch = InvoiceBatch::factory()->create(['punto_venta' => 2, 'estado' => 'processing']);
     $ok = Invoice::factory()->for($batch, 'batch')->create(['estado' => InvoiceEstado::Pending, 'pto_vta' => 2]);
     $bad = Invoice::factory()->for($batch, 'batch')->create(['estado' => InvoiceEstado::Pending, 'pto_vta' => 2]);
@@ -50,9 +45,6 @@ it('emite el lote: una autoriza, otra rechaza, y el lote NO se detiene', functio
         ->and($batch->summary['autorizadas'])->toBe(1)
         ->and($batch->summary['rechazadas'])->toBe(1)
         ->and($batch->summary['total'])->toBe(2);
-
-    Event::assertDispatched(InvoiceAuthorized::class);
-    Event::assertDispatched(InvoiceRejected::class);
 });
 
 it('cierra limpiamente un lote sin facturas pendientes (idempotencia en reintento)', function (): void {
@@ -66,19 +58,18 @@ it('cierra limpiamente un lote sin facturas pendientes (idempotencia en reintent
     expect($batch->refresh()->estado)->toBe('completed');
 });
 
-it('genera el PDF al autorizar (listener sincrónico)', function (): void {
-    Storage::fake('local');
+it('genera el PDF al vuelo (sin persistir) con nombre FC-{ptovta}-{numero}.pdf', function (): void {
     config(['afip.cuit' => '20111111112']);
 
     $invoice = Invoice::factory()->authorized()->create([
-        'pdf_path' => null,
-        'numero_comprobante' => 101,
+        'pto_vta' => 3,
+        'numero_comprobante' => 8,
         'cae' => '71234567890123',
     ]);
 
-    event(new InvoiceAuthorized($invoice));
+    $service = app(InvoicePdfService::class);
+    $bytes = $service->generar($invoice);
 
-    $invoice->refresh();
-    expect($invoice->pdf_path)->not->toBeNull();
-    Storage::disk('local')->assertExists($invoice->pdf_path);
+    expect($bytes)->toStartWith('%PDF-')
+        ->and($service->filename($invoice))->toBe('FC-3-00000008.pdf');
 });

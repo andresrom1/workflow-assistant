@@ -8,7 +8,6 @@ use App\Models\InvoiceBatch;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
-use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
 
@@ -112,15 +111,54 @@ it('bloquea el acceso a usuarios no-admin', function (): void {
         ->assertForbidden();
 });
 
-it('descarga un ZIP con los PDFs de las facturas autorizadas', function (): void {
-    Storage::fake('local');
+it('descarga un ZIP con los PDFs generados al vuelo de las facturas autorizadas', function (): void {
     $admin = User::factory()->admin()->create();
     $batch = InvoiceBatch::factory()->completed()->create();
-    $invoice = Invoice::factory()->authorized()->for($batch, 'batch')->create(['pdf_path' => 'invoices/2026-06/factura-c-2-00000101.pdf']);
-    Storage::disk('local')->put($invoice->pdf_path, '%PDF-fake');
+    Invoice::factory()->authorized()->for($batch, 'batch')->create();
+    Invoice::factory()->for($batch, 'batch')->create(['estado' => InvoiceEstado::Rejected]); // no debe entrar al zip
 
     $this->actingAs($admin)
         ->get(route('admin.facturacion.download', $batch))
         ->assertOk()
         ->assertDownload("facturas-lote-{$batch->codigo}-{$batch->id}.zip");
+});
+
+it('404 al descargar el ZIP de un lote sin facturas autorizadas', function (): void {
+    $admin = User::factory()->admin()->create();
+    $batch = InvoiceBatch::factory()->completed()->create();
+    Invoice::factory()->for($batch, 'batch')->create(['estado' => InvoiceEstado::Rejected]);
+
+    $this->actingAs($admin)->get(route('admin.facturacion.download', $batch))->assertNotFound();
+});
+
+it('descarga el PDF individual de una factura autorizada', function (): void {
+    $admin = User::factory()->admin()->create();
+    $invoice = Invoice::factory()->authorized()->create(['pto_vta' => 3, 'numero_comprobante' => 8]);
+
+    $response = $this->actingAs($admin)->get(route('admin.facturacion.invoices.pdf', $invoice));
+
+    $response->assertOk()
+        ->assertHeader('Content-Type', 'application/pdf')
+        ->assertHeader('Content-Disposition', 'attachment; filename="FC-3-00000008.pdf"');
+});
+
+it('404 al pedir el PDF de una factura no autorizada', function (): void {
+    $admin = User::factory()->admin()->create();
+    $invoice = Invoice::factory()->create(['estado' => InvoiceEstado::Pending]);
+
+    $this->actingAs($admin)->get(route('admin.facturacion.invoices.pdf', $invoice))->assertNotFound();
+});
+
+it('muestra el detalle de un lote con sus facturas', function (): void {
+    $admin = User::factory()->admin()->create();
+    $batch = InvoiceBatch::factory()->completed()->create(['summary' => ['autorizadas' => 1, 'rechazadas' => 0, 'total' => 1]]);
+    Invoice::factory()->authorized()->for($batch, 'batch')->create();
+
+    $this->actingAs($admin)
+        ->get(route('admin.facturacion.show', $batch))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Facturacion/BatchShow')
+            ->where('batch.id', $batch->id)
+            ->has('batch.invoices', 1));
 });
