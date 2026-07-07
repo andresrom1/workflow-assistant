@@ -119,8 +119,8 @@
                       ? 'background:#5b5ef6;'
                       : 'background:var(--border);'">
                     <input type="checkbox" v-model="drafts[group.key][item.key]" class="sr-only" />
-                    <div class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform"
-                      :class="drafts[group.key][item.key] ? 'translate-x-4 right-0.5' : 'left-0.5'">
+                    <div class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform"
+                      :class="drafts[group.key][item.key] ? 'translate-x-4' : 'translate-x-0'">
                     </div>
                   </div>
                   <span class="text-sm" style="color: var(--text-1);">

@@ -70,6 +70,18 @@ class QuoteService
         $this->snapshotRepo->updateCoveragePreference($quote->riskSnapshot, $preference);
     }
 
+    /**
+     * Expira las quotes abiertas de la conversación. Se usa al revertir una etapa
+     * (el cliente corrigió el vehículo o la cobertura): la cotización en curso ya
+     * no representa el riesgo real y debe descartarse. Idempotente.
+     */
+    public function expireOpenQuotes(Conversation $conversation): int
+    {
+        return $conversation->quotes()
+            ->whereIn('status', ['pending', 'processed', 'checkout_pending'])
+            ->update(['status' => 'expired']);
+    }
+
     public function getRaw(Quote $quote): array
     {
         $quote->loadMissing('providerRef', 'alternatives');

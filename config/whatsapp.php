@@ -15,6 +15,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Ventana de debounce del inbox
+    |--------------------------------------------------------------------------
+    |
+    | Delay (segundos) con el que se despacha ProcessConversationInbox tras
+    | ingestar un mensaje. Agrupa mensajes rápidos del usuario en una sola
+    | llamada al AI → una sola respuesta coherente. Si es muy corto, dos
+    | mensajes tipeados con pocos segundos de diferencia disparan dos llamadas
+    | al LLM y respuestas descoordinadas que se pisan.
+    |
+    */
+    'inbox_debounce_seconds' => (int) env('WHATSAPP_INBOX_DEBOUNCE_SECONDS', 8),
+
+    /*
+    |--------------------------------------------------------------------------
     | Número público para wa.me (landing / marketing)
     |--------------------------------------------------------------------------
     |

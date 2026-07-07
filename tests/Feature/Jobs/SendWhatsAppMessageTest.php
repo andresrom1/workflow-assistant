@@ -184,3 +184,59 @@ it('sends text without modality decision when conversation id is null', function
 
     SendWhatsAppMessage::dispatchSync($this->waId, $this->bsuid, $this->text, $this->phoneNumberId);
 });
+
+// ---------------------------------------------------------------------------
+// Interactive buttons path (WS2)
+// ---------------------------------------------------------------------------
+
+it('sends interactive buttons and bypasses the modality decider entirely', function () {
+    $conversation = Conversation::factory()->create();
+    $buttons = [
+        ['id' => 'alt:1', 'title' => 'Sancor $45,2K'],
+        ['id' => 'alt:2', 'title' => 'Federación $48K'],
+        ['id' => 'question', 'title' => 'Tengo una pregunta'],
+    ];
+
+    $waService = $this->mock(WhatsAppOutboundService::class);
+    $waService->shouldReceive('sendTypingIndicator')->once();
+    $waService->shouldReceive('sendInteractiveButtons')
+        ->once()
+        ->with($this->waId, $this->bsuid, $this->text, $buttons, $this->phoneNumberId, $conversation->id, 'CheckoutAgent', config('ai.default'))
+        ->andReturn(['messages' => [['id' => 'wamid.interactive001']]]);
+    $waService->shouldNotReceive('sendMessage');
+
+    $decider = $this->mock(MessageModalityDecider::class);
+    $decider->shouldNotReceive('decide');
+
+    SendWhatsAppMessage::dispatchSync($this->waId, $this->bsuid, $this->text, $this->phoneNumberId, $conversation->id, 'CheckoutAgent', null, $buttons);
+});
+
+it('falls back to plain text when the body exceeds 1024 chars with pending buttons', function () {
+    $conversation = Conversation::factory()->create();
+    $longText = str_repeat('a', 1025);
+    $buttons = [['id' => 'alt:1', 'title' => 'Opción']];
+
+    $waService = $this->mock(WhatsAppOutboundService::class);
+    $waService->shouldReceive('sendTypingIndicator')->once();
+    $waService->shouldNotReceive('sendInteractiveButtons');
+    $waService->shouldReceive('sendMessage')->once()->andReturn(['messages' => [['id' => 'wamid.fallbacklong']]]);
+
+    $decider = $this->mock(MessageModalityDecider::class);
+    $decider->shouldReceive('decide')->andReturn(['modality' => Modality::Text, 'eligible' => false, 'reason' => 'hard_gate', 'ratio' => null, 'p' => null, 'window_size' => null]);
+
+    SendWhatsAppMessage::dispatchSync($this->waId, $this->bsuid, $longText, $this->phoneNumberId, $conversation->id, 'CheckoutAgent', null, $buttons);
+});
+
+it('ignores an empty buttons array and follows the normal text/audio flow', function () {
+    $conversation = Conversation::factory()->create();
+
+    $waService = $this->mock(WhatsAppOutboundService::class);
+    $waService->shouldReceive('sendTypingIndicator')->once();
+    $waService->shouldNotReceive('sendInteractiveButtons');
+    $waService->shouldReceive('sendMessage')->once()->andReturn(['messages' => [['id' => 'wamid.emptybuttons']]]);
+
+    $decider = $this->mock(MessageModalityDecider::class);
+    $decider->shouldReceive('decide')->once()->andReturn(['modality' => Modality::Text, 'eligible' => false, 'reason' => 'hard_gate', 'ratio' => null, 'p' => null, 'window_size' => null]);
+
+    SendWhatsAppMessage::dispatchSync($this->waId, $this->bsuid, $this->text, $this->phoneNumberId, $conversation->id, 'CheckoutAgent', null, []);
+});

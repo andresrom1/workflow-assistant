@@ -2,20 +2,11 @@
 set -e
 
 # 1. Configuración Dinámica de Supervisor
-# Creamos un archivo de configuración extra para que Supervisor gestione Reverb y el Worker.
+# Creamos un archivo de configuración extra para que Supervisor gestione los Workers.
 # Esto garantiza que si se caen, se reinicien automáticamente.
 mkdir -p /var/log/supervisor
 
-echo "[program:reverb]
-command=php artisan reverb:start
-autostart=true
-autorestart=true
-stderr_logfile=/var/log/supervisor/reverb-err.log
-stdout_logfile=/var/log/supervisor/reverb-out.log
-stdout_logfile_maxbytes=1MB
-stderr_logfile_maxbytes=1MB
-
-[program:worker]
+echo "[program:worker]
 command=php artisan queue:work --queue=default --sleep=3 --tries=3 --timeout=60 --max-time=3600
 autostart=true
 autorestart=true
@@ -69,5 +60,5 @@ php artisan event:cache
 
 # 4. Iniciar Supervisor
 # Supervisor leerá el archivo laravel-worker.conf que creamos arriba
-# y arrancará Nginx, PHP-FPM, Reverb y el Queue Worker.
+# y arrancará Nginx, PHP-FPM y los Queue Workers.
 exec supervisord -c /etc/supervisor/conf.d/supervisord.conf

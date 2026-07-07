@@ -154,8 +154,45 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
 
         return match ($quotability->status) {
             QuotabilityStatus::Quotable => $this->onQuotable($conversation, $customer, $vehicle, $data['sessionUuid'], $quotability),
-            QuotabilityStatus::NeedsFact => $this->onNeedsFact($vehicle, $quotability),
-            QuotabilityStatus::NotQuotable => $this->onNotQuotable($vehicle),
+            QuotabilityStatus::NeedsFact => $this->onNeedsFact($conversation, $vehicle, $quotability),
+            QuotabilityStatus::NotQuotable => $this->onNotQuotable($conversation, $vehicle),
+        };
+    }
+
+    /**
+     * Registra un dato del vehículo que quedó pendiente para resolver la
+     * quotability (p.ej. transmisión) y reintenta el gate contra el catálogo.
+     *
+     * @param  array{patente: string, fact: string}  $data
+     */
+    public function provideVehicleFact(array $data, Conversation $conversation): array
+    {
+        $data = $this->validatePayload($data, [
+            'patente' => 'required|string',
+            'fact' => 'required|string|max:100',
+        ]);
+        $data['patente'] = $this->plate->normalize($data['patente']);
+
+        $conversation->load('customer.vehicles');
+        $vehicle = $conversation->customer?->vehicles->where('patente', $data['patente'])->first();
+
+        if (! $vehicle) {
+            return $this->formatError(
+                "No se encontró un vehículo con patente '{$data['patente']}' en esta conversación.",
+                'missing_vehicle'
+            );
+        }
+
+        // Enriquecer la versión (dominio) con el hecho que faltaba y reintentar el gate.
+        $vehicle->version = trim($vehicle->version.' '.$data['fact']);
+        $vehicle->save();
+
+        $quotability = $this->quotability->check($vehicle);
+
+        return match ($quotability->status) {
+            QuotabilityStatus::Quotable => $this->onQuotable($conversation, $conversation->customer, $vehicle, (string) Str::uuid(), $quotability),
+            QuotabilityStatus::NeedsFact => $this->onNeedsFact($conversation, $vehicle, $quotability),
+            QuotabilityStatus::NotQuotable => $this->onNotQuotable($conversation, $vehicle),
         };
     }
 
@@ -172,6 +209,8 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             ['external_vehicle_ref' => $result->externalRef],
         );
 
+        $this->clearPendingVehicleFact($conversation);
+
         return $this->formatSuccess(
             "Vehículo registrado correctamente. Cotización #{$quote->id} iniciada. "
             .'Indagá al cliente sobre la cobertura deseada para proceder con la oferta.',
@@ -182,9 +221,15 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
     /**
      * NeedsFact: ambigüedad reencuadrada como hecho de dominio faltante. No
      * promete cotización; el agente debe preguntar el dato (p.ej. transmisión).
+     * Marca el dato pendiente en la conversación para que coveragePreference()
+     * sepa por qué no hay una quote en marcha si el cliente avanza antes de responder.
      */
-    private function onNeedsFact(Vehicle $vehicle, QuotabilityResult $result): array
+    private function onNeedsFact(Conversation $conversation, Vehicle $vehicle, QuotabilityResult $result): array
     {
+        $meta = $conversation->metadata ?? [];
+        $meta['pending_vehicle_fact'] = ['patente' => $vehicle->patente, 'fact' => $result->missingFact];
+        $conversation->update(['metadata' => $meta]);
+
         $options = $result->options !== [] ? ' ('.implode(' / ', $result->options).')' : '';
 
         return $this->formatSuccess(
@@ -195,11 +240,26 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
     }
 
     /**
+     * Limpia el marcador de dato pendiente (ya sea porque se resolvió o porque
+     * se llegó a Quotable/NotQuotable por otra vía).
+     */
+    private function clearPendingVehicleFact(Conversation $conversation): void
+    {
+        $meta = $conversation->metadata ?? [];
+        if (array_key_exists('pending_vehicle_fact', $meta)) {
+            unset($meta['pending_vehicle_fact']);
+            $conversation->update(['metadata' => $meta]);
+        }
+    }
+
+    /**
      * NotQuotable: rama honesta. No mentimos identidad ("te tengo el auto"),
      * pero no prometemos una cotización que no va a llegar.
      */
-    private function onNotQuotable(Vehicle $vehicle): array
+    private function onNotQuotable(Conversation $conversation, Vehicle $vehicle): array
     {
+        $this->clearPendingVehicleFact($conversation);
+
         return $this->formatSuccess(
             "Tengo registrado tu {$vehicle->marca} {$vehicle->modelo} {$vehicle->year}, pero no puedo "
             .'cotizarlo automáticamente en este momento. Ofrecé derivar la consulta a un asesor.',
@@ -271,12 +331,37 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         }
 
         $resolved = $this->tryResolveQuoteById($quoteId);
+        $pendingFact = data_get($conversation->metadata, 'pending_vehicle_fact');
 
-        $message = $resolved
-            ? "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}. Cotización procesada; preparando las alternativas para presentártelas."
-            : "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}. La oferta será procesada en breve.";
+        $message = match (true) {
+            $resolved => "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}. Cotización procesada; preparando las alternativas para presentártelas.",
+            $quoteId !== null => "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}. La oferta será procesada en breve.",
+            $pendingFact !== null => "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}, pero falta un dato del vehículo para poder cotizar: {$pendingFact['fact']}. Preguntáselo al cliente y registralo con provide_vehicle_fact.",
+            default => "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}, pero no hay una cotización en marcha para este vehículo. Explicáselo al cliente con honestidad y ofrecé derivar a un asesor.",
+        };
 
         return $this->formatSuccess($message, ['vehicle_id' => $vehicle->id]);
+    }
+
+    /**
+     * Revierte la conversación a una etapa anterior (el cliente corrigió un dato
+     * ya registrado) y descarta la cotización en curso, que ya no representa
+     * el riesgo real.
+     *
+     * @param  array{stage: string}  $data
+     */
+    public function revertStage(array $data, Conversation $conversation): array
+    {
+        $data = $this->validatePayload($data, [
+            'stage' => 'required|string|in:customer,vehicle,coverage',
+        ]);
+
+        $this->quoteService->expireOpenQuotes($conversation);
+
+        return $this->formatSuccess(
+            "Etapa revertida a '{$data['stage']}'. La cotización anterior quedó descartada. "
+            .'Retomá la conversación pidiendo los datos de esa etapa.'
+        );
     }
 
     /**

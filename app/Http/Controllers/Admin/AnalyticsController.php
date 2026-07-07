@@ -17,6 +17,7 @@ class AnalyticsController extends Controller
 
         return Inertia::render('Admin/Analytics/Funnel', [
             'steps' => $analytics->funnelSteps($from, $to),
+            'promptBreakdown' => $analytics->funnelByPromptVersion($from, $to),
             'from' => $from->toDateString(),
             'to' => $to->toDateString(),
         ]);

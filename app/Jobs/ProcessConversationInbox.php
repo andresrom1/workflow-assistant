@@ -12,6 +12,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
 class ProcessConversationInbox implements ShouldQueue
@@ -59,12 +60,23 @@ class ProcessConversationInbox implements ShouldQueue
 
         $conversation = Conversation::findOrFail($this->conversationId);
 
-        $combinedBody = $messages->pluck('content')->implode("\n");
-
         // Marcar como procesados ANTES de llamar al AI para que un reintento
         // del job no vuelva a llamar al AI con los mismos mensajes.
         Message::whereIn('id', $messages->pluck('id'))
             ->update(['processed_at' => now()]);
+
+        if ($conversation->isAiPaused()) {
+            // El humano responde desde el panel de administración; estos mensajes
+            // ya quedaron marcados como processed para que al reanudar la IA no
+            // se re-inyecten al LLM (van resumidos en el transcript de la pausa).
+            Log::info('WhatsApp inbox: IA pausada, mensajes derivados al humano', [
+                'conversation_id' => $this->conversationId,
+            ]);
+
+            return;
+        }
+
+        $combinedBody = $this->prependPauseTranscript($conversation, $messages->pluck('content')->implode("\n"));
 
         $reply = $orchestrator->handle($combinedBody, $conversation);
         $inboundIds = $messages->pluck('id')->all();
@@ -75,7 +87,7 @@ class ProcessConversationInbox implements ShouldQueue
             ->update(['inbound_message_ids' => json_encode($inboundIds)]);
 
         // Destinatario: el teléfono del webhook si llegó; si no, el BSUID de la conversación.
-        SendWhatsAppMessage::dispatch($this->waId, $conversation->ext_user_id, $reply['text'], $this->phoneNumberId, $this->conversationId, $reply['agent'], $lastLogId)
+        SendWhatsAppMessage::dispatch($this->waId, $conversation->ext_user_id, $reply['text'], $this->phoneNumberId, $this->conversationId, $reply['agent'], $lastLogId, $reply['buttons'] ?? null)
             ->onQueue('whatsapp-outbound');
 
         $contactName = $messages->first()?->sender_name;
@@ -106,5 +118,39 @@ class ProcessConversationInbox implements ShouldQueue
             'conversation_id' => $this->conversationId,
             'error' => $exception->getMessage(),
         ]);
+    }
+
+    /**
+     * Si la conversación acaba de salir de un takeover humano, antepone un
+     * resumen de lo intercambiado durante la pausa para que la IA no pierda
+     * el hilo. Consume los marcadores de la pausa (no se repite en turnos futuros).
+     */
+    private function prependPauseTranscript(Conversation $conversation, string $body): string
+    {
+        $pausedAt = data_get($conversation->metadata, 'ai_paused_at');
+        $resumedAt = data_get($conversation->metadata, 'ai_resumed_at');
+
+        if (! $pausedAt || ! $resumedAt) {
+            return $body;
+        }
+
+        // Parsear a Carbon: el binding de whereBetween necesita el mismo formato
+        // que usa la columna en DB, y las strings ISO8601 crudas no matchean.
+        $transcript = Message::where('conversation_id', $conversation->id)
+            ->whereBetween('created_at', [Carbon::parse($pausedAt), Carbon::parse($resumedAt)])
+            ->orderBy('created_at')
+            ->get(['direction', 'content', 'agent_name'])
+            ->map(fn (Message $m): string => ($m->direction === 'inbound' ? 'Cliente' : 'Asesor').': '.$m->content)
+            ->implode("\n");
+
+        $meta = $conversation->metadata ?? [];
+        unset($meta['ai_paused_at'], $meta['ai_resumed_at']);
+        $conversation->update(['metadata' => $meta]);
+
+        if ($transcript === '') {
+            return $body;
+        }
+
+        return "[Contexto: un asesor humano atendió esta conversación. Intercambio durante la pausa:\n{$transcript}]\n\n{$body}";
     }
 }

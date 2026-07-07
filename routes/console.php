@@ -15,3 +15,12 @@ Schedule::command('checkout:cleanup-temp-photos')->hourly();
 // cadencia estacional (Oct-Mar cada 12 min / Abr-Sep cada 30 min).
 // withoutOverlapping(5) corta solapamientos si una corrida se cuelga contra red.
 Schedule::command('smn:poll-acp')->everyFiveMinutes()->withoutOverlapping(5);
+
+// Seguimiento de conversaciones estancadas: un nudge por conversación, lo más
+// cerca posible del cierre de la ventana de 24h de WhatsApp, solo en horario
+// comercial (08–20, hora Argentina).
+Schedule::command('conversations:follow-up-stalled')
+    ->hourly()
+    ->timezone('America/Argentina/Buenos_Aires')
+    ->between('8:00', '20:00')
+    ->withoutOverlapping();

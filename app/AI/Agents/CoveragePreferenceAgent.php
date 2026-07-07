@@ -4,6 +4,8 @@ namespace App\AI\Agents;
 
 use App\AI\Tools\CheckCoverageRuleTool;
 use App\AI\Tools\CoveragePreferenceTool;
+use App\AI\Tools\ProvideVehicleFactTool;
+use App\AI\Tools\RevertStageTool;
 use App\Models\AgentPrompt;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
@@ -24,6 +26,8 @@ class CoveragePreferenceAgent implements Agent, Conversational, HasTools
     public function __construct(
         private readonly CoveragePreferenceTool $tool,
         private readonly CheckCoverageRuleTool $coverageTool,
+        private readonly ProvideVehicleFactTool $vehicleFactTool,
+        private readonly RevertStageTool $revertStageTool,
     ) {}
 
     public function instructions(): Stringable|string
@@ -32,10 +36,10 @@ class CoveragePreferenceAgent implements Agent, Conversational, HasTools
     }
 
     /**
-     * @return array<CoveragePreferenceTool|CheckCoverageRuleTool>
+     * @return array<CoveragePreferenceTool|CheckCoverageRuleTool|ProvideVehicleFactTool|RevertStageTool>
      */
     public function tools(): iterable
     {
-        return [$this->tool, $this->coverageTool];
+        return [$this->tool, $this->coverageTool, $this->vehicleFactTool, $this->revertStageTool];
     }
 }

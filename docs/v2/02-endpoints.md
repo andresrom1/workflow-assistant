@@ -1,7 +1,7 @@
 # Endpoints — workflow-assistant (v2)
 
 > Cada endpoint indica **a quién sirve** (canal consumidor).
-> Canales: `openai_chatkit`, `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
+> Canales: `openai_chatkit` (deprecado, sunset 30-nov-2026), `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
 >
 > `pas_mobile` y `pas-web` fueron **extirpados** del proyecto: sus endpoints quedan marcados **legacy** (a reemplazar por el flujo Visred, que cotiza y emite sin intervención humana).
 

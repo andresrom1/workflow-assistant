@@ -3,7 +3,6 @@
 namespace App\Services\Quote\Strategies;
 
 use App\Contracts\QuotationProvider;
-use App\Events\QuoteProcessed;
 use App\Exceptions\Visred\VisredApiException;
 use App\Jobs\NotifyClientQuoteReady;
 use App\Models\Quote;
@@ -34,16 +33,12 @@ class ApiQuoteResolution implements QuoteResolutionStrategyInterface
             // 3. Guardar resultados
             $this->quoteRepo->saveResults($quote, $result);
 
-            // 4. Notificar según el canal de origen
+            // 4. Notificar al cliente por WhatsApp (único canal activo).
             $quote->loadMissing('conversation');
 
-            if ($quote->conversation?->channel === 'whatsapp') {
-                NotifyClientQuoteReady::dispatch($quote->conversation->id, $quote->id)
-                    ->onConnection('database_ai')
-                    ->onQueue('whatsapp-ai');
-            } else {
-                QuoteProcessed::dispatch($quote);
-            }
+            NotifyClientQuoteReady::dispatch($quote->conversation->id, $quote->id)
+                ->onConnection('database_ai')
+                ->onQueue('whatsapp-ai');
 
         } catch (Throwable $e) {
             Log::error('[ApiQuoteResolution] Fallo: '.$e->getMessage(), [

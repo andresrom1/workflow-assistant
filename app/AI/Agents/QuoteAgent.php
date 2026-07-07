@@ -4,6 +4,7 @@ namespace App\AI\Agents;
 
 use App\AI\Tools\CheckCoverageRuleTool;
 use App\AI\Tools\GetQuoteTool;
+use App\AI\Tools\RevertStageTool;
 use App\Models\AgentPrompt;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
@@ -24,6 +25,7 @@ class QuoteAgent implements Agent, Conversational, HasTools
     public function __construct(
         private readonly GetQuoteTool $tool,
         private readonly CheckCoverageRuleTool $coverageTool,
+        private readonly RevertStageTool $revertStageTool,
     ) {}
 
     public function instructions(): Stringable|string
@@ -32,10 +34,10 @@ class QuoteAgent implements Agent, Conversational, HasTools
     }
 
     /**
-     * @return array<GetQuoteTool|CheckCoverageRuleTool>
+     * @return array<GetQuoteTool|CheckCoverageRuleTool|RevertStageTool>
      */
     public function tools(): iterable
     {
-        return [$this->tool, $this->coverageTool];
+        return [$this->tool, $this->coverageTool, $this->revertStageTool];
     }
 }

@@ -91,8 +91,17 @@
               </div>
             </div>
 
-            <!-- Drill-down link -->
-            <div class="mt-2 flex justify-end">
+            <!-- Drill-down link + toggle de versiones -->
+            <div class="mt-2 flex items-center justify-end gap-3">
+              <button
+                v-if="(promptBreakdown[step.step]?.length ?? 0) > 0"
+                type="button"
+                @click="toggleVersions(step.step)"
+                class="text-[11px] transition-colors"
+                style="color: var(--text-3);"
+              >
+                {{ expandedStep === step.step ? '▾' : '▸' }} Por versión de prompt
+              </button>
               <Link
                 :href="`/admin/conversations?step=${step.step}`"
                 class="text-[11px] transition-colors"
@@ -100,6 +109,36 @@
               >
                 Ver conversaciones de este step →
               </Link>
+            </div>
+
+            <!-- Desglose por versión de prompt -->
+            <div v-if="expandedStep === step.step" class="mt-2 rounded-[10px] overflow-hidden"
+              style="border: 1px solid var(--border-sub);">
+              <table class="w-full text-[11px]">
+                <thead>
+                  <tr style="background: var(--bg-raised);">
+                    <th class="text-left px-3 py-1.5 font-semibold" style="color: var(--text-3);">Versión</th>
+                    <th class="text-left px-3 py-1.5 font-semibold" style="color: var(--text-3);">Notas</th>
+                    <th class="text-right px-3 py-1.5 font-semibold" style="color: var(--text-3);">Entraron</th>
+                    <th class="text-right px-3 py-1.5 font-semibold" style="color: var(--text-3);">Completaron</th>
+                    <th class="text-right px-3 py-1.5 font-semibold" style="color: var(--text-3);">Conversión</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in promptBreakdown[step.step]" :key="row.agent_prompt_id ?? 'none'"
+                    style="border-top: 1px solid var(--border-sub);">
+                    <td class="px-3 py-1.5" style="color: var(--text-1);">
+                      {{ row.version !== null ? `v${row.version}` : 'sin versión' }}
+                    </td>
+                    <td class="px-3 py-1.5 truncate max-w-[220px]" style="color: var(--text-2);">{{ row.notes ?? '—' }}</td>
+                    <td class="px-3 py-1.5 text-right" style="color: var(--text-2);">{{ row.entered }}</td>
+                    <td class="px-3 py-1.5 text-right" style="color: var(--text-2);">{{ row.completed }}</td>
+                    <td class="px-3 py-1.5 text-right font-semibold" style="color: var(--text-1);">
+                      {{ Math.round(row.conversion * 100) }}%
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -119,6 +158,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 
 interface StepMetric {
@@ -133,13 +173,28 @@ interface StepMetric {
   negative_annotations: number
 }
 
+interface PromptVersionMetric {
+  agent_prompt_id: number | null
+  version: number | null
+  notes: string | null
+  entered: number
+  completed: number
+  conversion: number
+}
+
 interface Props {
   steps: StepMetric[]
+  promptBreakdown: Record<number, PromptVersionMetric[]>
   from: string
   to: string
 }
 
 const props = defineProps<Props>()
+
+const expandedStep = ref<number | null>(null)
+const toggleVersions = (step: number) => {
+  expandedStep.value = expandedStep.value === step ? null : step
+}
 
 const maxEntered = Math.max(...props.steps.map(s => s.entered), 1)
 

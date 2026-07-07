@@ -220,6 +220,62 @@ class AnalyticsRepository
     }
 
     /**
+     * Conversión por versión de prompt: para cada step, agrupa los execution logs
+     * por agent_prompt_id y computa entered/completed con el mismo criterio que
+     * funnelSteps() (ver completedPerStep()). Sirve para medir el impacto de un
+     * cambio de prompt en la conversión real, no solo intuitivamente.
+     *
+     * @return array<int, list<array{agent_prompt_id: int|null, version: int|null, notes: string|null, entered: int, completed: int, conversion: float}>>
+     */
+    public function funnelByPromptVersion(Carbon $from, Carbon $to): array
+    {
+        $result = [];
+
+        foreach (self::STEPS as $stepNumber => $meta) {
+            $flag = $meta['key'];
+
+            $entered = DB::table('agent_execution_logs as l')
+                ->leftJoin('agent_prompts as p', 'p.id', '=', 'l.agent_prompt_id')
+                ->select('l.agent_prompt_id', 'p.version', 'p.notes', DB::raw('COUNT(DISTINCT l.conversation_id) as entered'))
+                ->where('l.step', $stepNumber)
+                ->whereBetween('l.created_at', [$from, $to])
+                ->groupBy('l.agent_prompt_id', 'p.version', 'p.notes')
+                ->get();
+
+            $completed = DB::table('agent_execution_logs')
+                ->where('step', $stepNumber)
+                ->whereBetween('created_at', [$from, $to])
+                ->whereRaw('(state_changes->>?)::boolean = true', [$flag])
+                ->select('agent_prompt_id', DB::raw('COUNT(DISTINCT conversation_id) as completed'))
+                ->groupBy('agent_prompt_id')
+                ->get()
+                ->keyBy('agent_prompt_id');
+
+            $rows = $entered->map(function ($row) use ($completed): array {
+                $enteredCount = (int) $row->entered;
+                $completedRow = $completed->get($row->agent_prompt_id);
+                $completedCount = $completedRow ? (int) $completedRow->completed : 0;
+
+                return [
+                    'agent_prompt_id' => $row->agent_prompt_id,
+                    'version' => $row->version,
+                    'notes' => $row->notes,
+                    'entered' => $enteredCount,
+                    'completed' => $completedCount,
+                    'conversion' => $enteredCount > 0 ? round($completedCount / $enteredCount, 4) : 0.0,
+                ];
+            })
+                ->sortByDesc(fn (array $r): int => $r['version'] ?? -1)
+                ->values()
+                ->all();
+
+            $result[$stepNumber] = $rows;
+        }
+
+        return $result;
+    }
+
+    /**
      * Count negative annotations (verdict = false) per step.
      *
      * @return array<int, int>

@@ -14,6 +14,9 @@ use App\AI\Tools\CoveragePreferenceTool;
 use App\AI\Tools\GetQuoteTool;
 use App\AI\Tools\IdentifyCustomerTool;
 use App\AI\Tools\IdentifyVehicleTool;
+use App\AI\Tools\PresentQuoteOptionsTool;
+use App\AI\Tools\ProvideVehicleFactTool;
+use App\AI\Tools\RevertStageTool;
 use App\Models\AgentExecutionLog;
 use App\Models\AgentPrompt;
 use App\Models\Conversation;
@@ -35,7 +38,7 @@ class InsuranceOrchestrator
      * El estado se actualiza dentro de cada Tool al ejecutarse exitosamente,
      * por lo que en el próximo mensaje el orquestador derivará al siguiente agente.
      *
-     * @return array{text: string, agent: string, execution_log_ids: int[]}
+     * @return array{text: string, agent: string, execution_log_ids: int[], buttons: list<array{id: string, title: string}>|null}
      */
     public function handle(string $message, Conversation $conversation): array
     {
@@ -151,6 +154,7 @@ class InsuranceOrchestrator
                 'text' => $checkoutResponse->text,
                 'agent' => class_basename($checkoutAgent),
                 'execution_log_ids' => [$quoteLog->id, $checkoutLog->id],
+                'buttons' => $this->pullPendingInteractive($conversation),
             ];
         }
 
@@ -176,7 +180,28 @@ class InsuranceOrchestrator
             'text' => $response->text,
             'agent' => class_basename($agent),
             'execution_log_ids' => [$log->id],
+            'buttons' => $this->pullPendingInteractive($conversation),
         ];
+    }
+
+    /**
+     * Levanta y limpia los botones que una tool (ej. PresentQuoteOptionsTool)
+     * haya dejado pendientes en metadata durante este turno.
+     *
+     * @return list<array{id: string, title: string}>|null
+     */
+    private function pullPendingInteractive(Conversation $conversation): ?array
+    {
+        $conversation->refresh();
+        $meta = $conversation->metadata ?? [];
+        $buttons = data_get($meta, 'pending_interactive.buttons');
+
+        if ($buttons !== null) {
+            unset($meta['pending_interactive']);
+            $conversation->update(['metadata' => $meta]);
+        }
+
+        return $buttons;
     }
 
     /**
@@ -215,6 +240,21 @@ class InsuranceOrchestrator
         if ($result['success']) {
             $conversation->updateAiState(['customer_identified' => true]);
             $conversation->refresh();
+
+            // El customer recién creado por teléfono no tiene nombre; usar el
+            // profile name del webhook para que el saludo del primer turno sea personal.
+            $customer = $conversation->customer;
+            if ($customer && ! $customer->name) {
+                $senderName = $conversation->messages()
+                    ->where('direction', 'inbound')
+                    ->whereNotNull('sender_name')
+                    ->latest()
+                    ->value('sender_name');
+
+                if ($senderName) {
+                    $customer->update(['name' => $senderName]);
+                }
+            }
         }
     }
 
@@ -301,6 +341,9 @@ class InsuranceOrchestrator
     private function resolveAgent(array $state, Conversation $conversation): Agent&Conversational
     {
         $coverageTool = new CheckCoverageRuleTool;
+        // Disponible desde cobertura en adelante — no en CustomerIdentifier ni
+        // VehicleIdentifier, cuyas etapas no tienen una anterior a la que volver.
+        $revertTool = new RevertStageTool($this->adapter, $conversation);
 
         return match (true) {
             ! $state['customer_identified'] => new CustomerIdentifierAgent(
@@ -314,14 +357,19 @@ class InsuranceOrchestrator
             ! $state['coverage_set'] => new CoveragePreferenceAgent(
                 new CoveragePreferenceTool($this->adapter, $conversation),
                 $coverageTool,
+                new ProvideVehicleFactTool($this->adapter, $conversation),
+                $revertTool,
             ),
             ! $state['quote_ready'] => new QuoteAgent(
                 new GetQuoteTool($this->adapter, $conversation),
                 $coverageTool,
+                $revertTool,
             ),
             default => new CheckoutAgent(
                 new CheckoutTool($this->adapter, $conversation),
                 $coverageTool,
+                $revertTool,
+                new PresentQuoteOptionsTool($conversation),
             ),
         };
     }

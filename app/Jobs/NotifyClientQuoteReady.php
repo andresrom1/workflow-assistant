@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\AI\InsuranceOrchestrator;
 use App\Models\Conversation;
+use App\Models\Quote;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -52,6 +53,18 @@ class NotifyClientQuoteReady implements ShouldQueue
             return;
         }
 
+        // Si el cliente revirtió etapa (revert_to_stage) mientras esta cotización
+        // estaba en vuelo, quedó 'expired' — no tiene sentido presentarla.
+        $quote = Quote::find($this->quoteId);
+        if (! $quote || $quote->status === 'expired') {
+            Log::info('NotifyClientQuoteReady: quote inexistente o expirada, saliendo', [
+                'conversation_id' => $this->conversationId,
+                'quote_id' => $this->quoteId,
+            ]);
+
+            return;
+        }
+
         // Destinatario: teléfono si la conversación lo tiene; si es solo-BSUID,
         // external_conversation_id == ext_user_id (ambos el BSUID) → no hay teléfono.
         $bsuid = $conversation->ext_user_id;
@@ -74,7 +87,7 @@ class NotifyClientQuoteReady implements ShouldQueue
 
         $reply = $orchestrator->handle($trigger, $conversation);
 
-        SendWhatsAppMessage::dispatch($phone, $bsuid, $reply['text'], $phoneNumberId, $this->conversationId, $reply['agent'])
+        SendWhatsAppMessage::dispatch($phone, $bsuid, $reply['text'], $phoneNumberId, $this->conversationId, $reply['agent'], null, $reply['buttons'] ?? null)
             ->onQueue('whatsapp-outbound');
     }
 

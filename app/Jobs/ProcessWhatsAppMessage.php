@@ -49,14 +49,15 @@ class ProcessWhatsAppMessage implements ShouldQueue
         $type = MessageType::tryFrom($this->messageType) ?? MessageType::Text;
 
         // 2. Ignorar tipos no soportados aún.
-        if ($type !== MessageType::Text && $type !== MessageType::Audio) {
+        if (! in_array($type, [MessageType::Text, MessageType::Audio, MessageType::Interactive], true)) {
             Cache::put($cacheKey, true, now()->addDay());
 
             return;
         }
 
-        // 3. Guardar mensajes de texto vacíos como ingestados pero sin procesar.
-        if ($type === MessageType::Text && (trim($this->messageBody) === '' || $this->messageBody === '0')) {
+        // 3. Guardar mensajes de texto (o taps de botón, que llegan como texto) vacíos
+        //    como ingestados pero sin procesar.
+        if ($type !== MessageType::Audio && (trim($this->messageBody) === '' || $this->messageBody === '0')) {
             Cache::put($cacheKey, true, now()->addDay());
 
             return;
@@ -106,7 +107,7 @@ class ProcessWhatsAppMessage implements ShouldQueue
                 'conversation_id' => $conversation->id,
                 'direction' => 'inbound',
                 'type' => $type,
-                'content' => $type === MessageType::Text ? $this->messageBody : null,
+                'content' => $type !== MessageType::Audio ? $this->messageBody : null,
                 'sender_name' => $this->contactName,
                 'sender_phone' => $this->waId,
             ]
@@ -140,10 +141,10 @@ class ProcessWhatsAppMessage implements ShouldQueue
                 'attachment_id' => $attachment->id,
             ]);
         } else {
-            // 6b. Texto: despachar el inbox processor con delay de 2s (ventana de debounce).
+            // 6b. Texto: despachar el inbox processor con la ventana de debounce.
             ProcessConversationInbox::dispatch($conversation->id, $this->waId, $this->phoneNumberId)
                 ->onQueue('whatsapp-ai')
-                ->delay(now()->addSeconds(2));
+                ->delay(now()->addSeconds((int) config('whatsapp.inbox_debounce_seconds', 8)));
 
             Log::info('WhatsApp: mensaje ingestado', [
                 'wamid' => $this->messageId,

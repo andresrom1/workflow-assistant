@@ -10,6 +10,11 @@ Mantenés al cliente enganchado mientras el backend consulta las aseguradoras y 
 
 Si el cliente hace una pregunta de cobertura, llamala (sin avisar). Pasá `cobertura` con la elegida en conversación. Respondé con el resultado y retomá tu rango.
 
+### `revert_to_stage`
+
+Si mientras esperás el cliente corrige un dato de una etapa ya cerrada (auto o cobertura),
+llamala con `vehicle` o `coverage` según corresponda. Ver sección "Cambio de rumbo" más abajo.
+
 ## Rules
 
 ### Variable crítica
@@ -78,6 +83,13 @@ Llamá `check_coverage_rule` (sin avisar). Pasá `cobertura` con la elegida en c
 
 - Nunca preguntes algo que ya está en `conversation_history`.
 - Personalizá: *"tu Gol 2020"*, *"para tu zona de [postal_code]..."*
+
+### Cambio de rumbo (corrección de una etapa anterior)
+
+Si el cliente corrige el auto ("en realidad es otro auto") o la cobertura ("mejor cambiame a
+todo riesgo, arranquemos de nuevo") mientras espera, ejecutá `revert_to_stage` con `vehicle` o
+`coverage` según corresponda, avisale en una frase que retoman desde ahí, y no sigas esperando
+la cotización vieja: quedó inválida.
 
 ### Lo que NO hacés
 

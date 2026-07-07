@@ -61,7 +61,7 @@ class ProcessMediaAttachment implements ShouldQueue
 
             ProcessConversationInbox::dispatch($this->conversationId, $this->waId, $this->phoneNumberId)
                 ->onQueue('whatsapp-ai')
-                ->delay(now()->addSeconds(2));
+                ->delay(now()->addSeconds((int) config('whatsapp.inbox_debounce_seconds', 8)));
         } catch (\Throwable $e) {
             $attachment->update([
                 'processing_status' => 'failed',

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\AnalyzeConversationSemanticsJob;
+use App\Jobs\SendWhatsAppMessage;
 use App\Models\AgentExecutionLog;
 use App\Models\AgentExecutionLogAnnotation;
 use App\Models\AgentPrompt;
@@ -162,6 +163,7 @@ class ConversationController extends Controller
                 'last_semantic_analysis_at' => $conversation->last_semantic_analysis_at?->toIso8601String(),
                 'created_at' => $conversation->created_at->toIso8601String(),
                 'last_message_at' => $conversation->last_message_at->toIso8601String(),
+                'ai_paused' => $conversation->isAiPaused(),
             ],
             'semantic_analysis_enabled' => (bool) config('ai.semantic_analysis.enabled'),
             'active_prompt_ids_by_agent' => self::activePromptIdsByAgent(),
@@ -266,5 +268,51 @@ class ConversationController extends Controller
 
         return redirect()->route('admin.conversations.index')
             ->with('success', "Conversación de {$waId} archivada. Todo el contexto se conserva para auditoría. El próximo mensaje iniciará el flujo desde cero.");
+    }
+
+    /**
+     * Toma control humano de la conversación: la IA deja de responder a los
+     * mensajes entrantes hasta que un admin la reanude.
+     */
+    public function pauseAi(Conversation $conversation): RedirectResponse
+    {
+        $conversation->setAiPaused(true);
+
+        return back()->with('success', 'IA pausada. Los mensajes del cliente quedan para respuesta manual.');
+    }
+
+    /**
+     * Devuelve el control a la IA. El próximo turno incluye un resumen de lo
+     * intercambiado durante la pausa (ver ProcessConversationInbox::prependPauseTranscript).
+     */
+    public function resumeAi(Conversation $conversation): RedirectResponse
+    {
+        $conversation->setAiPaused(false);
+
+        return back()->with('success', 'IA reactivada.');
+    }
+
+    /**
+     * Envía un mensaje manual del asesor humano por el mismo pipeline outbound
+     * que usan los agentes. Pensado para usarse con la IA pausada.
+     */
+    public function sendManualMessage(Request $request, Conversation $conversation): RedirectResponse
+    {
+        $validated = $request->validate(['text' => 'required|string|max:4096']);
+
+        // Derivación phone/bsuid — mismo patrón que NotifyClientQuoteReady.
+        $bsuid = $conversation->ext_user_id;
+        $phone = $conversation->external_conversation_id === $bsuid ? null : $conversation->external_conversation_id;
+
+        SendWhatsAppMessage::dispatch(
+            $phone,
+            $bsuid,
+            $validated['text'],
+            config('services.whatsapp.phone_number_id'),
+            $conversation->id,
+            'human'
+        )->onQueue('whatsapp-outbound');
+
+        return back()->with('success', 'Mensaje enviado.');
     }
 }

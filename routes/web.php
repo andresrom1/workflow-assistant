@@ -182,6 +182,12 @@ Route::middleware(['auth'])->group(function () {
             ->name('conversations.reset');
         Route::post('/conversations/{conversation}/analyze-semantics', [ConversationController::class, 'analyzeSemantics'])
             ->name('conversations.analyze-semantics');
+        Route::post('/conversations/{conversation}/pause-ai', [ConversationController::class, 'pauseAi'])
+            ->name('conversations.pause-ai');
+        Route::post('/conversations/{conversation}/resume-ai', [ConversationController::class, 'resumeAi'])
+            ->name('conversations.resume-ai');
+        Route::post('/conversations/{conversation}/send-message', [ConversationController::class, 'sendManualMessage'])
+            ->name('conversations.send-message');
 
         Route::post('/execution-logs/{log}/annotations', [AgentExecutionLogAnnotationController::class, 'store'])
             ->name('execution-logs.annotations.store');

@@ -27,6 +27,9 @@ class SendWhatsAppMessage implements ShouldQueue
 
     public int $backoff = 10;
 
+    /**
+     * @param  list<array{id: string, title: string}>|null  $buttons
+     */
     public function __construct(
         private readonly ?string $phone,
         private readonly ?string $bsuid,
@@ -35,6 +38,7 @@ class SendWhatsAppMessage implements ShouldQueue
         private readonly ?int $conversationId = null,
         private readonly ?string $agentName = null,
         private readonly ?int $executionLogId = null,
+        private readonly ?array $buttons = null,
     ) {}
 
     public function handle(
@@ -45,6 +49,31 @@ class SendWhatsAppMessage implements ShouldQueue
     ): void {
         // Always send typing indicator before any response.
         $waService->sendTypingIndicator($this->phone, $this->bsuid, $this->phoneNumberId);
+
+        // Los botones fuerzan texto: sin modality decider ni TTS. Si el body excede
+        // el límite de un mensaje interactivo, se degrada a texto plano (con log).
+        if ($this->buttons !== null && $this->buttons !== []) {
+            if (mb_strlen($this->text) > 1024) {
+                Log::warning('WhatsApp: body > 1024 con botones pendientes — enviando texto plano', [
+                    'conversationId' => $this->conversationId,
+                    'length' => mb_strlen($this->text),
+                ]);
+            } else {
+                $waService->sendInteractiveButtons(
+                    $this->phone,
+                    $this->bsuid,
+                    $this->text,
+                    $this->buttons,
+                    $this->phoneNumberId,
+                    $this->conversationId,
+                    $this->agentName,
+                    config('ai.default'),
+                );
+                $this->linkLatestOutboundMessage();
+
+                return;
+            }
+        }
 
         $conversation = $this->conversationId
             ? Conversation::find($this->conversationId)

@@ -79,15 +79,13 @@
 
 ---
 
-## Vuln 5 — MEDIA: canal de broadcast `chat.{sessionUuid}` autoriza a cualquiera
+## Vuln 5 — MEDIA: canal de broadcast `chat.{sessionUuid}` autoriza a cualquiera — ✅ RESUELTO (2026-07-07)
 
-**Ubicación:** `routes/channels.php:9-11`
+**Estado:** Resuelto por eliminación. Con la deprecación de ChatKit y el **retiro de Laravel Reverb** (WhatsApp único canal), se eliminaron `routes/channels.php`, la conexión `reverb` de broadcasting y el evento `QuoteProcessed`. Ya no existe canal de broadcast que autorizar, así que la superficie de esta vulnerabilidad desapareció. Ver `ROADMAP.md` (Bitácora 2026-07-07).
 
-**Descripción:** El callback de autorización del canal privado retorna `true` incondicionalmente. Cualquier usuario autenticado puede suscribirse a la sesión de chat de cualquier otro conociendo el `sessionUuid`, y recibir los resultados de cotización broadcasteados.
+**Ubicación (histórica):** `routes/channels.php:9-11` (archivo eliminado)
 
-**Escenario de explotación:** Un usuario del panel se suscribe a `chat.{uuid}` de otra sesión y escucha en tiempo real las cotizaciones y datos que se emiten por ese canal. El UUID mitiga el guessing, pero la autorización no verifica pertenencia.
-
-**Acción correctiva:** Verificar que el usuario/sesión tenga relación legítima con `sessionUuid` (p. ej. que sea el dueño de la conversación) en vez de `return true`.
+**Descripción:** El callback de autorización del canal privado retornaba `true` incondicionalmente. Cualquier usuario autenticado podía suscribirse a la sesión de chat de cualquier otro conociendo el `sessionUuid`, y recibir los resultados de cotización broadcasteados.
 
 ---
 

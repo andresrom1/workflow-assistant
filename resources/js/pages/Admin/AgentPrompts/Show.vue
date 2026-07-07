@@ -292,6 +292,17 @@
                 </button>
 
                 <button
+                  v-if="v.parent_version_id"
+                  @click="toggleDiff(v.id)"
+                  class="text-[11px] px-2.5 py-1 rounded-[7px] transition-all"
+                  style="color: var(--text-3); border: 1px solid var(--border);"
+                  @mouseenter="e => (e.currentTarget as HTMLElement).style.color = 'var(--text-1)'"
+                  @mouseleave="e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'"
+                >
+                  {{ diffTargetId === v.id ? 'Ocultar diff' : 'Ver diff' }}
+                </button>
+
+                <button
                   v-if="!v.is_active"
                   @click="restoreVersion(v)"
                   class="text-[11px] px-2.5 py-1 rounded-[7px] font-medium transition-all"
@@ -320,6 +331,28 @@
                   style="background: #0d1117; color: #e6edf3; max-height: 300px; overflow-y: auto;">
                   <pre class="whitespace-pre-wrap">{{ v.content }}</pre>
                 </div>
+              </div>
+            </Transition>
+
+            <!-- Acordeón: diff contra la versión padre -->
+            <Transition name="accordion">
+              <div v-if="diffTargetId === v.id" class="px-5 pb-4">
+                <div v-if="diffParts" class="rounded-[10px] p-4 font-mono text-[12px] leading-relaxed overflow-x-auto"
+                  style="background: #0d1117; max-height: 400px; overflow-y: auto;">
+                  <pre
+                    v-for="(part, idx) in diffParts"
+                    :key="idx"
+                    class="whitespace-pre-wrap m-0"
+                    :style="part.added
+                      ? 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);'
+                      : part.removed
+                        ? 'background: var(--badge-danger-bg); color: var(--badge-danger-txt);'
+                        : 'color: #8b949e;'"
+                  >{{ part.value }}</pre>
+                </div>
+                <p v-else class="text-[11px]" style="color: var(--text-3);">
+                  Sin versión padre registrada para comparar.
+                </p>
               </div>
             </Transition>
           </div>
@@ -473,6 +506,7 @@
 import { ref, computed, reactive } from 'vue'
 import { usePage, router } from '@inertiajs/vue3'
 import { marked } from 'marked'
+import { diffLines, type Change } from 'diff'
 import BackLink from '@/components/UI/BackLink.vue'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -671,6 +705,24 @@ const toggleExpanded = (id: number) => {
     expanded.add(id)
   }
 }
+
+// ─── Diff entre versiones ────────────────────────────────────────────────────
+
+const diffTargetId = ref<number | null>(null)
+const versionsById = computed(() => new Map(props.versions.map(v => [v.id, v])))
+
+const toggleDiff = (id: number) => {
+  diffTargetId.value = diffTargetId.value === id ? null : id
+}
+
+const diffParts = computed<Change[] | null>(() => {
+  if (diffTargetId.value === null) return null
+  const target = versionsById.value.get(diffTargetId.value)
+  if (!target?.parent_version_id) return null
+  const parent = versionsById.value.get(target.parent_version_id)
+  if (!parent) return null
+  return diffLines(parent.content, target.content)
+})
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

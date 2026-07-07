@@ -12,7 +12,7 @@ use Log;
 class MessageModalityDecider
 {
     /** Agents whose responses should never be sent as audio. */
-    private const TEXT_ONLY_AGENTS = ['QuoteAgent', 'CheckoutAgent'];
+    private const TEXT_ONLY_AGENTS = ['QuoteAgent', 'CheckoutAgent', 'human', 'followup'];
 
     /** Minimum word count to be eligible for audio. */
     private const MIN_WORDS = 15;

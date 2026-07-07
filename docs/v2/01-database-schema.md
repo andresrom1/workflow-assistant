@@ -4,7 +4,7 @@
 > **Generado a partir del schema vivo** (`database-schema`). Refleja el estado tras la salida de `pas_mobile`/`pas-web` y la entrada de `mango-mobile` + Visred API.
 >
 > **Convención de canal:** cada grupo indica qué sub-proyecto escribe/lee esas tablas.
-> Canales posibles: `openai_chatkit`, `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
+> Canales posibles: `openai_chatkit` (deprecado, sunset 30-nov-2026), `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
 
 ---
 

@@ -1,7 +1,7 @@
 <?php
 
 use App\Contracts\QuotationProvider;
-use App\Events\QuoteProcessed;
+use App\Jobs\NotifyClientQuoteReady;
 use App\Models\Conversation;
 use App\Models\Quote;
 use App\Models\RiskProviderRef;
@@ -11,8 +11,8 @@ use App\Services\Visred\VisredQuotationProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
 
 uses(RefreshDatabase::class);
@@ -323,7 +323,7 @@ it('descarta placeholders (sin nombre) pero conserva las active=false vendibles'
 });
 
 it('E2E: ApiQuoteResolution con Visred real persiste alternativas + provider ref', function () {
-    Event::fake([QuoteProcessed::class]);
+    Queue::fake([NotifyClientQuoteReady::class]);
 
     Http::fake([
         COMPANIES_URL => companiesResponse(),
@@ -356,5 +356,5 @@ it('E2E: ApiQuoteResolution con Visred real persiste alternativas + provider ref
         ->and($quote->alternatives->pluck('aseguradora')->unique()->all())->toBe(['Sancor'])
         ->and($quote->providerRef->external_quote_id)->toBe('9001'); // quotation_result_id de la 1ra alt
 
-    Event::assertDispatched(QuoteProcessed::class);
+    Queue::assertPushed(NotifyClientQuoteReady::class);
 });

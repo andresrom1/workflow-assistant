@@ -76,17 +76,24 @@ class WhatsAppWebhookController extends Controller
             if ($messageId && ($waId || $extUserId) && $waId !== $phoneNumberId) {
                 $messageType = data_get($message, 'type', 'text');
 
+                // Un tap de botón/lista llega como texto normal para el pipeline (el agente
+                // lo recibe como si el cliente lo hubiese escrito); el id del botón no se usa.
+                $messageBody = $messageType === 'interactive'
+                    ? (data_get($message, 'interactive.button_reply.title')
+                        ?? data_get($message, 'interactive.list_reply.title', ''))
+                    : data_get($message, 'text.body', '');
+
                 ProcessWhatsAppMessage::dispatch(
                     $waId,
-                    data_get($message, 'text.body', ''),
+                    $messageBody,
                     $messageId,
                     $phoneNumberId,
                     data_get($contact, 'profile.name', 'Usuario'),
                     $messageType,
                     $extUserId,
                     $extUsername,
-                    data_get($message, "{$messageType}.id"),
-                    data_get($message, "{$messageType}.mime_type"),
+                    $messageType === 'interactive' ? null : data_get($message, "{$messageType}.id"),
+                    $messageType === 'interactive' ? null : data_get($message, "{$messageType}.mime_type"),
                 );
             }
         }

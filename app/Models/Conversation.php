@@ -138,6 +138,29 @@ class Conversation extends Model
         $this->update($updates);
     }
 
+    // =========================================================================
+    // Takeover humano
+    // =========================================================================
+
+    public function isAiPaused(): bool
+    {
+        return (bool) data_get($this->metadata, 'ai_paused', false);
+    }
+
+    /**
+     * Pausa/reanuda la IA para esta conversación (takeover humano desde el admin).
+     * Guarda el timestamp de la transición para poder inyectar un resumen de lo
+     * ocurrido durante la pausa en el próximo turno de la IA al reanudar.
+     */
+    public function setAiPaused(bool $paused): void
+    {
+        $meta = $this->metadata ?? [];
+        $meta['ai_paused'] = $paused;
+        $meta[$paused ? 'ai_paused_at' : 'ai_resumed_at'] = now()->toIso8601String();
+
+        $this->update(['metadata' => $meta]);
+    }
+
     /**
      * Guarda el identificador externo de usuario (ej: BSUID) y el username externo.
      * Solo actualiza un campo si aún está vacío — no sobreescribe un BSUID ya guardado.

@@ -2,6 +2,13 @@
 
 Este proyecto es un asistente inteligente diseñado para automatizar y agilizar el proceso de cotización y emisión de seguros, integrando inteligencia artificial con flujos de trabajo robustos en el backend.
 
+> **Canal activo: WhatsApp (Meta Cloud API).** El chat web sobre OpenAI ChatKit / Agent Builder
+> queda **deprecado** — OpenAI discontinúa Agent Builder a más tardar el **30-nov-2026**. Por eso
+> el asistente opera **solo por WhatsApp** por el momento, la **landing pública de marca (MANGO)**
+> ahora vive en este proyecto (`/` → `Landing/Index.vue`), y **Laravel Reverb fue retirado**: no hay
+> cliente web que consuma broadcasts, la entrega asíncrona de cotizaciones va por el pipeline de
+> jobs de WhatsApp (`NotifyClientQuoteReady` → `SendWhatsAppMessage`).
+
 ## 🚀 Funcionalidades Implementadas
 
 ### 1. Asistente Basado en IA (Agente)
@@ -25,8 +32,8 @@ Este proyecto es un asistente inteligente diseñado para automatizar y agilizar 
 ### 5. Preferencias de Cobertura
 - **Captura de Preferencias**: Permite al usuario (a través de la IA) definir qué tipo de cobertura desea, lo cual se persiste para refinar el match con las alternativas generadas.
 
-### 6. Infraestructura y Tiempo Real
-- **Broadcasting (Reverb)**: Notificaciones en tiempo real al frontend cuando las cotizaciones asíncronas son procesadas y están listas.
+### 6. Infraestructura Asíncrona
+- **Entrega asíncrona de cotizaciones**: cuando las alternativas están listas, `NotifyClientQuoteReady` reingresa al orquestador y despacha la respuesta por WhatsApp (`SendWhatsAppMessage`). Sin WebSockets: el canal es WhatsApp, no un frontend web en vivo.
 - **Arquitectura Basada en Trabajos (Jobs)**: Uso intensivo de colas para procesos pesados, garantizando una respuesta rápida al usuario.
 
 ### 7. Herramientas de Desarrollo
@@ -52,7 +59,7 @@ Este proyecto es un asistente inteligente diseñado para automatizar y agilizar 
 - **`finalize-policy`**: Cierre del ciclo de venta con la generación y envío de la póliza digital al cliente.
 
 ### 6. Soporte Multi-canal Avanzado
-- **WhatsApp**: Integrado vía Meta WhatsApp Cloud API nativa (webhook + pipeline de jobs), con paridad de funciones con el chat web. Telegram queda como canal futuro.
+- **WhatsApp**: canal activo, integrado vía Meta WhatsApp Cloud API nativa (webhook + pipeline de jobs). El chat web (OpenAI ChatKit) queda deprecado por el sunset de Agent Builder; Telegram queda como canal futuro.
 
 ---
 
@@ -60,6 +67,5 @@ Este proyecto es un asistente inteligente diseñado para automatizar y agilizar 
 - **Backend**: Laravel 11.x (PHP 8.3+)
 - **IA**: OpenAI API (con Assistant API o Tool Calling)
 - **Base de Datos**: PostgreSQL / MySQL
-- **Tiempo Real**: Laravel Reverb
 - **Colas**: Redis / Database Queue
 - **Integraciones**: Meta WhatsApp Cloud API (canal de mensajería)

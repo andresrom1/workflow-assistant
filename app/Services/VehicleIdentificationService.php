@@ -46,8 +46,11 @@ class VehicleIdentificationService
 
     /**
      * Actualiza un vehículo existente aplicando política de actualización.
-     * Actualizamos: Dueño, CP, Versión, Combustible, Marca y Modelo.
-     * Inmutable: Año (Preservamos la integridad temporal del registro).
+     * Actualizamos todos los datos del vehículo declarado ahora: Dueño, CP,
+     * Versión, Combustible, Marca, Modelo y Año. Cuando la misma patente se
+     * re-apunta a otro auto, el año viejo rompería la resolución de catálogo
+     * (match exacto por año en VisredQuotabilityResolver), así que refleja
+     * siempre el auto que el cliente declara en esta conversación.
      *
      * @param  Vehicle  $vehicle  El vehículo a actualizar
      * @param  Customer  $newOwner  El nuevo dueño del vehículo
@@ -62,6 +65,7 @@ class VehicleIdentificationService
             'version' => $data['version'],       // Refinamiento de versión
             'marca' => $data['marca'],           // Corrección de marca
             'modelo' => $data['modelo'],         // Corrección de modelo
+            'year' => $data['year'],             // Año declarado ahora (gate de catálogo)
         ];
 
         // Normalizamos combustible y lo actualizamos (ej: el usuario agregó GNC)

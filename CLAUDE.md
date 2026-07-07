@@ -14,7 +14,6 @@ This application is a Laravel application and its main Laravel ecosystems packag
 - laravel/ai (AI) - v0
 - laravel/framework (LARAVEL) - v12
 - laravel/prompts (PROMPTS) - v0
-- laravel/reverb (REVERB) - v1
 - laravel/sanctum (SANCTUM) - v4
 - laravel/boost (BOOST) - v2
 - laravel/mcp (MCP) - v0
@@ -24,7 +23,6 @@ This application is a Laravel application and its main Laravel ecosystems packag
 - phpunit/phpunit (PHPUNIT) - v11
 - @inertiajs/vue3 (INERTIA_VUE) - v2
 - vue (VUE) - v3
-- laravel-echo (ECHO) - v2
 - tailwindcss (TAILWINDCSS) - v4
 
 ## Skills Activation
@@ -124,7 +122,7 @@ class MyTool implements Tool
 ```
 Webhook → ProcessWhatsAppMessage (default)
                ↓ persiste mensaje con processed_at=null
-               ↓ dispatch con delay 2s
+               ↓ dispatch con delay = config('whatsapp.inbox_debounce_seconds') (8s)
           ProcessConversationInbox (whatsapp-ai)
                ↓ agrupa todos los mensajes pendientes
                ↓ concatena con \n → una sola llamada al AI
@@ -143,7 +141,7 @@ Webhook → ProcessWhatsAppMessage (default)
 
 **Regla crítica:** `processed_at` se setea ANTES de llamar al AI. Si el job falla y reintenta, encuentra el inbox vacío y sale limpiamente — evita doble llamada al LLM con los mismos mensajes.
 
-**Debounce:** El inbox processor se despacha con `->delay(now()->addSeconds(2))`. Si llegan 3 mensajes en 1 segundo, los 3 jobs de ingesta terminan antes de que el primer inbox processor corra, y este los agrupa todos.
+**Debounce:** El inbox processor se despacha con `->delay(now()->addSeconds(config('whatsapp.inbox_debounce_seconds')))` (8s por defecto, tuneable por `WHATSAPP_INBOX_DEBOUNCE_SECONDS`). Si llegan varios mensajes dentro de la ventana, los jobs de ingesta terminan antes de que el primer inbox processor corra, y este los agrupa todos. Muy corto → dos mensajes tipeados con pocos segundos de diferencia disparan dos llamadas al LLM y respuestas que se pisan.
 
 ### Idempotencia
 Use the `wamid` (WhatsApp message ID) as cache key: `processed_wamid_{wamid}`.

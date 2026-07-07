@@ -15,11 +15,25 @@
             {{ channelLabel(conversation.channel) }}
           </span>
         </div>
-        <span class="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
-          :style="statusStyle(conversation.status)">
-          <span class="w-1.5 h-1.5 rounded-full" :style="statusDot(conversation.status)"></span>
-          {{ conversation.status }}
-        </span>
+        <div class="flex items-center gap-2">
+          <span v-if="conversation.ai_paused"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
+            style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);">
+            ⏸ IA pausada
+          </span>
+          <span class="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
+            :style="statusStyle(conversation.status)">
+            <span class="w-1.5 h-1.5 rounded-full" :style="statusDot(conversation.status)"></span>
+            {{ conversation.status }}
+          </span>
+          <button type="button" @click="takeoverModalOpen = true"
+            class="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors"
+            :style="conversation.ai_paused
+              ? 'background: var(--accent-100); color: var(--dot-accent);'
+              : 'background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);'">
+            {{ conversation.ai_paused ? 'Devolver a la IA' : 'Tomar control' }}
+          </button>
+        </div>
       </div>
 
       <!-- Identidad + pipeline -->
@@ -236,8 +250,14 @@
                   'msg-highlight': highlightedOutboundId === msg.id,
                   'msg-hover': highlightedOutboundId !== msg.id && hoveredMsgIds.has(msg.id),
                 }"
-                style="background: var(--accent-100); border: 1px solid var(--accent-200, var(--border));">
-                <div v-if="msg.agent_name" class="flex items-center gap-1.5 mb-1">
+                :style="msg.agent_name === 'human'
+                  ? 'background: var(--bg-card); border: 1.5px solid var(--accent-600);'
+                  : 'background: var(--accent-100); border: 1px solid var(--accent-200, var(--border));'">
+                <div v-if="msg.agent_name === 'human'" class="flex items-center gap-1.5 mb-1">
+                  <span class="w-2 h-2 rounded-full flex-shrink-0" style="background: var(--accent-600);"></span>
+                  <p class="text-[10px] font-semibold" style="color: var(--accent-600);">Asesor</p>
+                </div>
+                <div v-else-if="msg.agent_name" class="flex items-center gap-1.5 mb-1">
                   <span class="w-2 h-2 rounded-full flex-shrink-0" :style="{ background: agentColor(msg.agent_name) }"></span>
                   <p class="text-[10px] font-semibold" :style="{ color: agentColor(msg.agent_name) }">
                     {{ agentShortName(msg.agent_name) }}
@@ -255,6 +275,20 @@
                 </div>
               </div>
             </div>
+          </div>
+
+          <!-- Composer manual — solo con IA pausada -->
+          <div v-if="conversation.ai_paused" class="p-3 border-t" style="border-color: var(--border); background: var(--bg-raised);">
+            <form @submit.prevent="sendManualMessage" class="flex items-end gap-2">
+              <textarea v-model="manualMessageForm.text" rows="2" placeholder="Escribí como asesor…"
+                class="flex-1 text-sm px-3 py-2 rounded-lg outline-none resize-none"
+                style="background: var(--bg-card); color: var(--text-1); border: 1px solid var(--border);"></textarea>
+              <button type="submit" :disabled="manualMessageForm.processing || !manualMessageForm.text.trim()"
+                class="px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40"
+                style="background: var(--accent-600); color: white;">
+                Enviar
+              </button>
+            </form>
           </div>
         </div>
 
@@ -569,6 +603,45 @@
     </div>
   </div>
 
+  <!-- Modal de confirmación de takeover -->
+  <Transition name="fade">
+    <div v-if="takeoverModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-black/50" @click="takeoverModalOpen = false" />
+      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
+           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">
+          {{ conversation.ai_paused ? '¿Devolver el control a la IA?' : '¿Tomar control de la conversación?' }}
+        </h3>
+        <p class="text-sm mb-5" style="color: var(--text-2);">
+          <template v-if="conversation.ai_paused">
+            La IA vuelve a responder los próximos mensajes del cliente. Va a recibir un resumen de lo que se conversó durante la pausa.
+          </template>
+          <template v-else>
+            La IA deja de responder al cliente hasta que reactives el flujo. Vas a poder escribirle vos directamente desde este panel.
+          </template>
+        </p>
+        <div class="flex justify-end gap-2">
+          <button
+            @click="takeoverModalOpen = false"
+            class="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="confirmToggleTakeover"
+            class="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+            :style="conversation.ai_paused
+              ? 'background: var(--accent-100); color: var(--dot-accent);'
+              : 'background: var(--badge-danger-bg); color: var(--badge-danger-txt);'"
+          >
+            {{ conversation.ai_paused ? 'Devolver a la IA' : 'Tomar control' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
   <PromptSlideOver
     :open="promptSlideOverOpen"
     :prompt-id="promptSlideOverId"
@@ -579,7 +652,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
-import { Link, router } from '@inertiajs/vue3'
+import { Link, router, useForm, usePoll } from '@inertiajs/vue3'
 import AgentFlowGraph from '@/components/AgentFlowGraph.vue'
 import BackLink from '@/components/UI/BackLink.vue'
 import PromptSlideOver from '@/components/PromptSlideOver.vue'
@@ -665,6 +738,7 @@ const props = defineProps<{
     last_semantic_analysis_at: string | null
     created_at: string
     last_message_at: string
+    ai_paused: boolean
   }
   semantic_analysis_enabled: boolean
   active_prompt_ids_by_agent: Record<string, number>
@@ -1067,4 +1141,42 @@ const reanalyzeSemantics = () => {
     },
   )
 }
+
+// ── Takeover humano ──
+
+const takeoverModalOpen = ref(false)
+
+const confirmToggleTakeover = () => {
+  const action = props.conversation.ai_paused ? 'resume-ai' : 'pause-ai'
+  router.post(`/admin/conversations/${props.conversation.id}/${action}`, {}, {
+    preserveScroll: true,
+    preserveState: true,
+    only: ['conversation'],
+  })
+  takeoverModalOpen.value = false
+}
+
+const manualMessageForm = useForm({ text: '' })
+
+const sendManualMessage = () => {
+  manualMessageForm.post(`/admin/conversations/${props.conversation.id}/send-message`, {
+    preserveScroll: true,
+    only: ['messages', 'conversation'],
+    onSuccess: () => { manualMessageForm.reset('text') },
+  })
+}
+
+// ── Refresh automático mientras la conversación está viva ──
+
+const { start: startPoll, stop: stopPoll } = usePoll(
+  5000,
+  { only: ['messages', 'executions', 'conversation'] },
+  { autoStart: false },
+)
+
+watch(
+  () => props.conversation.status !== 'completed' && props.conversation.status !== 'archived',
+  (isLive) => { isLive ? startPoll() : stopPoll() },
+  { immediate: true },
+)
 </script>

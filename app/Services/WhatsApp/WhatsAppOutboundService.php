@@ -2,6 +2,7 @@
 
 namespace App\Services\WhatsApp;
 
+use App\Enums\MessageType;
 use App\Exceptions\WhatsAppSpamLimitException;
 use App\Models\Message;
 use Illuminate\Support\Facades\Http;
@@ -194,6 +195,52 @@ class WhatsAppOutboundService
         }
 
         return null;
+    }
+
+    /**
+     * Envía un mensaje interactivo con botones de respuesta rápida (máx. 3, título
+     * máx. 20 caracteres — límites de la Cloud API). Solo válido dentro de la
+     * ventana de 24h.
+     *
+     * @param  list<array{id: string, title: string}>  $buttons
+     * @return array<string, mixed>
+     */
+    public function sendInteractiveButtons(?string $phone, ?string $bsuid, string $bodyText, array $buttons, string $phoneNumberId, ?int $conversationId = null, ?string $agentName = null, ?string $aiProvider = null): array
+    {
+        $response = $this->post($phoneNumberId, [
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            ...$this->recipientPayload($phone, $bsuid),
+            'type' => 'interactive',
+            'interactive' => [
+                'type' => 'button',
+                'body' => ['text' => mb_substr($bodyText, 0, 1024)],
+                'action' => [
+                    'buttons' => array_map(
+                        static fn (array $b): array => [
+                            'type' => 'reply',
+                            'reply' => ['id' => $b['id'], 'title' => mb_substr($b['title'], 0, 20)],
+                        ],
+                        array_slice($buttons, 0, 3),
+                    ),
+                ],
+            ],
+        ]);
+
+        if ($conversationId && ! empty($response['messages'])) {
+            Message::create([
+                'conversation_id' => $conversationId,
+                'direction' => 'outbound',
+                'type' => MessageType::Interactive,
+                'agent_name' => $agentName,
+                'ai_provider' => $aiProvider,
+                'content' => $bodyText,
+                'external_message_id' => data_get($response, 'messages.0.id'),
+                'sender_phone' => $phoneNumberId,
+            ]);
+        }
+
+        return $response;
     }
 
     /**

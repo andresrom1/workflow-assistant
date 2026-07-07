@@ -4,6 +4,14 @@
 > (refleja el estado actual: salida de `pas_mobile`/`pas-web`, entrada de `mango-mobile`,
 > y la cotización/emisión vía **Visred API**). `docs/v1/` es **archivo histórico**.
 
+> **Deprecación del chat web (`openai_chatkit`) — 2026-07-07.** OpenAI discontinúa **Agent Builder**
+> a más tardar el **30-nov-2026**, así que el frontend web de ChatKit deja de tener continuidad.
+> El asistente opera **solo por WhatsApp** por el momento. Consecuencias ya aplicadas: la landing
+> pública de marca migró a este proyecto y **Laravel Reverb fue retirado** (sin cliente web no hay
+> broadcasts; la entrega asíncrona de cotizaciones va por el pipeline de jobs de WhatsApp). Las
+> referencias a `openai_chatkit` en esta doc quedan como **canal deprecado** — se conservan por ahora
+> como registro del rol que cumplía cada capa.
+
 ---
 
 > **¿Dónde estamos?** El estado de ejecución vive en [`../ROADMAP.md`](../ROADMAP.md) — fuente de verdad del avance y la deuda abierta.
@@ -17,7 +25,7 @@ Cambios estructurales respecto de v1:
 3. **`mango-mobile`** (app Flutter) entra: cartera, siniestro, contactos de emergencia, tracking en vivo y Cuenta Compartida.
 
 Canales consumidores que se usan como etiqueta en toda la doc:
-`openai_chatkit` · `mango-mobile` · `workflow-assistant` · `pas_mobile` *(legacy, extirpado)* · `pas-web` *(legacy, extirpado)*.
+`workflow-assistant` (WhatsApp, **canal activo**) · `mango-mobile` · `openai_chatkit` *(deprecado — sunset Agent Builder 30-nov-2026)* · `pas_mobile` *(legacy, extirpado)* · `pas-web` *(legacy, extirpado)*.
 
 ---
 
@@ -65,7 +73,7 @@ Canales consumidores que se usan como etiqueta en toda la doc:
 ## Capas de la arquitectura (recordatorio)
 
 ```
-Proveedor de IA (ChatKit / WhatsApp)
+Proveedor de IA (WhatsApp — ChatKit deprecado)
         ↓
    Adapter        ← único que conoce el canal
         ↓

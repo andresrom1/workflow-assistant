@@ -2,7 +2,7 @@
 
 > El Adapter es la **única capa que conoce el canal**: traduce tool-calls del proveedor de IA
 > a llamadas de Service, normaliza payloads y maneja errores del canal (Adapter → Service → Repo).
-> Canales: `openai_chatkit`, `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
+> Canales: `openai_chatkit` (deprecado, sunset 30-nov-2026), `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
 
 ---
 

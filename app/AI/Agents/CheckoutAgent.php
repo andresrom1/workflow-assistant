@@ -4,6 +4,8 @@ namespace App\AI\Agents;
 
 use App\AI\Tools\CheckCoverageRuleTool;
 use App\AI\Tools\CheckoutTool;
+use App\AI\Tools\PresentQuoteOptionsTool;
+use App\AI\Tools\RevertStageTool;
 use App\Models\AgentPrompt;
 use Laravel\Ai\Attributes\Model;
 use Laravel\Ai\Attributes\Timeout;
@@ -28,6 +30,8 @@ class CheckoutAgent implements Agent, Conversational, HasTools
     public function __construct(
         private readonly CheckoutTool $tool,
         private readonly CheckCoverageRuleTool $coverageTool,
+        private readonly RevertStageTool $revertStageTool,
+        private readonly PresentQuoteOptionsTool $presentQuoteOptionsTool,
     ) {}
 
     public function instructions(): Stringable|string
@@ -36,10 +40,10 @@ class CheckoutAgent implements Agent, Conversational, HasTools
     }
 
     /**
-     * @return array<CheckoutTool|CheckCoverageRuleTool>
+     * @return array<CheckoutTool|CheckCoverageRuleTool|RevertStageTool|PresentQuoteOptionsTool>
      */
     public function tools(): iterable
     {
-        return [$this->tool, $this->coverageTool];
+        return [$this->tool, $this->coverageTool, $this->revertStageTool, $this->presentQuoteOptionsTool];
     }
 }

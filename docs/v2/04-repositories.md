@@ -2,7 +2,7 @@
 
 > Capa de **acceso a datos**, agnóstica del canal (Adapter → Service → **Repo**).
 > Reciben/retornan modelos de dominio. Cada repo indica a qué canal sirve.
-> Canales: `openai_chatkit`, `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
+> Canales: `openai_chatkit` (deprecado, sunset 30-nov-2026), `pas_mobile` (legacy, extirpado), `pas-web` (legacy, extirpado), `mango-mobile`, `workflow-assistant`.
 
 ---
 
