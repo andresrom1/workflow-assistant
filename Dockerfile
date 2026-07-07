@@ -37,6 +37,10 @@ COPY --chown=root:root .docker/supervisord.conf /etc/supervisor/conf.d/superviso
 COPY --chown=root:root .docker/start.sh /start.sh
 RUN chmod +x /start.sh
 
+# 8b. php.ini de producción (límites de upload 100M para PDFs de aseguradoras).
+# Va en conf.d para sobrescribir los defaults de php:8.4-fpm-alpine (~2M).
+COPY --chown=root:root docker/prod/php.ini /usr/local/etc/php/conf.d/zz-prod.ini
+
 # Usuarios de servicios
 RUN sed -i 's/user = www-data/user = www/g' /usr/local/etc/php-fpm.d/www.conf \
  && sed -i 's/group = www-data/group = www/g' /usr/local/etc/php-fpm.d/www.conf \

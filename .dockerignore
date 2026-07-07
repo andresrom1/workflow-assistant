@@ -1,0 +1,43 @@
+# Evita hornear secretos y artefactos pesados en la imagen (el Dockerfile hace COPY . .).
+# El entorno se inyecta en runtime vía env_file de Compose, no dentro de la imagen.
+
+# Secretos / entorno
+.env
+.env.*
+!.env.example
+auth.json
+
+# Dependencias reconstruidas dentro de la imagen
+/vendor
+/node_modules
+
+# Certificados y almacenamiento privado (van en volumen persistente, no en la imagen)
+/storage/app/certs/*
+!/storage/app/certs/.gitkeep
+/storage/*.key
+/storage/logs/*
+/storage/pail
+
+# Git y herramientas de dev
+.git
+.github
+/.idea
+/.vscode
+/.zed
+/.fleet
+/.nova
+/.phpunit.cache
+/.phpstan-tmp
+/.rector-cache
+.phpunit.result.cache
+
+# Tests y docs no necesarios en runtime
+/tests
+*.log
+*.old
+Thumbs.db
+.DS_Store
+
+# Config local de Claude
+.claude/settings.local.json
+.claude/worktrees/

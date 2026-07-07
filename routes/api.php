@@ -57,20 +57,24 @@ Route::prefix('webhooks/whatsapp')->group(function () {
     Route::post('/', [WhatsAppWebhookController::class, 'handleIncoming']);
 });
 
-Route::prefix('dev')->group(function () {
+// Rutas de desarrollo/testing: NUNCA disponibles en producción.
+// Incluyen operaciones destructivas (clean-database, fresh-migrations).
+if (! app()->isProduction()) {
+    Route::prefix('dev')->group(function () {
 
-    // Ejecutar tests
-    Route::get('/run-tests', [TestingController::class, 'runTests']);
+        // Ejecutar tests
+        Route::get('/run-tests', [TestingController::class, 'runTests']);
 
-    // Estado de la BD
-    Route::get('/database-status', [TestingController::class, 'databaseStatus']);
+        // Estado de la BD
+        Route::get('/database-status', [TestingController::class, 'databaseStatus']);
 
-    // Limpiar BD
-    Route::post('/clean-database', [TestingController::class, 'cleanDatabase']);
+        // Limpiar BD
+        Route::post('/clean-database', [TestingController::class, 'cleanDatabase']);
 
-    // Info del sistema
-    Route::get('/system-info', [TestingController::class, 'systemInfo']);
+        // Info del sistema
+        Route::get('/system-info', [TestingController::class, 'systemInfo']);
 
-    // ⚠️ PELIGROSO: Solo habilitar si realmente lo necesitas
-    Route::post('/fresh-migrations', [TestingController::class, 'freshMigrations']);
-});
+        // ⚠️ PELIGROSO: Solo habilitar si realmente lo necesitas
+        Route::post('/fresh-migrations', [TestingController::class, 'freshMigrations']);
+    });
+}

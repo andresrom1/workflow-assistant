@@ -1,0 +1,19 @@
+# Reverse proxy con TLS automático (Let's Encrypt) para el backend.
+# {$DOMAIN} viene de .env.production (APP_DOMAIN). Requisito de Meta: el webhook
+# de WhatsApp debe ser HTTPS con certificado válido.
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	# Acompaña a client_max_body_size/upload_max_filesize (100M) para PDFs de aseguradoras.
+	request_body {
+		max_size 100MB
+	}
+
+	reverse_proxy app:80
+
+	log {
+		output stdout
+		format console
+	}
+}

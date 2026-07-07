@@ -1,0 +1,74 @@
+# Despliegue de producción (VM ARM Oracle Cloud Always Free).
+# Una sola fuente de entorno: .env.production (gitignored).
+#
+# Uso:
+#   docker compose --env-file .env.production -f compose.prod.yaml build
+#   docker compose --env-file .env.production -f compose.prod.yaml up -d
+#   docker compose --env-file .env.production -f compose.prod.yaml exec app php artisan migrate --force
+#
+# Secretos de archivo (certs AFIP, JSON de Firebase) se colocan en ./runtime/storage-app
+# en el VM (fuera de git y fuera de la imagen). Ver .env.production.example.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      # Almacenamiento privado persistente: certs AFIP, credenciales Firebase,
+      # y cualquier archivo del disco 'local'. Sobrevive a rebuilds de la imagen.
+      - ./runtime/storage-app:/var/www/storage/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Habilita la extensión pgvector en la primera inicialización (RAG de coberturas).
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Dominio para el TLS automático de Let's Encrypt.
+      DOMAIN: ${APP_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+    driver: bridge

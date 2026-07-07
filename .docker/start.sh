@@ -44,6 +44,26 @@ stopwaitsecs=3600
 stderr_logfile=/var/log/supervisor/worker-media-err.log
 stdout_logfile=/var/log/supervisor/worker-media-out.log
 stdout_logfile_maxbytes=1MB
+stderr_logfile_maxbytes=1MB
+
+[program:worker-documents]
+command=php artisan queue:work --queue=documents --sleep=5 --tries=3 --timeout=300 --max-time=3600
+autostart=true
+autorestart=true
+stopwaitsecs=3600
+stderr_logfile=/var/log/supervisor/worker-documents-err.log
+stdout_logfile=/var/log/supervisor/worker-documents-out.log
+stdout_logfile_maxbytes=1MB
+stderr_logfile_maxbytes=1MB
+
+[program:scheduler]
+command=php artisan schedule:work
+autostart=true
+autorestart=true
+stopwaitsecs=60
+stderr_logfile=/var/log/supervisor/scheduler-err.log
+stdout_logfile=/var/log/supervisor/scheduler-out.log
+stdout_logfile_maxbytes=1MB
 stderr_logfile_maxbytes=1MB" > /etc/supervisor/conf.d/laravel-worker.conf
 
 # 2. Migraciones (Producción)
