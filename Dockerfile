@@ -1,10 +1,18 @@
+# Stage 1: Build Vite assets con Node
+FROM node:22-alpine AS node-build
+WORKDIR /var/www
+COPY package.json package-lock.json* ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+# Stage 2: App PHP
 FROM php:8.4-fpm-alpine
 
 # 1. Crear usuario antes que nada
 RUN addgroup -g 1000 www && adduser -u 1000 -G www -s /bin/sh -D www
 
 # 2. Dependencias del sistema
-#RUN apk add --no-cache \ # Vammos a probar si al cachear se despliega mas rapido
 RUN apk add --no-cache \
 nginx supervisor curl zip unzip git sqlite libzip-dev linux-headers postgresql-dev \
 && docker-php-ext-install pdo pdo_mysql pdo_pgsql pcntl zip
@@ -19,7 +27,10 @@ RUN chown www:www /var/www
 # Cambiamos owner ANTES de copiar
 COPY --chown=www:www . .
 
-# 5. Instalar dependencias de Laravel (ya como www)
+# 5. Assets Vite compilados desde el stage de Node
+COPY --chown=www:www --from=node-build /var/www/public/build /var/www/public/build
+
+# 6. Instalar dependencias de Laravel (ya como www)
 USER www
 RUN composer install --no-dev --optimize-autoloader --no-scripts
 
