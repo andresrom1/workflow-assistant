@@ -55,7 +55,9 @@ COPY --chown=root:root docker/prod/php.ini /usr/local/etc/php/conf.d/zz-prod.ini
 # Usuarios de servicios
 RUN sed -i 's/user = www-data/user = www/g' /usr/local/etc/php-fpm.d/www.conf \
  && sed -i 's/group = www-data/group = www/g' /usr/local/etc/php-fpm.d/www.conf \
- && sed -i 's/user nginx;/user www;/g' /etc/nginx/nginx.conf
+ && sed -i 's/user nginx;/user www;/g' /etc/nginx/nginx.conf \
+ && chown -R www:www /var/lib/nginx \
+ && chown -R www:www /var/log/nginx
 
 EXPOSE 80
 CMD ["/start.sh"]
