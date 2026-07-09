@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Mobile;
 
 use App\Contracts\WhatsAppDispatcher;
 use App\Enums\PolizaEstado;
-use App\Enums\UserRole;
 use App\Exceptions\Api\ApiException;
 use App\Http\Controllers\Controller;
 use App\Models\MobileAccount;
@@ -104,8 +103,7 @@ class SiniestroController extends Controller
             return null;
         }
 
-        return User::query()
-            ->where('role', UserRole::Pas)
+        return User::pas()
             ->where('email', $email)
             ->first();
     }

@@ -12,9 +12,9 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
- * Usuario del admin panel (Breeze, sesión cookie). Cuando role=pas, también
- * representa al Productor Asesor de Seguros: su perfil (matrícula, teléfono,
- * avatar) vive en `metadata` JSONB.
+ * Usuario del admin panel (Breeze, sesión cookie). Cuando role=pas —o role=admin,
+ * que por jerarquía es un superset del PAS— también representa al Productor Asesor
+ * de Seguros: su perfil (matrícula, teléfono, avatar) vive en `metadata` JSONB.
  *
  * No tiene nada que ver con la identidad de la app móvil: esa identidad vive
  * en App\Models\MobileAccount.
@@ -64,15 +64,19 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->role === UserRole::Admin;
     }
 
+    /**
+     * Un admin actúa como PAS: su jerarquía es superior, así que puede ser el
+     * productor asignado a un cliente y el destino por default del siniestro.
+     */
     public function isPas(): bool
     {
-        return $this->role === UserRole::Pas;
+        return $this->role === UserRole::Pas || $this->role === UserRole::Admin;
     }
 
     /** @param  Builder<self>  $query */
     public function scopePas(Builder $query): void
     {
-        $query->where('role', UserRole::Pas);
+        $query->whereIn('role', [UserRole::Pas, UserRole::Admin]);
     }
 
     public function pasMatricula(): ?string

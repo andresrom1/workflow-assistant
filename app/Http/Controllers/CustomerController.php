@@ -178,7 +178,7 @@ class CustomerController extends Controller
                 'pas_id' => $customer->pas_id,
                 'notes' => $customer->metadata['notes'] ?? '',
             ],
-            'pasUsers' => User::where('role', 'pas')->orderBy('name')->get(['id', 'name']),
+            'pasUsers' => User::pas()->orderBy('name')->get(['id', 'name']),
             'taxConditions' => $catalog->taxConditions(),
         ]);
     }

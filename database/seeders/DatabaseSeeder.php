@@ -15,9 +15,10 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
+            // AdminUserSeeder crea el user admin, que por jerarquía es también el
+            // PAS por default asignado a los clientes (ver CustomerSeeder).
             AdminUserSeeder::class,
             AgentPromptSeeder::class,
-            MobilePasSeeder::class,
             CustomerSeeder::class,
             MobileRiskSeeder::class,
         ]);

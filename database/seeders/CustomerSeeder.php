@@ -10,8 +10,8 @@ use Illuminate\Database\Seeder;
  * Seed de tomadores (Customer) — fixtures fijos + 1 opcional con tu email
  * OAuth real para testear claim end-to-end.
  *
- * Cada Customer queda con `pas_id` apuntando al PAS sembrado por
- * MobilePasSeeder (modelo "asesor dedicado": un PAS por cliente).
+ * Cada Customer queda con `pas_id` apuntando al user admin, que por jerarquía
+ * actúa como PAS (modelo "asesor dedicado": un PAS por cliente).
  *
  * Para probar el flujo end-to-end con login real, definí en .env:
  *   MANGO_DEV_CUSTOMER_EMAIL=tu-email@gmail.com  (el mismo que tu OAuth)
@@ -21,7 +21,10 @@ class CustomerSeeder extends Seeder
 {
     public function run(): void
     {
-        $pas = User::pas()->first();
+        // El PAS por default es el operador admin sembrado por AdminUserSeeder
+        // (resuelto por email, no por `pas()->first()`, para no depender del orden
+        // de PKs cuando hay varios users pas/admin).
+        $pas = User::where('email', AdminUserSeeder::EMAIL)->first();
         $pasId = $pas?->id;
 
         $fixtures = [
@@ -60,6 +63,12 @@ class CustomerSeeder extends Seeder
                     'completed_at' => now(),
                 ],
             );
+        }
+
+        // Garantía: TODO customer queda con PAS asignado por default (incluye los
+        // creados fuera de este seed, p. ej. por chat/checkout antes de sembrar).
+        if ($pasId !== null) {
+            Customer::whereNull('pas_id')->update(['pas_id' => $pasId]);
         }
     }
 }

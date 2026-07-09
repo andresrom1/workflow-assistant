@@ -20,7 +20,7 @@ use Illuminate\Support\Str;
  * además de tus propias pólizas vas a ver el Honda de Tomás como "Cuenta
  * Compartida" en tu Home.
  *
- * Depende de: MobilePasSeeder + CustomerSeeder.
+ * Depende de: CustomerSeeder.
  */
 class MobileRiskSeeder extends Seeder
 {
