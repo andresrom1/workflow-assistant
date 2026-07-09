@@ -7,13 +7,10 @@
     aria-label="MANGO Insurance Broker"
     xmlns="http://www.w3.org/2000/svg"
   >
-    <!-- Isotipo: fruta mango -->
-    <path class="ml-stem" d="M44,17 C44,12 46,7 50,5" />
-    <path class="ml-leaf" d="M44,16 C48,8 62,6 64,12 C57,15 49,16 44,16 Z" />
-    <path
-      class="ml-fruit"
-      d="M44,22 C56,17 69,22 72,35 C76,48 71,67 62,77 C53,87 38,90 27,83 C16,76 13,61 16,47 C19,33 30,27 44,22 Z"
-    />
+    <!-- Isotipo: fruta mango (geometría compartida con MangoFruit.vue) -->
+    <path class="ml-stem" :d="MANGO_STEM" />
+    <path class="ml-leaf" :d="MANGO_LEAF" />
+    <path class="ml-fruit" :d="MANGO_FRUIT" />
 
     <!-- Wordmark -->
     <text class="ml-word" x="90" y="72">M</text>
@@ -29,6 +26,8 @@
 </template>
 
 <script setup lang="ts">
+import { MANGO_FRUIT, MANGO_LEAF, MANGO_STEM } from './mangoIsotype'
+
 withDefaults(
   defineProps<{
     /** Oculta la tagline "Insurance Broker" para headers chicos. */
@@ -42,17 +41,26 @@ withDefaults(
 
 <style scoped>
 /* Los fills/fuentes que el SVG original referenciaba externamente, ligados a
-   los tokens de marca → adapta noir/light automáticamente. */
+   los tokens de marca → adapta noir/light automáticamente.
+   Isotipo siempre en outline: la fruta en mango, la ramita y la hoja en verde. */
 .ml-fruit,
 .ml-leaf,
 .ml-stem {
-  fill: var(--mg-mango);
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ml-fruit {
+  stroke: var(--mg-mango);
+  stroke-width: 3;
+}
+.ml-leaf {
+  stroke: var(--mg-leaf);
+  stroke-width: 2.5;
 }
 .ml-stem {
-  fill: none;
-  stroke: var(--mg-mango);
+  stroke: var(--mg-leaf);
   stroke-width: 2.5;
-  stroke-linecap: round;
 }
 .ml-word {
   fill: var(--mg-fg);

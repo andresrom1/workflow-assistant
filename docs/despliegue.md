@@ -89,6 +89,8 @@ Estos son los puntos del plan original (A.1) y su estado en el repo:
    COPY --chown=www:www --from=node-build /var/www/public/build /var/www/public/build
    ```
    Commit: `101e02b feat: multi-stage Node build for Vite assets in Dockerfile`.
+
+   > **`public/build/` es artefacto redundante.** Desde este multi-stage, la imagen de producción compila sus propios assets con `npm run build` y sobrescribe `public/build/` con el resultado del stage `node-build`. Lo que esté versionado en `public/build/` **se ignora en el deploy**. Consecuencia práctica: **no hace falta comitear los assets** que aparecen tras un `npm run build` local (JS/CSS con hash nuevo + `manifest.json`). El destino correcto es dejar de trackear `public/build/` (`git rm -r --cached public/build` + `/public/build` en `.gitignore`), en un commit aparte. Pendiente de hacer hasta cerrar la iteración de landings experimentales (`resources/js/pages/Landing/V2..V7.vue`) para no agregar churn mientras tanto. Mientras se itera, ver las landings con `composer run dev` (dev server, no necesita `public/build/`).
 7. **Permisos del dir temporal de nginx** — **fix post-deploy (2026-07-09).** El `Dockerfile` cambia nginx para correr como `www` (vía `sed`), pero `/var/lib/nginx/tmp/` seguía perteneciendo al usuario `nginx` original del paquete. Resultado: todo `POST` con `multipart/form-data` (subida de documentos, edición de prompts) devolvía 500 porque nginx no podía escribir el body temp. Síntomas: `500 Internal Server Error` sin stack trace de Laravel, error de nginx `[crit] open() "/var/lib/nginx/tmp/client_body/..." failed (13: Permission denied)`. Fix en el `Dockerfile`:
    ```dockerfile
    RUN sed -i 's/user = www-data/user = www/g' /usr/local/etc/php-fpm.d/www.conf \

@@ -420,6 +420,7 @@ body {
   --mg-mango:          #ff6b00;
   --mg-mango-soft:     #ffa040;
   --mg-mango-tint:     #fff3e8;
+  --mg-leaf:           #2e9c5a;
   --mg-ok:             #00a86b;
   --mg-ok-tint:        #e7f7f0;
   --mg-bad:            #e5484d;
@@ -465,6 +466,7 @@ body {
   --mg-mango:          #ff6b00;
   --mg-mango-soft:     #ffa040;
   --mg-mango-tint:     rgba(255, 107, 0, 0.12);
+  --mg-leaf:           #4fca82;
   --mg-ok:             #3cd6a1;
   --mg-ok-tint:        rgba(60, 214, 161, 0.12);
   --mg-bad:            #f26b6b;

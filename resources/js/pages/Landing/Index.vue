@@ -383,6 +383,7 @@ import type { Directive } from 'vue'
 import { Head } from '@inertiajs/vue3'
 import MangoLayout from '@/layouts/MangoLayout.vue'
 import MangoLogo from '@/components/Mango/MangoLogo.vue'
+import MangoFruit from '@/components/Mango/MangoFruit.vue'
 
 const props = defineProps<{
   waQuoteUrl: string | null
@@ -623,20 +624,6 @@ const IconDot = () =>
     class: 'mt-[7px] w-1.5 h-1.5 shrink-0 rounded-full',
     style: { background: 'var(--mg-mango)' },
   })
-
-// Isotipo fruta (paths de MangoLogo.vue). `mono` la pinta blanca para la
-// franja naranja de cierre; por defecto va en naranja de marca.
-const MangoFruit = (fruitProps: { mono?: boolean }) => {
-  const color = fruitProps.mono ? '#ffffff' : 'var(--mg-mango)'
-  return h('svg', { viewBox: '4 2 78 88', xmlns: 'http://www.w3.org/2000/svg', 'aria-hidden': 'true' }, [
-    h('path', { d: 'M44,17 C44,12 46,7 50,5', fill: 'none', stroke: color, 'stroke-width': 2.5, 'stroke-linecap': 'round' }),
-    h('path', { d: 'M44,16 C48,8 62,6 64,12 C57,15 49,16 44,16 Z', fill: color }),
-    h('path', {
-      d: 'M44,22 C56,17 69,22 72,35 C76,48 71,67 62,77 C53,87 38,90 27,83 C16,76 13,61 16,47 C19,33 30,27 44,22 Z',
-      fill: color,
-    }),
-  ])
-}
 
 // Features reales de mango-mobile (spec v3). Paths de iconos: líneas simples 24x24.
 const appFeatures = [

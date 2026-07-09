@@ -40,7 +40,8 @@ powershell -ExecutionPolicy Bypass -File C:\Users\Andrés\.oci\retry-instance.ps
 gcloud compute ssh mango-prod --zone=us-central1-a --project=project-1abe2eb8-c736-448d-bd8
 docker exec -it workflow-assistant-app-1 php artisan tinker // para entrar a tinker
 
-# Traer la ultima vercion de main
+# Traer la ultima version de main
+cd ~/workflow-assistant
 git pull origin main
 docker compose --env-file .env.production -f compose.prod.yaml build app
 docker compose --env-file .env.production -f compose.prod.yaml up -d app
