@@ -317,7 +317,7 @@ docker compose --env-file .env.production -f compose.prod.yaml exec app php arti
 
 En el dashboard de Meta/WhatsApp:
 1. **Webhook URL:** `https://mangobroker.com.ar/api/webhooks/whatsapp`
-2. **Verify Token:** `AndMan8317`
+2. **Verify Token:** `<ver WHATSAPP_VERIFY_TOKEN en .env.production>`
 3. **Campo suscrito:** `messages` (mensajes entrantes)
 4. Validación de firma HMAC con `WHATSAPP_APP_SECRET`.
 

@@ -33,4 +33,14 @@ php artisan db:seed --class=CheckoutTestDataSeeder // para generar checkout de p
 
 php artisan db:seed --class=OpportunityTestDataSeeder // para generar oportunity de prueba
 
-// # 5. Visitar /admin/settings
+# ORACLE
+powershell -ExecutionPolicy Bypass -File C:\Users\Andrés\.oci\retry-instance.ps1
+
+# GCP - Conectarse a la VM
+gcloud compute ssh mango-prod --zone=us-central1-a --project=project-1abe2eb8-c736-448d-bd8
+docker exec -it workflow-assistant-app-1 php artisan tinker // para entrar a tinker
+
+# Traer la ultima vercion de main
+git pull origin main
+docker compose --env-file .env.production -f compose.prod.yaml build app
+docker compose --env-file .env.production -f compose.prod.yaml up -d app

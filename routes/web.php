@@ -38,6 +38,101 @@ Route::get('/', function () {
     ]);
 })->name('landing');
 
+// Landing v2 — experimento editorial "Warm Tech" (comparar contra la v1).
+Route::get('/landing-v2', function () {
+    $publicNumber = config('whatsapp.public_number');
+
+    return Inertia::render('Landing/V2', [
+        'waQuoteUrl' => $publicNumber
+            ? 'https://wa.me/'.$publicNumber.'?text='.rawurlencode('Hola, quiero cotizar el seguro de mi auto.')
+            : null,
+        'appDownloadUrl' => config('whatsapp.app_download_url'),
+    ]);
+})->name('landing.v2');
+
+// Landing v3 — concept car "zine/publicación anti-fintech".
+Route::get('/landing-v3', function () {
+    $publicNumber = config('whatsapp.public_number');
+
+    return Inertia::render('Landing/V3', [
+        'waQuoteUrl' => $publicNumber
+            ? 'https://wa.me/'.$publicNumber.'?text='.rawurlencode('Hola, quiero cotizar el seguro de mi auto.')
+            : null,
+        'appDownloadUrl' => config('whatsapp.app_download_url'),
+    ]);
+})->name('landing.v3');
+
+// Landing v4 — concept car "recetario".
+Route::get('/landing-v4', function () {
+    $publicNumber = config('whatsapp.public_number');
+
+    return Inertia::render('Landing/V4', [
+        'waQuoteUrl' => $publicNumber
+            ? 'https://wa.me/'.$publicNumber.'?text='.rawurlencode('Hola, quiero cotizar el seguro de mi auto.')
+            : null,
+        'appDownloadUrl' => config('whatsapp.app_download_url'),
+    ]);
+})->name('landing.v4');
+
+// Landing v5 — concept car "manual de instrucciones".
+Route::get('/landing-v5', function () {
+    $publicNumber = config('whatsapp.public_number');
+
+    return Inertia::render('Landing/V5', [
+        'waQuoteUrl' => $publicNumber
+            ? 'https://wa.me/'.$publicNumber.'?text='.rawurlencode('Hola, quiero cotizar el seguro de mi auto.')
+            : null,
+        'appDownloadUrl' => config('whatsapp.app_download_url'),
+    ]);
+})->name('landing.v5');
+
+// Landing v6 — concept car "carta de un amigo".
+Route::get('/landing-v6', function () {
+    $publicNumber = config('whatsapp.public_number');
+
+    return Inertia::render('Landing/V6', [
+        'waQuoteUrl' => $publicNumber
+            ? 'https://wa.me/'.$publicNumber.'?text='.rawurlencode('Hola, quiero cotizar el seguro de mi auto.')
+            : null,
+        'appDownloadUrl' => config('whatsapp.app_download_url'),
+    ]);
+})->name('landing.v6');
+
+// Landing v7 — concept car "faro / taller".
+Route::get('/landing-v7', function () {
+    $publicNumber = config('whatsapp.public_number');
+
+    return Inertia::render('Landing/V7', [
+        'waQuoteUrl' => $publicNumber
+            ? 'https://wa.me/'.$publicNumber.'?text='.rawurlencode('Hola, quiero cotizar el seguro de mi auto.')
+            : null,
+        'appDownloadUrl' => config('whatsapp.app_download_url'),
+    ]);
+})->name('landing.v7');
+
+// Landing v2.1 y v2.2 — consolidan la curaduría (mismo cuerpo, hero distinto).
+Route::get('/landing-v2-1', function () {
+    $publicNumber = config('whatsapp.public_number');
+
+    return Inertia::render('Landing/V2_1', [
+        'waQuoteUrl' => $publicNumber
+            ? 'https://wa.me/'.$publicNumber.'?text='.rawurlencode('Hola, quiero cotizar el seguro de mi auto.')
+            : null,
+        'appDownloadUrl' => config('whatsapp.app_download_url'),
+    ]);
+})->name('landing.v2-1');
+
+Route::get('/landing-v2-2', function () {
+    $publicNumber = config('whatsapp.public_number');
+
+    return Inertia::render('Landing/V2_2', [
+        'waQuoteUrl' => $publicNumber
+            ? 'https://wa.me/'.$publicNumber.'?text='.rawurlencode('Hola, quiero cotizar el seguro de mi auto.')
+            : null,
+        'appDownloadUrl' => config('whatsapp.app_download_url'),
+    ]);
+})->name('landing.v2-2');
+
 Route::get('/privacy', function () {
     return view('privacy');
 })->name('privacy');
