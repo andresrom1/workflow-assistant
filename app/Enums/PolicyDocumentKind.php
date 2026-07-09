@@ -32,14 +32,15 @@ enum PolicyDocumentKind: string
     }
 
     /**
-     * Documentos que una póliza vigente "completa" debería tener (checklist de
-     * mantenimiento). Supuesto de dominio a confirmar: hoy es un set fijo, no varía
-     * por compañía/producto.
+     * Documentos obligatorios para que una póliza vigente se considere "completa"
+     * (checklist de mantenimiento). El Certificado de cobertura es deseable pero no
+     * obligatorio, por eso no integra este set. Supuesto de dominio a confirmar: hoy
+     * es un set fijo, no varía por compañía/producto.
      *
      * @return list<self>
      */
     public static function expectedForActivePolicy(): array
     {
-        return [self::Poliza, self::CirculationCard, self::Certificado];
+        return [self::Poliza, self::CirculationCard];
     }
 }

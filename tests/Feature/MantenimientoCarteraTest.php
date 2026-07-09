@@ -95,7 +95,7 @@ it('renderiza el reporte ordenado por urgencia: vencida-sin-sucesora arriba', fu
             ->where('filas.data.0.renovacion.accionable', true)
             ->where('filas.data.1.numero', 'DOC-INCOMPLETA')
             ->where('filas.data.1.docs.completos', 0)
-            ->where('filas.data.1.docs.total', 3)
+            ->where('filas.data.1.docs.total', 2)
             ->where('filas.data.1.renovacion.nivel', 'al_dia'));
 });
 
@@ -111,8 +111,8 @@ it('una sola fila por póliza aunque combine documentación y renovación', func
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->where('filas.total', 1)
-            // "pendientes" cuenta acciones, no pólizas: 3 docs faltantes + 1 renovación.
-            ->where('pendientes', 4)
+            // "pendientes" cuenta acciones, no pólizas: 2 docs faltantes + 1 renovación.
+            ->where('pendientes', 3)
             ->where('filas.data.0.docs.completos', 0)
             ->where('filas.data.0.renovacion.nivel', 'vence_pronto')
             ->where('filas.data.0.renovacion.accionable', true));

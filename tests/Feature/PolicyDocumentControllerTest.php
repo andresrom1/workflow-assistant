@@ -81,7 +81,7 @@ it('filtra el index por pólizas sin documentos', function (): void {
 
 it('el gestor expone el checklist de completitud (presentes vs faltantes)', function (): void {
     $poliza = Poliza::factory()->create();
-    // Tiene la Póliza; faltan Cédula de circulación y Certificado.
+    // Tiene la Póliza; falta Cédula de circulación.
     PolicyDocument::factory()->adminUpload()->create([
         'poliza_id' => $poliza->id,
         'kind' => PolicyDocumentKind::Poliza,
@@ -92,11 +92,10 @@ it('el gestor expone el checklist de completitud (presentes vs faltantes)', func
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('PolicyDocuments/Show')
-            ->has('checklist', 3)
+            ->has('checklist', 2)
             ->where('checklist.0.kind', 'poliza')
             ->where('checklist.0.presente', true)
-            ->where('checklist.1.presente', false)
-            ->where('checklist.2.presente', false));
+            ->where('checklist.1.presente', false));
 });
 
 it('el gestor preselecciona el kind cuando se entra con ?kind=', function (): void {
@@ -123,9 +122,9 @@ it('el panel de pendientes lista vigentes y emitidas incompletas, excluye comple
     // Emitida sin documentos → aparece.
     Poliza::factory()->create(['estado' => PolizaEstado::Emitida, 'numero' => 'POL-EMI']);
 
-    // Vigente COMPLETA (los 3 esperados) → NO aparece.
+    // Vigente COMPLETA (los 2 esperados) → NO aparece.
     $completa = Poliza::factory()->create(['estado' => PolizaEstado::Vigente, 'numero' => 'POL-OK']);
-    foreach ([PolicyDocumentKind::Poliza, PolicyDocumentKind::CirculationCard, PolicyDocumentKind::Certificado] as $k) {
+    foreach ([PolicyDocumentKind::Poliza, PolicyDocumentKind::CirculationCard] as $k) {
         PolicyDocument::factory()->adminUpload()->create(['poliza_id' => $completa->id, 'kind' => $k]);
     }
 
@@ -167,7 +166,7 @@ it('el index expone la completitud de documentación esperada', function (): voi
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->where('polizas.data.0.doc_presentes', 1)
-            ->where('polizas.data.0.doc_esperados', 3));
+            ->where('polizas.data.0.doc_esperados', 2));
 });
 
 it('sube un documento manual y lo persiste en R2 como admin_upload', function (): void {
