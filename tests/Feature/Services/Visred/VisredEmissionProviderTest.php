@@ -210,7 +210,7 @@ it('captura los documentos oficiales al emitir y los devuelve como blobs neutros
     Http::fake([
         EMITIR_URL => Http::response(['task_id' => 't-doc', 'company_id' => 'sancor']),
         'https://visred.test/v1/tasks/t-doc/' => taskPresaleSuccess(['presale_id' => 77, 'policy_number' => 'POL-77']),
-        'https://visred.test/v1/documents/' => Http::response(['result' => ['url' => 'https://files.visred.test/poliza-77.pdf']]),
+        'https://visred.test/v1/documents/' => Http::response(['result' => ['document_url' => 'https://files.visred.test/poliza-77.pdf']]),
         'https://files.visred.test/poliza-77.pdf' => Http::response('PDFBYTES'),
     ]);
 
@@ -261,7 +261,7 @@ it('separa los documentos listos de los pendientes en una misma emisión', funct
         'https://visred.test/v1/tasks/t-mix/' => taskPresaleSuccess(['presale_id' => 77, 'policy_number' => 'POL-77']),
         'https://visred.test/v1/documents/' => function (Request $request) {
             return $request['task_type_id'] === 'download-poliza'
-                ? Http::response(['result' => ['url' => 'https://files.visred.test/poliza.pdf']])
+                ? Http::response(['result' => ['document_url' => 'https://files.visred.test/poliza.pdf']])
                 : Http::response(['result' => null]); // certificado todavía generándose
         },
         'https://files.visred.test/poliza.pdf' => Http::response('PDFBYTES'),
@@ -285,7 +285,7 @@ it('capturePendingDocuments re-pide solo los kinds pedidos y devuelve los que ya
             expect($request['presale_id'])->toBe(77); // decodifica el token opaco
             expect($request['task_type_id'])->toBe('download-certificate'); // solo el pedido
 
-            return Http::response(['result' => ['url' => 'https://files.visred.test/cert.pdf']]);
+            return Http::response(['result' => ['document_url' => 'https://files.visred.test/cert.pdf']]);
         },
         'https://files.visred.test/cert.pdf' => Http::response('CERTBYTES'),
     ]);

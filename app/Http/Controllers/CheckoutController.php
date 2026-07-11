@@ -225,102 +225,120 @@ class CheckoutController extends Controller
 
         abort_if($tempPhotosCount < $requiredPhotoCount, 422, 'Faltan fotos de inspección o no fueron procesadas correctamente.');
 
-        // Ejecutar las mutaciones de BD en una transacción atómica
-        DB::transaction(function () use ($quote, $alternative, $validated, $consolidation, $merge): void {
+        // Ejecutar las mutaciones de BD en una transacción atómica.
+        // try/catch para loguear el trace completo: sin esto el 500 del submit
+        // es invisible (a diferencia de uploadPhoto, que sí captura y loguea).
+        try {
+            DB::transaction(function () use ($quote, $alternative, $validated, $consolidation, $merge): void {
 
-            // 1. Guardar CheckoutSession
-            $session = CheckoutSession::updateOrCreate(
-                ['quote_id' => $quote->id],
-                [
-                    'quote_alternative_id' => $alternative->id,
-                    'status' => 'submitted',
-                    // `nombre`/`telefono` se mantienen poblados (compuestos) para mail/admin.
-                    'nombre' => trim($validated['first_name'].' '.$validated['last_name']),
-                    'first_name' => $validated['first_name'],
-                    'last_name' => $validated['last_name'],
-                    'birthdate' => $validated['birthdate'],
-                    'sex_id' => $validated['sex_id'],
-                    'tax_condition_id' => $validated['tax_condition_id'],
-                    'dni' => $validated['dni'],
-                    'email' => $validated['email'],
-                    'telefono' => $validated['phone_prefix'].$validated['phone_number'],
-                    'phone_prefix' => $validated['phone_prefix'],
-                    'phone_number' => $validated['phone_number'],
-                    'domicilio_calle' => $validated['domicilio_calle'],
-                    'domicilio_numero' => $validated['domicilio_numero'],
-                    'domicilio_cp' => $validated['domicilio_cp'],
-                    'domicilio_provincia' => $validated['domicilio_provincia'],
-                    'domicilio_localidad' => $validated['domicilio_localidad'],
-                    'vehiculo_uso' => $validated['vehiculo_uso'],
-                    'vehiculo_nro_chasis' => $validated['vehiculo_nro_chasis'],
-                    'vehiculo_nro_motor' => $validated['vehiculo_nro_motor'],
-                    'has_gnc' => $validated['has_gnc'] ?? false,
-                    'cc_brand' => $validated['cc_brand'],
-                    'cc_pan_encrypted' => Crypt::encryptString($validated['cc_pan']),
-                    'cc_expiry_encrypted' => Crypt::encryptString($validated['cc_expiry']),
-                    'cc_holder_name_encrypted' => Crypt::encryptString($validated['cc_holder_name']),
-                    'cc_holder_dni_encrypted' => Crypt::encryptString($validated['cc_holder_dni']),
-                    'photo_paths' => collect($validated['photo_ids'])->map(fn ($path) => Storage::disk('r2')->url($path))->toArray(),
-                    'submitted_at' => now(),
-                ]
-            );
+                // 1. Guardar CheckoutSession
+                $session = CheckoutSession::updateOrCreate(
+                    ['quote_id' => $quote->id],
+                    [
+                        'quote_alternative_id' => $alternative->id,
+                        'status' => 'submitted',
+                        // `nombre`/`telefono` se mantienen poblados (compuestos) para mail/admin.
+                        'nombre' => trim($validated['first_name'].' '.$validated['last_name']),
+                        'first_name' => $validated['first_name'],
+                        'last_name' => $validated['last_name'],
+                        'birthdate' => $validated['birthdate'],
+                        'sex_id' => $validated['sex_id'],
+                        'tax_condition_id' => $validated['tax_condition_id'],
+                        'dni' => $validated['dni'],
+                        'email' => $validated['email'],
+                        'telefono' => $validated['phone_prefix'].$validated['phone_number'],
+                        'phone_prefix' => $validated['phone_prefix'],
+                        'phone_number' => $validated['phone_number'],
+                        'domicilio_calle' => $validated['domicilio_calle'],
+                        'domicilio_numero' => $validated['domicilio_numero'],
+                        'domicilio_cp' => $validated['domicilio_cp'],
+                        'domicilio_provincia' => $validated['domicilio_provincia'],
+                        'domicilio_localidad' => $validated['domicilio_localidad'],
+                        'vehiculo_uso' => $validated['vehiculo_uso'],
+                        'vehiculo_nro_chasis' => $validated['vehiculo_nro_chasis'],
+                        'vehiculo_nro_motor' => $validated['vehiculo_nro_motor'],
+                        'has_gnc' => $validated['has_gnc'] ?? false,
+                        'cc_brand' => $validated['cc_brand'],
+                        'cc_pan_encrypted' => Crypt::encryptString($validated['cc_pan']),
+                        'cc_expiry_encrypted' => Crypt::encryptString($validated['cc_expiry']),
+                        'cc_holder_name_encrypted' => Crypt::encryptString($validated['cc_holder_name']),
+                        'cc_holder_dni_encrypted' => Crypt::encryptString($validated['cc_holder_dni']),
+                        'photo_paths' => collect($validated['photo_ids'])->map(fn ($path) => Storage::disk('r2')->url($path))->toArray(),
+                        'submitted_at' => now(),
+                    ]
+                );
 
-            // 2. Transicionar fotos de temp a confirmed
-            InspectionPhoto::where('quote_id', $quote->id)
-                ->where('status', InspectionPhotoStatus::Temp)
-                ->update([
-                    'status' => InspectionPhotoStatus::Confirmed,
-                    'confirmed_at' => now(),
-                ]);
+                // 2. Transicionar fotos de temp a confirmed
+                InspectionPhoto::where('quote_id', $quote->id)
+                    ->where('status', InspectionPhotoStatus::Temp)
+                    ->update([
+                        'status' => InspectionPhotoStatus::Confirmed,
+                        'confirmed_at' => now(),
+                    ]);
 
-            // 3. Actualizar status del quote
-            $quote->update(['status' => 'checkout_submitted']);
+                // 3. Actualizar status del quote
+                $quote->update(['status' => 'checkout_submitted']);
 
-            // 3b. Sync-back al Customer canónico (declaración jurada del checkout). El
-            // domicilio del tomador queda en el Customer; la ubicación de guarda del
-            // riesgo (que tarifa) se siembra en el vehículo SOLO si está vacía.
-            $customer = $quote->conversation?->customer;
-            if ($customer !== null) {
-                // Convergencia de identidad: el DNI/email declarados pueden pertenecer a
-                // otra fila creada por otra puerta (WhatsApp por teléfono, app por email).
-                // Se fusionan en el customer de la conversación antes de consolidar. Solo se
-                // reconcilia por claves fuertes (dni/email), nunca por teléfono. Ver docs/v2/12 §5.
-                $customer = $merge->reconcile($customer, [
-                    'dni' => $validated['dni'],
-                    'email' => $validated['email'],
-                ]);
+                // 3b. Sync-back al Customer canónico (declaración jurada del checkout). El
+                // domicilio del tomador queda en el Customer; la ubicación de guarda del
+                // riesgo (que tarifa) se siembra en el vehículo SOLO si está vacía.
+                $customer = $quote->conversation?->customer;
+                if ($customer !== null) {
+                    // Convergencia de identidad: el DNI/email declarados pueden pertenecer a
+                    // otra fila creada por otra puerta (WhatsApp por teléfono, app por email).
+                    // Se fusionan en el customer de la conversación antes de consolidar. Solo se
+                    // reconcilia por claves fuertes (dni/email), nunca por teléfono. Ver docs/v2/12 §5.
+                    $customer = $merge->reconcile($customer, [
+                        'dni' => $validated['dni'],
+                        'email' => $validated['email'],
+                    ]);
 
-                $consolidation->apply($customer, [
-                    'first_name' => $validated['first_name'],
-                    'last_name' => $validated['last_name'],
-                    'dni' => $validated['dni'],
-                    'birthdate' => $validated['birthdate'],
-                    'sex_id' => $validated['sex_id'],
-                    'tax_condition_id' => $validated['tax_condition_id'],
-                    'email' => $validated['email'],
-                    'phone' => '+549'.$validated['phone_prefix'].$validated['phone_number'],
-                    'domicilio_calle' => $validated['domicilio_calle'],
-                    'domicilio_numero' => $validated['domicilio_numero'],
-                    'domicilio_cp' => $validated['domicilio_cp'],
-                    'domicilio_provincia' => $validated['domicilio_provincia'],
-                    'domicilio_localidad' => $validated['domicilio_localidad'],
-                ], 'checkout');
-            }
+                    $consolidation->apply($customer, [
+                        'first_name' => $validated['first_name'],
+                        'last_name' => $validated['last_name'],
+                        'dni' => $validated['dni'],
+                        'birthdate' => $validated['birthdate'],
+                        'sex_id' => $validated['sex_id'],
+                        'tax_condition_id' => $validated['tax_condition_id'],
+                        'email' => $validated['email'],
+                        'phone' => '+549'.$validated['phone_prefix'].$validated['phone_number'],
+                        'domicilio_calle' => $validated['domicilio_calle'],
+                        'domicilio_numero' => $validated['domicilio_numero'],
+                        'domicilio_cp' => $validated['domicilio_cp'],
+                        'domicilio_provincia' => $validated['domicilio_provincia'],
+                        'domicilio_localidad' => $validated['domicilio_localidad'],
+                    ], 'checkout');
+                }
 
-            $vehicle = $quote->riskSnapshot?->vehicle;
-            if ($vehicle !== null && $vehicle->exists && empty($vehicle->codigo_postal)) {
-                $vehicle->update(['codigo_postal' => $validated['domicilio_cp']]);
-            }
+                $vehicle = $quote->riskSnapshot?->vehicle;
+                if ($vehicle !== null && $vehicle->exists && empty($vehicle->codigo_postal)) {
+                    $vehicle->update(['codigo_postal' => $validated['domicilio_cp']]);
+                }
 
-            // Despachar emisión de póliza (skeleton — cuando API esté lista, solo
-            // hay que implementar PolizaEmisionService::emitir())
-            EmitirPoliza::dispatch($quote->id, $session->id);
+                // Despachar emisión de póliza (skeleton — cuando API esté lista, solo
+                // hay que implementar PolizaEmisionService::emitir())
+                EmitirPoliza::dispatch($quote->id, $session->id);
 
-            // Notificación interna por mail
-            Mail::to(
-                config('mail.checkout_notifications_to', config('mail.from.address'))
-            )->queue(new CheckoutCompletadoMail($quote, $session));
-        });
+                // Notificación interna por mail
+                Mail::to(
+                    config('mail.checkout_notifications_to', config('mail.from.address'))
+                )->queue(new CheckoutCompletadoMail($quote, $session));
+            });
+        } catch (\Throwable $e) {
+            Log::error('CheckoutController: submit falló dentro de la transacción', [
+                'quote_id' => $quote->id,
+                'checkout_token' => $token,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+                'location' => $e->getFile().':'.$e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'No pudimos procesar el checkout. Intentá de nuevo en unos minutos.',
+            ], 500);
+        }
 
         return response()->json([
             'success' => true,

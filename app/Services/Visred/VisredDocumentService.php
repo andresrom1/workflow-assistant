@@ -11,7 +11,7 @@ use Throwable;
  *
  * `POST /v1/documents/ {presale_id, product_id, task_type_id}` dispara la generación
  * del PDF del lado de la compañía y es ASÍNCRONO: recién emitida la póliza el documento
- * todavía se está generando, así que `result.url` viene vacío. Cada llamada hace UN solo
+ * todavía se está generando, así que `result.document_url` viene vacío. Cada llamada hace UN solo
  * intento (no poll-ea internamente): si la URL pre-firmada ya está, descarga los bytes y
  * los devuelve como blobs NEUTROS; si no, marca el documento como pendiente. La CADENCIA
  * de reintento (1 intento por minuto, hasta ~10 min) la maneja el job
@@ -101,7 +101,7 @@ class VisredDocumentService
             $url = $this->requestDocumentUrl($presaleId, $productId, $taskTypeId);
 
             if ($url === '') {
-                Log::warning('[VisredDocument] documento todavía sin result.url (pendiente, reintenta el job)', [
+                Log::warning('[VisredDocument] documento todavía sin result.document_url (pendiente, reintenta el job)', [
                     'task_type_id' => $taskTypeId,
                 ]);
 
@@ -133,7 +133,7 @@ class VisredDocumentService
 
         $result = $task['result'] ?? null;
 
-        return is_array($result) && is_scalar($result['url'] ?? null) ? (string) $result['url'] : '';
+        return is_array($result) && is_scalar($result['document_url'] ?? null) ? (string) $result['document_url'] : '';
     }
 
     /**
@@ -144,7 +144,7 @@ class VisredDocumentService
         $response = Http::timeout((int) config('visred.timeout', 30))->get($url);
 
         if ($response->failed()) {
-            Log::warning('[VisredDocument] descarga del result.url falló', [
+            Log::warning('[VisredDocument] descarga del result.document_url falló', [
                 'task_type_id' => $taskTypeId,
                 'status' => $response->status(),
             ]);

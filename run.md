@@ -45,3 +45,13 @@ cd ~/workflow-assistant
 git pull origin main
 docker compose --env-file .env.production -f compose.prod.yaml build app
 docker compose --env-file .env.production -f compose.prod.yaml up -d app
+
+# 1. Log de la app Laravel (el que buscabas)
+docker compose --env-file .env.production -f compose.prod.yaml \exec app tail -f storage/logs/laravel.log
+
+# 2. Logs del contenedor (nginx + php-fpm, arranque, migraciones)
+docker compose --env-file .env.production -f compose.prod.yaml logs -f app
+
+# 3. Logs de un worker de cola (ej. el de WhatsApp AI)
+docker compose --env-file .env.production -f compose.prod.yaml \
+  exec app tail -f /var/log/supervisor/worker-whatsapp-ai-out.log
