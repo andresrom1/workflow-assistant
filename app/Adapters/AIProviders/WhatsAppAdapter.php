@@ -448,8 +448,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             'checkout_alternative_id' => $alternative->id,
         ]);
 
-        $checkoutUrl = rtrim((string) config('app.checkout_url', config('app.url')), '/')
-            .'/checkout/'.$token;
+        $checkoutUrl = route('checkout.show', ['token' => $token]);
 
         return $this->formatSuccess(
             "Tu link de checkout está listo. Completá tus datos aquí: {$checkoutUrl}",
