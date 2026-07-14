@@ -1,25 +1,29 @@
 # v3/04 — Ingesta local de documentos de póliza (lado servidor)
 
-> **Estado: IMPLEMENTADO (Fases 1–3), suite verde.** El lado cliente (script Python) está
-> hecho y andando: ver `ingestor/` (repo aparte, `ingestor/README.md`, `ingestor/app/v5/USO.md`
-> y `ingestor/app/v5/SERVIDOR.md` — la contraparte server documentada para el cliente).
-> Este doc describe el **endpoint y la lógica de alta**, ya construidos en `workflow-assistant`.
-> El contrato JSON (§2) se definió acá y es la fuente de verdad; el ingestor lo cumple. El
-> transporte HTTP (§2-bis) documenta cómo lo envía el cliente. El **mapa de archivos** de la
-> implementación y el estado de las preguntas abiertas están en §6 y §7.
+> **Estado: v1 IMPLEMENTADO (Fases 1–3, suite verde) — v2 IMPLEMENTADO en rama, en
+> evaluación (Fase 4, 2026-07).** El lado cliente (script Python) vive en `ingestor/` (repo
+> aparte, sin git — versionado por carpeta: `app/v5/` es la versión v1 del contrato, hoy
+> **retirada de uso** pero conservada intacta como rollback del cliente; `app/v6/` es la
+> versión vigente, ver §9). Este doc describe el **endpoint y la lógica de alta**, en
+> `workflow-assistant`. El **mapa de archivos** de v1 y el estado de sus preguntas abiertas
+> están en §6 y §7; el diseño de v2 (contrato, pipeline LLM, costo) está en §9.
 >
 > Encaja en v3 (post-emisión / mantenimiento de cartera). Es el productor automático que
 > alimenta la cola de Pendientes descrita en [`03-entrega-documentacion-app.md`](03-entrega-documentacion-app.md).
 >
-> **Garantías que ya da el cliente (no las re-implementes, pero contás con ellas):**
+> **Garantías del cliente v1/v5 (históricas — ver §9 para lo que cambia en v2):**
 > - **Solo manda pólizas del corpus.** Si no detecta una aseguradora conocida (por CUIT del
 >   emisor o alias), el PDF **no se sube** — facturas, resúmenes, etc. nunca llegan al endpoint.
+>   ⚠️ **Esto cambia en v2:** el cliente deja de clasificar: sube todo lo que pasa el filtro de
+>   tamaño y el server descarta la basura solo (§9).
 > - **Dedup local por hash.** El cliente lleva su propio `state.json` y no reenvía un PDF ya
 >   subido. Aun así el server **debe** dedup por `hash_sha256` (el cliente puede reinstalarse o
->   reintentar tras un 5xx) — ver §4.
+>   reintentar tras un 5xx) — ver §4. **Sigue vigente en v2, sin cambios.**
 > - **Ventana temporal.** Solo procesa PDFs de la carpeta Descargas creados hace ≤ 90 días.
+>   **Sigue vigente en v2.**
 > - **Reintentos.** Ante error de red/5xx reintenta hasta 3 veces con backoff y, si igual falla,
 >   reintenta el archivo en la corrida del día siguiente → **el endpoint tiene que ser idempotente.**
+>   **Sigue vigente en v2.**
 
 ---
 
@@ -256,9 +260,153 @@ Mapa de la implementación (Fases 1–3). Sin DTOs: el controller arma `array<st
 
 ## 8. Referencias
 
-- Cliente: `ingestor/README.md` (parser v5, estado por compañía, contrato) y
+- Cliente v1 (histórico): `ingestor/README.md` (parser v5, estado por compañía, contrato) y
   `ingestor/app/v5/USO.md` (guía operativa: config, flujo, `state.json`, automatización).
   Código del uploader: `ingestor/app/v5/uploader.py`; armado del contrato: `parser.py::_build`.
+- Cliente v2 (vigente): `ingestor/app/v6/README.md` — ver §9 de este doc.
 - Modelo de documentación de póliza implementado: [`03-entrega-documentacion-app.md`](03-entrega-documentacion-app.md).
 - Dedup/merge de clientes: [`../v2/12-deduplicacion-merge-clientes.md`](../v2/12-deduplicacion-merge-clientes.md).
 - Modelo cliente como fuente de verdad: [`../v2/11-modelo-cliente-consolidacion-datos.md`](../v2/11-modelo-cliente-consolidacion-datos.md).
+
+---
+
+## 9. v2 (2026-07) — extracción server-side con LLM
+
+> **Motivación (por qué se reemplazó el parser v1/v5).** Medido sobre datos reales de
+> producción: de 290 PDFs escaneados en Descargas, el cliente subió 161 (el filtro de
+> "detectó CUIT de aseguradora ⇒ es póliza" es falso — el CUIT del emisor aparece también en
+> facturas, recibos, cotizaciones, denuncias, manuales comerciales). De los subidos, **145
+> quedaron pendientes y solo 6 se confirmaron**: 112/145 sin DNI del tomador (San Cristóbal
+> casi nunca lo extraía en la práctica, aunque el README de v5 lo daba por ✅), 46
+> totalmente ciegos, Experta con el texto roto ("necesita OCR"). Endosos/cancelaciones
+> llegaban clasificados como `poliza` (el parser nunca emitía `endoso`).
+>
+> **Decisión:** el cliente deja de extraer campos. El servidor clasifica y extrae con un
+> LLM (`deepseek-chat`), texto-first (nunca el PDF como archivo — ver nota de costo abajo),
+> validando cada campo determinísticamente ("validar-o-null", la misma filosofía de v1
+> corriendo del otro lado). **Validado con un smoke test real** contra el corpus de
+> `ingestor/docs/` (15 PDFs, 7 compañías) antes de implementar: extracción igual o mejor que
+> el parser v5 en las 7 compañías (estrictamente mejor en 4 — Experta completa desde el
+> texto roto, San Cristóbal con DNI, Mercantil con patente en la tarjeta, Triunfo con la
+> tarjeta verde bien atribuida), clasificación de basura 3/3, costo medido **$0.0002/doc**
+> (98% cache-hit del prompt fijo sobre DeepSeek).
+
+### 9.1 Contrato v2 (reemplaza a v1, §2)
+
+El cliente ya no manda `documento`/`tomador`/`riesgo`/`fechas`/`extraccion` — solo el
+archivo y su texto plano:
+
+```json
+{
+  "schema_version": 2,
+  "archivo": { "nombre_original": "Caratula Anual (5).pdf", "hash_sha256": "…",
+               "detectado_en": "2026-07-13T08:00:00-03:00" },
+  "texto": "SANCOR SEGUROS - Póliza N° 000031184413 - ... (o null si el PDF no tiene texto)"
+}
+```
+
+`texto`: primeras 3 páginas extraídas con pdfplumber (`ingestor/app/v6/extract_text.py`),
+capado a 12000 chars en el cliente y re-capado a `config('ingesta.max_text_chars')` (8000)
+en el servidor — el cap server-side le pone techo al costo por documento
+independientemente de lo que mande el cliente. `schema_version` distinto de 2 → 422 (v1
+retirado, un solo cliente controlado).
+
+### 9.2 Pipeline server-side
+
+```
+POST /api/ingesta/documentos (contrato v2)
+  ├─ valida envoltorio + hash (igual que v1)
+  ├─ dedup por hash (igual que v1)
+  ├─ PDF a R2 (igual que v1)
+  ├─ crea IngestedDocument status=en_extraccion (payload = {schema_version, archivo, texto})
+  └─ dispatch ExtractIngestedDocument (cola `documents`, conexión `database_long`, igual
+     carril que ExtractCoverageDocumentText)
+        ├─ IngestaExtractorAgent (deepseek-chat) clasifica + extrae
+        ├─ valida CADA campo determinísticamente (patente/DNI/fechas/número/compañía) —
+        │  el LLM nunca es la última palabra
+        ├─ clase del corpus (poliza/certificado/endoso/cupon/tarjeta_circulacion)
+        │  → status=pendiente, kind mapeado
+        ├─ clase no-corpus (factura/recibo/cotizacion/denuncia_siniestro/
+        │  resumen_cuenta/manual_comercial/otro_no_poliza) → status=descartado_auto
+        │  (el PDF queda en R2 para auditoría, nada se materializa)
+        └─ IngestaDocumentoService::applyExtraction() reescribe `payload` con el shape
+           del contrato v1 (documento/tomador/riesgo/fechas) — por eso
+           IngestaPendientesController/IngestaConfirmacionService siguen funcionando
+           sin cambios
+```
+
+Degradación (nunca se pierde nada, el PDF ya está en R2 desde `stage()`):
+- Sin texto (`texto=null`, ~3% medido — PDFs escaneados/Experta con texto roto) → no
+  llama al LLM, cae directo a `pendiente` con campos null (igual que un doc "ciego" en v1).
+- LLM caído / respuesta no-JSON tras agotar reintentos → `failed()` degrada a `pendiente`.
+
+Estados nuevos en `IngestaStatus` (columna `status` sigue siendo `string`, sin migración):
+`en_extraccion` (esperando/corriendo el job) y `descartado_auto` (clasificado como
+no-póliza). `descartado_auto` **no tiene UI propia** — solo consultable por query directa
+(decisión: agregar una pestaña "Descartados" más adelante si se desconfía del
+clasificador).
+
+### 9.3 Por qué esto NO repite el costo de `pas-web`
+
+`pas-web` (histórico) mandaba el PDF **entero como archivo** a un modelo frontier
+(`gpt-5.2`), lo que factura texto + una imagen renderizada por página + output grande →
+$0.04–0.10 por documento, más caro todavía si se cuela un PDF largo. Acá: **texto plano
+capado, nunca el PDF como archivo**, modelo `deepseek-chat` (no razonador — extraer 12
+campos planos no lo necesita), output ~300 tokens. El job loguea tokens in/out por
+documento para que el costo sea un dato observado. **Regla dura: nunca mandar el PDF como
+archivo/attachment al LLM de ingesta sin re-evaluar costos.**
+
+### 9.4 Fix de agrupación en Pendientes
+
+La clave de agrupación de `IngestaPendientesController::index()` pasó de `num:{numero}` a
+`num:{compañía}:{número normalizado a solo dígitos}` — evita que dos compañías con el
+mismo número colisionen y absorbe diferencias de **separadores** (puntos/guiones) del
+mismo número. **Limitación aceptada:** si el LLM deja un **prefijo de organizador** en el
+número (ej. Triunfo: "458 1.912.367" en vez de "1.912.367"), la normalización a
+solo-dígitos no lo distingue de un dígito real y el contrato puede partirse en 2 grupos —
+el prompt le pide al LLM devolver el número limpio, pero si no lo hace, el humano confirma
+cada documento por separado y `resolvePoliza()` los une por `company+numero` o por patente
+al confirmar. No se sobre-ingenierizó esto.
+
+### 9.5 Cliente v2 (`ingestor/app/v6/`)
+
+`app/v5/` queda **intacta en disco** como referencia/rollback del cliente, pero **el
+rollback no es solo-cliente**: el servidor v2 rechaza `schema_version` distinto de 2 (422),
+así que volver a correr v5 requiere revertir también el servidor a antes de esta fase (el
+commit de `feature/ingesta-v2-extraccion-llm` que cambia el `schema_version` esperado). No
+hay convivencia v1/v2 en el servidor — es un corte, no un flag. `app/v6/` reemplaza
+`parser.py` (7 extractores regex por compañía) por `extract_text.py` (~25 líneas,
+pdfplumber). Único filtro que queda del lado cliente: **tamaño** (`rules.max_size_mb`,
+default 15 MB — los PDFs de póliza reales están todos bajo 2 MB). Detalle completo en
+`ingestor/app/v6/README.md`.
+
+**Estado de evaluación (2026-07):** `config.yaml` de v6 apunta a un **túnel ngrok** hacia
+el server local (decisión del usuario: evaluar antes de pasar a producción). Pendiente:
+correr v6 contra el corpus real vía ngrok, verificar la cola de Pendientes, y recién
+después re-apuntar a `https://mangobroker.com.ar/api/ingesta/documentos` y mergear la rama
+`feature/ingesta-v2-extraccion-llm` a `main`.
+
+### 9.6 Backlog de los 145 pendientes v1
+
+No se migran ni se re-procesan automáticamente: esas filas no tienen `payload.texto` (el
+server no re-extrae de PDF, solo del texto que ya viene en el payload) y el dedup por hash
+haría que un reenvío del mismo PDF devuelva 200 duplicado sin volver a pasar por el job.
+Se triage-an a mano desde la UI existente (confirmar o descartar por contrato); los que
+sigan en Descargas dentro de la ventana de 90 días re-entrarán por v6 con extracción
+nueva **solo si no fueron subidos ya** (hash distinto — no es el caso de estos 145).
+
+### 9.7 Archivos clave (v2)
+
+- `app/AI/Agents/IngestaExtractorAgent.php` — el agente + prompt (clasificación + extracción).
+- `app/Jobs/ExtractIngestedDocument.php` — orquesta la extracción + validadores determinísticos.
+- `config/ingesta.php` — modelo, cap de texto, CUITs de aseguradoras, alias de compañía.
+- `app/Enums/IngestaStatus.php` — estados `en_extraccion`/`descartado_auto` nuevos.
+- `app/Services/IngestaDocumentoService.php` — `stage()` v2 + `applyExtraction()`.
+- `app/Http/Controllers/PolicyDocumentIngestaController.php` — contrato v2.
+- `app/Http/Controllers/IngestaPendientesController.php` — fix de agrupación (§9.4).
+- `app/Console/Commands/ReextraerIngesta.php` — ops: re-despachar un doc puntual o los
+  colgados en `en_extraccion` (`--stuck`).
+- Tests: `tests/Feature/PolicyDocumentIngestaTest.php` (contrato v2),
+  `tests/Feature/ExtractIngestedDocumentTest.php` (job + validadores + E2E con fixtures
+  reales del smoke test), `tests/Feature/IngestaPendientesGroupingTest.php` (agrupación).
+- Cliente: `ingestor/app/v6/`.

@@ -78,6 +78,55 @@
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
 
+- **2026-07-13** — **Ingesta local v2 — extracción server-side con LLM (rama, pendiente evaluación live) 🚧.**
+  Problema medido en datos reales: de 290 PDFs escaneados en Descargas, el cliente subió 161
+  (el filtro "detectó CUIT de aseguradora ⇒ es póliza" es falso — factura/cotización/denuncia/
+  manual también lo llevan); de esos, **145 quedaron pendientes y solo 6 se confirmaron**
+  (112/145 sin DNI del tomador, 46 ciegos, San Cristóbal/Experta fallando en la práctica pese
+  a estar marcados ✅ en el README del parser v5; endosos/cancelaciones entraban como `poliza`).
+  **Decisión:** el cliente deja de extraer campos; el servidor clasifica y extrae con
+  **`deepseek-chat`** (texto-first, nunca el PDF como archivo), validando cada campo
+  determinísticamente ("validar-o-null") y descartando sola la basura (`descartado_auto`).
+  **Validado con smoke test real** contra el corpus (`ingestor/docs/`, 15 PDFs/7 compañías)
+  antes de implementar: extracción igual o mejor que el parser v5 en las 7 (mejor en 4),
+  clasificación de basura 3/3, costo medido **$0.0002/doc** (98% cache-hit).
+  - **Servidor:** `IngestaExtractorAgent` (agente nombrado, `#[Model('deepseek-chat')]`,
+    prompt probado en el smoke) + job `ExtractIngestedDocument` (cola `documents`/
+    `database_long`, mismo carril que `ExtractCoverageDocumentText`) con validadores
+    portados de `parser.py` (patente/DNI-CUIT/fechas/número/alias de compañía). Estados
+    nuevos `en_extraccion`/`descartado_auto` en `IngestaStatus` (columna `string`, sin
+    migración). Contrato v2 en el endpoint (`schema_version=2`, ya no trae
+    `documento/tomador/riesgo/fechas` — eso lo produce el LLM); `IngestaDocumentoService::
+    applyExtraction()` reescribe `payload` con el shape v1 para que
+    `IngestaPendientesController`/`IngestaConfirmacionService` sigan funcionando **sin
+    cambios**. Fix de agrupación de Pendientes: clave `num:{compañía}:{número
+    normalizado}` (antes `num:{numero}`, colisionaba entre compañías y se partía por
+    diferencias de formato del número). Comando `ingesta:reextraer` (ops: re-despachar un
+    doc puntual o los colgados en `en_extraccion` con `--stuck`).
+  - **Cliente:** `ingestor/app/v6/` reemplaza `parser.py` (7 extractores regex por
+    compañía) por `extract_text.py` (~25 líneas, pdfplumber) — el cliente pasa a ser
+    scanner+transportista, sin conocer de pólizas. Único filtro que queda del lado
+    cliente: tamaño (`max_size_mb=15`). `app/v5/` queda intacta en disco como referencia
+    (el rollback real requiere revertir también el servidor, que ya no acepta
+    `schema_version=1`). `ingestor/` no tiene git propio — los archivos quedan en disco,
+    sin commit.
+  - **Tests:** `PolicyDocumentIngestaTest` reescrito a v2 (11), `ExtractIngestedDocumentTest`
+    nuevo (10 — fixtures con respuestas *reales* de deepseek-chat del smoke test,
+    validadores, degradación sin texto/LLM caído, E2E endpoint→job→confirm→materialización),
+    `IngestaPendientesGroupingTest` nuevo (3). Un assert de `IngestaConfirmacionTest`
+    actualizado (la key de agrupación cambió de formato, cambio intencional de esta rama).
+    Suite completa **571/571** verde (el entorno tiene un techo de memoria de 128M
+    preexistente que no alcanza para correr toda la suite en un proceso — se corrió con
+    `--memory-limit` elevado, igual que quedó documentado en la entrada 2026-07-06). PHPStan
+    **0** errores nuevos.
+  - **Pendiente antes de mergear a `main`:** evaluación live vía **ngrok** (decisión del
+    usuario: no pasar a producción todavía) — correr `app/v6/` contra el corpus real +
+    verificar `/ingesta-pendientes` + confirmar un contrato end-to-end; recién después
+    re-apuntar `config.yaml` a `mangobroker.com.ar` y mergear. Backlog de los 145
+    pendientes v1: no se re-procesan automáticamente (sin `payload.texto`, dedup por hash
+    los sigue reconociendo como ya subidos) — se triage-an a mano en la UI existente.
+    _(rama `feature/ingesta-v2-extraccion-llm`, sin mergear)_
+
 - **2026-07-09** — **Fix génesis — el PAS asignado al cliente venía sin teléfono (crash de siniestro en mobile) ✅.** Tras el deploy a GCP con BD en blanco (solo seed), el mobile crasheaba al hacer swipe en Siniestros: el PAS resuelto tenía `metadata` sin `phone`, y `ClaimReport.fromJson` (mango-mobile) castea `phone as String` no-nullable. Causa de raíz en el seed: (1) el PAS era un user aparte (`MobilePasSeeder`) del admin, con `metadata` que podía quedar incompleta; (2) `AdminUserSeeder`/`MobilePasSeeder` usaban `firstOrCreate` → si el user ya existía (logueó antes del seed) **no** rellenaban `metadata`. Decisión (usuario): **el admin es un superset del PAS** (mayor jerarquía). Cambios: `User::isPas()`/`scopePas()` reconocen `role=admin` como PAS; `AdminUserSeeder` idempotente (`firstOrNew` + fuerza `metadata` matrícula/teléfono, preserva password) y expone `AdminUserSeeder::EMAIL` como fuente de verdad; `CustomerSeeder` asigna ese admin a las fixtures **y** backfillea todo customer con `pas_id` null; **`MobilePasSeeder` eliminado**; `SiniestroController::defaultPas()` y el dropdown de `Customers/Edit` usan el scope `pas()`. Perfil de PAS por default: matrícula `97072`, teléfono `+5493516280778` (env-overridable). Test `SeedPasAssignmentTest` (4 casos: admin-es-PAS con perfil, todos los customers con PAS, backfill, idempotencia del metadata). Suite mobile PAS **27/27** · PHPStan **0**. _(rama `main`)_
 
 - **2026-07-07** — **Deprecación de ChatKit + retiro de Laravel Reverb ✅.** OpenAI anunció el sunset de **Agent Builder** (a más tardar **30-nov-2026**), así que el chat web sobre **OpenAI ChatKit** deja de tener continuidad. Consecuencias inmediatas: (1) el asistente opera **solo por WhatsApp** por ahora; (2) la **landing pública de marca (MANGO)** ya vive en este proyecto (`/` → `Landing/Index.vue`); (3) **Reverb retirado** — sin cliente web no hay quién consuma broadcasts. Cambios: `ApiQuoteResolution` ya no ramifica por canal (la entrega asíncrona de cotizaciones va **siempre** por el pipeline de jobs de WhatsApp — `NotifyClientQuoteReady` → `SendWhatsAppMessage`); eliminados el evento `QuoteProcessed` (`ShouldBroadcast`), `routes/channels.php` (+ el `channels:` de `bootstrap/app.php`), `config/reverb.php`, la conexión `reverb` de `config/broadcasting.php`, `resources/js/echo.js` (+ import en `bootstrap.js`), el `[program:reverb]` de `.docker/start.sh` y `broadcasting/*` de `config/cors.php`. Deps removidas: `laravel/reverb` (composer), `laravel-echo` + `pusher-js` (npm). Doc actualizada (`README.md`, `docs/README.md`, este ROADMAP). Test `VisredQuotationProviderTest` migrado de `Event::assertDispatched(QuoteProcessed)` a `Queue::assertPushed(NotifyClientQuoteReady)`. Suite Visred **14/14** · PHPStan **0** · build ✅. **Nota:** la deprecación del código del adapter ChatKit (`OpenAI\AgentToolAdapter`, tools HTTP `web-chat/v1`) es una cirugía posterior — por ahora queda en su lugar, marcado como canal deprecado en la doc. _(rama `main`)_
