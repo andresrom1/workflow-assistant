@@ -89,7 +89,7 @@ class ExtractIngestedDocument implements ShouldQueue
             throw new RuntimeException('IngestaExtractorAgent: respuesta no parseable como JSON.');
         }
 
-        $extraccion = $this->validar($decoded);
+        $extraccion = $this->validar($decoded, $texto);
 
         $ingesta->applyExtraction($this->document, $extraccion);
 
@@ -149,14 +149,17 @@ class ExtractIngestedDocument implements ShouldQueue
      *     razon_descarte: ?string,
      * }
      */
-    private function validar(array $raw): array
+    private function validar(array $raw, string $texto): array
     {
         $clase = mb_strtolower(trim((string) ($raw['clase'] ?? '')));
         $tomadorRaw = (array) ($raw['tomador'] ?? []);
         $riesgoRaw = (array) ($raw['riesgo'] ?? []);
         $fechasRaw = (array) ($raw['fechas'] ?? []);
 
-        $compania = $this->normalizarCompania($this->nullableString($raw['compania'] ?? null));
+        // El CUIT del emisor en el texto es señal MÁS fuerte que el nombre que diga el
+        // LLM (hay documentos —cupones— que no nombran a la compañía, solo su CUIT).
+        $compania = $this->companiaPorCuitDelEmisor($texto)
+            ?? $this->normalizarCompania($this->nullableString($raw['compania'] ?? null));
         $numeroPoliza = $this->validarNumero($this->nullableString($raw['numero_poliza'] ?? null));
         $documentoNumero = $this->validarDocumento($this->nullableString($tomadorRaw['documento_numero'] ?? null));
         $patente = $this->validarPatente($this->nullableString($riesgoRaw['patente'] ?? null));
@@ -298,10 +301,43 @@ class ExtractIngestedDocument implements ShouldQueue
             return null;
         }
 
-        /** @var list<string> $cuitsAseguradoras */
+        /** @var array<string, string> $cuitsAseguradoras */
         $cuitsAseguradoras = config('ingesta.company_cuits', []);
+        /** @var list<string> $otrosEmisores */
+        $otrosEmisores = config('ingesta.other_issuer_cuits', []);
 
-        return in_array($d, $cuitsAseguradoras, true) ? null : $d;
+        $esEmisor = array_key_exists($d, $cuitsAseguradoras) || in_array($d, $otrosEmisores, true);
+
+        return $esEmisor ? null : $d;
+    }
+
+    /**
+     * Detección FUERTE de compañía por el CUIT del emisor presente en el texto (misma
+     * señal que usaba parser.py v5): busca CUITs como token con límites (formateado
+     * `NN-NNNNNNNN-N` o 11 dígitos contiguos) y los matchea contra el mapa de
+     * aseguradoras conocidas. Si aparecen CUITs de MÁS de una aseguradora (p. ej. la
+     * tarjeta verde Mercosur lista varias como representantes), es ambiguo → null (se
+     * usa lo que dijo el LLM).
+     */
+    private function companiaPorCuitDelEmisor(string $texto): ?string
+    {
+        preg_match_all('/\b\d{2}-\d{8}-\d\b/', $texto, $formateados);
+        preg_match_all('/\b\d{11}\b/', $texto, $contiguos);
+
+        $cuits = array_unique(array_merge(
+            array_map(fn (string $c): string => preg_replace('/\D/', '', $c) ?? '', $formateados[0]),
+            $contiguos[0],
+        ));
+
+        /** @var array<string, string> $mapa */
+        $mapa = config('ingesta.company_cuits', []);
+
+        $matches = array_values(array_unique(array_intersect_key(
+            $mapa,
+            array_flip(array_filter($cuits, fn (string $c): bool => array_key_exists($c, $mapa))),
+        )));
+
+        return count($matches) === 1 ? $matches[0] : null;
     }
 
     private function validarFecha(?string $v): ?string

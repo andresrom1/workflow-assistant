@@ -26,22 +26,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | CUITs de aseguradoras conocidas
+    | CUITs de aseguradoras conocidas → nombre canónico
     |--------------------------------------------------------------------------
     |
-    | Un `documento_numero` que coincida con uno de estos CUITs NO es del tomador —
-    | es el emisor del documento (frecuente que el LLM confunda el CUIT del pie de
-    | página con el documento del cliente). Portado de ingestor/app/v5/parser.py
-    | (COMPANY_BY_CUIT) + margen de otros emisores vistos en el corpus real.
+    | Doble uso (portado de ingestor/app/v5/parser.py COMPANY_BY_CUIT):
+    | 1. Detección FUERTE de compañía: si el texto contiene el CUIT de una
+    |    aseguradora conocida, esa es la compañía emisora — pisa lo que diga el LLM
+    |    (caso real 2026-07-14: el cupón de San Cristóbal no menciona el nombre de
+    |    la compañía, solo su CUIT; el LLM adivinó "Sancor" y rompió la agrupación
+    |    del contrato).
+    | 2. Exclusión de `documento_numero`: un documento que coincida con uno de
+    |    estos CUITs NO es del tomador, es el emisor.
     |
     */
 
     'company_cuits' => [
-        '30500049460', // Sancor Seguros
-        '30500061711', // Río Uruguay
-        '30500000127', // Seguros Galicia
-        '30714590541', // Experta Seguros
-        '34500045339', // San Cristóbal
+        '30500049460' => 'Sancor Seguros',
+        '30500061711' => 'Río Uruguay',
+        '30500000127' => 'Seguros Galicia',
+        '30714590541' => 'Experta Seguros',
+        '34500045339' => 'San Cristóbal',
+    ],
+
+    // Otros CUITs emisores vistos en documentos reales que tampoco son del tomador,
+    // pero cuya compañía no identifica al documento (bancos, coaseguros, etc.).
+    'other_issuer_cuits' => [
         '30500065776', // emisor visto en corpus real (certificado Sancor)
     ],
 

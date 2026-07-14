@@ -165,6 +165,56 @@ it('trata una clase desconocida como corpus conservador: pendiente, kind otro', 
         ->and($doc->kind)->toBe(PolicyDocumentKind::Otro);
 });
 
+it('corrige la compañía por CUIT del emisor en el texto (cupón que no nombra a la compañía)', function (): void {
+    // Caso real 2026-07-14 (ingested_document 171): el cupón de pago de San Cristóbal
+    // no menciona el nombre de la compañía en el texto, solo su CUIT — el LLM adivinó
+    // "Sancor Seguros" y rompió la agrupación del contrato. El CUIT es señal más fuerte.
+    IngestaExtractorAgent::fake([json_encode([
+        'clase' => 'cupon',
+        'compania' => 'Sancor Seguros', // lo que el LLM adivinó (mal)
+        'numero_poliza' => '01-03-07-30414411', 'endoso_numero' => null,
+        'tomador' => ['tipo_persona' => 'fisica', 'first_name' => 'RODRIGO EZEQUIEL', 'last_name' => 'BASSI', 'razon_social' => null, 'documento_tipo' => null, 'documento_numero' => null],
+        'riesgo' => ['patente' => null, 'marca' => null, 'modelo' => null, 'year' => null, 'combustible' => null, 'uso' => null],
+        'fechas' => ['emision' => null, 'vigencia_desde' => '2026-04-16', 'vigencia_hasta' => '2026-07-16'],
+    ])]);
+
+    $doc = runIngestaJob(extractionStagedDoc([
+        'payload' => [
+            'schema_version' => 2,
+            'archivo' => ['nombre_original' => 'cupones_de_pago.pdf', 'hash_sha256' => str_repeat('b', 64), 'detectado_en' => null],
+            // Texto real del cupón: CUIT del emisor (San Cristóbal), sin el nombre.
+            'texto' => "C.U.I.T. 34-50004533-9 C.U.I.T. 34-50004533-9\nInscrip. SSN 0192\nPÓLIZA Nro 01-03-07-30414411\nRAMO COMBINADO BASSI RODRIGO EZEQUIEL",
+        ],
+    ]));
+
+    expect($doc->compania)->toBe('San Cristóbal') // el CUIT pisa al LLM
+        ->and($doc->kind)->toBe(PolicyDocumentKind::Cupon)
+        ->and($doc->status)->toBe(IngestaStatus::Pendiente);
+});
+
+it('no pisa la compañía cuando el texto trae CUITs de más de una aseguradora (ambiguo)', function (): void {
+    IngestaExtractorAgent::fake([json_encode([
+        'clase' => 'certificado',
+        'compania' => 'Triunfo', // lo que dijo el LLM
+        'numero_poliza' => '1912367', 'endoso_numero' => null,
+        'tomador' => ['tipo_persona' => null, 'first_name' => null, 'last_name' => null, 'razon_social' => null, 'documento_tipo' => null, 'documento_numero' => null],
+        'riesgo' => ['patente' => null, 'marca' => null, 'modelo' => null, 'year' => null, 'combustible' => null, 'uso' => null],
+        'fechas' => ['emision' => null, 'vigencia_desde' => null, 'vigencia_hasta' => null],
+    ])]);
+
+    $doc = runIngestaJob(extractionStagedDoc([
+        'payload' => [
+            'schema_version' => 2,
+            'archivo' => ['nombre_original' => 'tarjeta_mercosur.pdf', 'hash_sha256' => str_repeat('c', 64), 'detectado_en' => null],
+            // Tarjeta verde Mercosur: lista varias aseguradoras representantes con sus CUITs.
+            'texto' => "Representantes: SANCOR SEGUROS C.U.I.T. 30-50004946-0 / SAN CRISTOBAL C.U.I.T. 34-50004533-9\nPÓLIZA 1912367",
+        ],
+    ]));
+
+    // Ambiguo → conserva lo del LLM (normalizado por alias).
+    expect($doc->compania)->toBe('Triunfo Cooperativa de Seguros');
+});
+
 it('clasifica un endoso/cancelación como tal (no como poliza)', function (): void {
     IngestaExtractorAgent::fake([json_encode([
         'clase' => 'endoso',
