@@ -2,25 +2,26 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\PolicyDocumentKind;
+use App\Jobs\ExtractIngestedDocument;
 use App\Services\IngestaDocumentoService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Recibe los documentos de póliza que sube el ingestor local (repo `ingestor/`, Python
- * sin LLM, parser v5) por `multipart/form-data`: campo `metadata` (JSON string del
- * contrato §2) + campo `file` (PDF original). Autenticado con token Sanctum del productor.
+ * Recibe los documentos de póliza que sube el ingestor local (repo `ingestor/`, Python,
+ * scanner+uploader v6) por `multipart/form-data`: campo `metadata` (JSON string del
+ * contrato v2) + campo `file` (PDF original). Autenticado con token Sanctum del productor.
  *
- * Filosofía de validación (doc §2-bis): MINIMIZAR los 422. Un 422 hace que el ingestor
- * cuente el archivo como error y lo reintente al día siguiente. Sólo se rechaza lo
- * genuinamente improcesable (envoltorio roto, sin hash para dedup, schema desconocido);
- * un contrato incompleto (sin número de póliza, sin tomador) NO se rechaza: se estaciona
- * en Pendientes para confirmación humana.
+ * v2: el cliente ya NO extrae campos (eso lo hacía el parser regex v5, retirado). Manda
+ * texto plano (pdfplumber, primeras páginas) + el PDF; la clasificación/extracción corre
+ * server-side vía LLM en {@see ExtractIngestedDocument}, despachado desde
+ * {@see IngestaDocumentoService::stage()}.
  *
- * El parseo vive en el cliente; acá NO se re-extrae. Ver
- * docs/v3/04-ingesta-local-documentos.md.
+ * Filosofía de validación (se mantiene de v1): MINIMIZAR los 422. Un 422 hace que el
+ * ingestor cuente el archivo como error y lo reintente al día siguiente. Sólo se rechaza
+ * lo genuinamente improcesable (envoltorio roto, sin hash para dedup, schema desconocido).
+ * Ver docs/v3/04-ingesta-local-documentos.md.
  */
 class PolicyDocumentIngestaController extends Controller
 {
@@ -48,9 +49,9 @@ class PolicyDocumentIngestaController extends Controller
         // 3. Invariantes duras: sin éstas el documento es improcesable (no es "incompleto").
         $hash = data_get($contract, 'archivo.hash_sha256');
 
-        if ((int) data_get($contract, 'schema_version') !== 1) {
+        if ((int) data_get($contract, 'schema_version') !== 2) {
             throw ValidationException::withMessages([
-                'metadata' => 'schema_version no soportado (se espera 1).',
+                'metadata' => 'schema_version no soportado (se espera 2).',
             ]);
         }
 
@@ -60,10 +61,11 @@ class PolicyDocumentIngestaController extends Controller
             ]);
         }
 
-        // 4. Degradación: el resto se acepta. `kind` desconocido o ausente → Otro.
-        $kind = PolicyDocumentKind::tryFrom((string) data_get($contract, 'documento.kind'))
-            ?? PolicyDocumentKind::Otro;
-        $contract['documento']['kind'] = $kind->value;
+        // 4. Degradación: `texto` es opcional. Si vino con un tipo inesperado, se ignora
+        //    en vez de rechazar el documento (mismo espíritu que el resto del endpoint):
+        //    el job de extracción ya sabe degradar cuando no hay texto.
+        $texto = data_get($contract, 'texto');
+        $contract['texto'] = is_string($texto) ? $texto : null;
 
         // 5. El controller no crea nada: delega el estacionamiento en Pendientes.
         $result = $this->ingesta->stage($contract, $request->file('file'));

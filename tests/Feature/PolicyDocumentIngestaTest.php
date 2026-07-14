@@ -1,9 +1,12 @@
 <?php
 
+use App\Enums\IngestaStatus;
+use App\Jobs\ExtractIngestedDocument;
 use App\Models\IngestedDocument;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
@@ -11,55 +14,24 @@ use Laravel\Sanctum\Sanctum;
 uses(RefreshDatabase::class);
 
 /**
- * Contrato §2 mínimo válido. `$overrides` reemplaza secciones top-level completas
- * (documento, tomador, riesgo, fechas, archivo, extraccion).
+ * Contrato v2 mínimo válido: el cliente ya NO extrae campos (parser regex v5 retirado) —
+ * solo manda el texto plano (pdfplumber) + los datos del archivo. La clasificación y
+ * extracción corren server-side vía {@see ExtractIngestedDocument} (ver
+ * tests/Feature/ExtractIngestedDocumentTest.php para ese pipeline).
  *
  * @param  array<string, mixed>  $overrides
  * @return array<string, mixed>
  */
-function validIngestaContract(array $overrides = []): array
+function validIngestaContractV2(array $overrides = []): array
 {
     return array_replace([
-        'schema_version' => 1,
-        'documento' => [
-            'kind' => 'poliza',
-            'compania' => 'Sancor Seguros',
-            'numero_poliza' => '000031184413',
-            'endoso_numero' => null,
-        ],
-        'tomador' => [
-            'tipo_persona' => 'fisica',
-            'first_name' => 'SICOT LEONARDO',
-            'last_name' => 'FABIO',
-            'razon_social' => null,
-            'documento_tipo' => 'DNI',
-            'documento_numero' => '21407965',
-        ],
-        'riesgo' => [
-            'tipo' => 'vehicle',
-            'patente' => 'AB235OR',
-            'marca' => null,
-            'modelo' => null,
-            'version' => null,
-            'year' => '2017',
-            'combustible' => null,
-            'uso' => null,
-            'codigo_postal' => null,
-        ],
-        'fechas' => [
-            'emision' => null,
-            'vigencia_desde' => '2026-02-19',
-            'vigencia_hasta' => '2027-02-19',
-        ],
+        'schema_version' => 2,
         'archivo' => [
             'nombre_original' => 'Caratula Anual (5).pdf',
             'hash_sha256' => str_repeat('a', 64),
             'detectado_en' => '2026-06-24T08:00:00-03:00',
         ],
-        'extraccion' => [
-            'parser' => 'policy_parser_v5',
-            'campos_no_extraidos' => ['marca', 'modelo', 'emision'],
-        ],
+        'texto' => 'SANCOR SEGUROS - Póliza N° 000031184413 - Asegurado: SICOT LEONARDO FABIO...',
     ], $overrides);
 }
 
@@ -68,7 +40,7 @@ function validIngestaContract(array $overrides = []): array
  *
  * @param  array<string, mixed>  $contract
  */
-function postIngesta(array $contract, ?UploadedFile $file = null): TestResponse
+function postIngestaV2(array $contract, ?UploadedFile $file = null): TestResponse
 {
     $file ??= UploadedFile::fake()->create('poliza.pdf', 200, 'application/pdf');
 
@@ -83,36 +55,34 @@ beforeEach(function (): void {
 });
 
 it('rechaza sin token (401)', function (): void {
-    postIngesta(validIngestaContract())->assertUnauthorized();
+    postIngestaV2(validIngestaContractV2())->assertUnauthorized();
 });
 
-it('acepta un contrato válido, estaciona la fila y sube el PDF a R2', function (): void {
+it('acepta un contrato v2 válido, estaciona la fila en_extraccion, sube el PDF a R2 y despacha la extracción', function (): void {
+    Queue::fake();
     Sanctum::actingAs(User::factory()->create());
 
     $hash = str_repeat('a', 64);
 
-    postIngesta(validIngestaContract())
+    postIngestaV2(validIngestaContractV2())
         ->assertCreated()
         ->assertJson(['status' => 'staged', 'pendiente' => true]);
 
     $this->assertDatabaseHas('ingested_documents', [
         'hash_sha256' => $hash,
-        'kind' => 'poliza',
-        'compania' => 'Sancor Seguros',
-        'numero_poliza' => '000031184413',
-        'documento_numero' => '21407965',
-        'patente' => 'AB235OR',
-        'status' => 'pendiente',
+        'status' => 'en_extraccion',
     ]);
 
     Storage::disk('r2')->assertExists("ingesta/{$hash}.pdf");
+
+    Queue::assertPushed(ExtractIngestedDocument::class, fn (ExtractIngestedDocument $job): bool => $job->document->hash_sha256 === $hash);
 });
 
 it('rechaza con 422 si falta el archivo', function (): void {
     Sanctum::actingAs(User::factory()->create());
 
     test()->post('/api/ingesta/documentos', [
-        'metadata' => json_encode(validIngestaContract()),
+        'metadata' => json_encode(validIngestaContractV2()),
     ], ['Accept' => 'application/json'])
         ->assertStatus(422)
         ->assertJsonValidationErrorFor('file');
@@ -121,7 +91,7 @@ it('rechaza con 422 si falta el archivo', function (): void {
 it('rechaza con 422 si el archivo no es PDF', function (): void {
     Sanctum::actingAs(User::factory()->create());
 
-    postIngesta(validIngestaContract(), UploadedFile::fake()->create('foto.png', 100, 'image/png'))
+    postIngestaV2(validIngestaContractV2(), UploadedFile::fake()->create('foto.png', 100, 'image/png'))
         ->assertStatus(422)
         ->assertJsonValidationErrorFor('file');
 });
@@ -140,69 +110,77 @@ it('rechaza con 422 si metadata no es JSON válido', function (): void {
 it('rechaza con 422 si falta el hash (sin él no hay idempotencia)', function (): void {
     Sanctum::actingAs(User::factory()->create());
 
-    $contract = validIngestaContract();
+    $contract = validIngestaContractV2();
     $contract['archivo']['hash_sha256'] = null;
 
-    postIngesta($contract)
+    postIngestaV2($contract)
         ->assertStatus(422)
         ->assertJsonValidationErrorFor('metadata');
 });
 
-it('rechaza con 422 si el schema_version no es soportado', function (): void {
+it('rechaza con 422 si el schema_version no es 2 (v1 retirado)', function (): void {
     Sanctum::actingAs(User::factory()->create());
 
-    postIngesta(validIngestaContract(['schema_version' => 2]))
+    postIngestaV2(validIngestaContractV2(['schema_version' => 1]))
         ->assertStatus(422)
         ->assertJsonValidationErrorFor('metadata');
 });
 
-it('degrada en vez de rechazar cuando faltan claves mínimas (caso Mercantil sin número ni tomador)', function (): void {
+it('degrada en vez de rechazar cuando texto viene con un tipo inesperado', function (): void {
+    Queue::fake();
     Sanctum::actingAs(User::factory()->create());
 
-    $contract = validIngestaContract([
-        'documento' => ['kind' => 'circulation-card', 'compania' => 'Mercantil Andina', 'numero_poliza' => null, 'endoso_numero' => null],
-        'tomador' => ['tipo_persona' => null, 'first_name' => null, 'last_name' => null, 'razon_social' => null, 'documento_tipo' => null, 'documento_numero' => null],
-    ]);
+    $contract = validIngestaContractV2(['texto' => ['no' => 'es un string']]);
     $contract['archivo']['hash_sha256'] = str_repeat('b', 64);
 
-    // El contrato incompleto NO se rechaza: se estaciona en Pendientes para confirmación.
-    postIngesta($contract)->assertCreated();
+    // No se rechaza: se estaciona igual, el job de extracción degradará por falta de texto.
+    postIngestaV2($contract)->assertCreated();
 
     $this->assertDatabaseHas('ingested_documents', [
         'hash_sha256' => str_repeat('b', 64),
-        'kind' => 'circulation-card',
-        'numero_poliza' => null,
-        'documento_numero' => null,
-        'patente' => 'AB235OR',
-        'status' => 'pendiente',
+        'status' => 'en_extraccion',
     ]);
 });
 
-it('coerce un kind desconocido a Otro antes de estacionar', function (): void {
+it('acepta texto null (PDF sin texto extraíble) y lo estaciona igual', function (): void {
+    Queue::fake();
     Sanctum::actingAs(User::factory()->create());
 
-    $contract = validIngestaContract([
-        'documento' => ['kind' => 'inventado', 'compania' => 'Sancor Seguros', 'numero_poliza' => '123', 'endoso_numero' => null],
-    ]);
+    $contract = validIngestaContractV2(['texto' => null]);
     $contract['archivo']['hash_sha256'] = str_repeat('c', 64);
 
-    postIngesta($contract)->assertCreated();
+    postIngestaV2($contract)->assertCreated();
 
-    $this->assertDatabaseHas('ingested_documents', [
-        'hash_sha256' => str_repeat('c', 64),
-        'kind' => 'otro',
-    ]);
+    $doc = IngestedDocument::where('hash_sha256', str_repeat('c', 64))->firstOrFail();
+    expect(data_get($doc->payload, 'texto'))->toBeNull();
 });
 
-it('es idempotente: el mismo hash no duplica filas y responde 200', function (): void {
+it('es idempotente: el mismo hash no duplica filas ni re-despacha la extracción', function (): void {
+    Queue::fake();
     Sanctum::actingAs(User::factory()->create());
 
-    postIngesta(validIngestaContract())->assertCreated();
+    postIngestaV2(validIngestaContractV2())->assertCreated();
 
     // Reenvío del mismo PDF (mismo hash): 200 idempotente, sin segunda fila.
-    postIngesta(validIngestaContract())
+    postIngestaV2(validIngestaContractV2())
         ->assertOk()
         ->assertJson(['status' => 'duplicate']);
 
     expect(IngestedDocument::where('hash_sha256', str_repeat('a', 64))->count())->toBe(1);
+    Queue::assertPushed(ExtractIngestedDocument::class, 1);
+});
+
+it('un duplicado ya descartado_auto responde pendiente=false', function (): void {
+    Sanctum::actingAs(User::factory()->create());
+
+    $doc = IngestedDocument::factory()->create([
+        'hash_sha256' => str_repeat('d', 64),
+        'status' => IngestaStatus::DescartadoAuto,
+    ]);
+
+    postIngestaV2(validIngestaContractV2(['archivo' => [
+        'nombre_original' => 'x.pdf', 'hash_sha256' => str_repeat('d', 64), 'detectado_en' => null,
+    ]]))
+        ->assertOk()
+        ->assertJson(['status' => 'duplicate', 'pendiente' => false, 'ingested_document_id' => $doc->id]);
 });
