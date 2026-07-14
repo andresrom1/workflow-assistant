@@ -248,7 +248,8 @@ it('el index agrupa los pendientes por contrato y expone key/prefill/resumen', f
             ->component('PolicyDocuments/PendientesIngesta')
             ->has('grupos', 1)
             ->has('grupos.0.documentos', 2)
-            ->where('grupos.0.key', 'num:000031184413')
+            // Clave v2: compañía + número normalizado (ver fix de agrupación, doc v3/04).
+            ->where('grupos.0.key', 'num:sancor seguros:000031184413')
             ->where('grupos.0.resumen.tomador', 'SICOT LEONARDO FABIO')
             ->where('grupos.0.prefill.documento_numero', '21407965')
             ->has('grupos.0.faltantes_count'));

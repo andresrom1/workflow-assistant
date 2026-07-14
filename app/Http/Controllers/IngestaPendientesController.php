@@ -42,12 +42,31 @@ class IngestaPendientesController extends Controller
             ->orderByDesc('id')
             ->get();
 
-        // Agrupar por contrato: numero_poliza si lo hay, sino patente, sino el id (suelto).
+        // Agrupar por contrato: compañía + número normalizado (solo dígitos), sino
+        // patente, sino el id (suelto). El número normalizado evita que dos compañías con
+        // el mismo número colisionen y que variantes de formato del mismo número
+        // (LLM: "1.912.367" vs "458 1.912.367", o guiones vs sin guiones) partan el
+        // contrato en dos grupos.
+        $numeroKey = fn (IngestedDocument $d): ?string => ($num = preg_replace('/\D/', '', (string) $d->numero_poliza)) !== ''
+            ? 'num:'.mb_strtolower((string) $d->compania).':'.$num
+            : null;
+
+        // Fusión: documentos sin número (cupón, tarjeta vieja) que comparten patente con
+        // un contrato ya identificado por otro documento del grupo se unen a ESE grupo en
+        // vez de quedar sueltos en su propio "pat:X".
+        $patenteAContrato = [];
+        foreach ($pendientes as $d) {
+            $key = $numeroKey($d);
+            if ($key !== null && $d->patente !== null && ! isset($patenteAContrato[$d->patente])) {
+                $patenteAContrato[$d->patente] = $key;
+            }
+        }
+
         $grupos = $pendientes
-            ->groupBy(fn (IngestedDocument $d): string => match (true) {
-                $d->numero_poliza !== null => "num:{$d->numero_poliza}",
-                $d->patente !== null => "pat:{$d->patente}",
-                default => "id:{$d->id}",
+            ->groupBy(function (IngestedDocument $d) use ($numeroKey, $patenteAContrato): string {
+                $key = $numeroKey($d);
+
+                return $key ?? $patenteAContrato[$d->patente] ?? ($d->patente !== null ? "pat:{$d->patente}" : "id:{$d->id}");
             })
             ->map(function (Collection $docs, string $key): array {
                 /** @var IngestedDocument $head */
