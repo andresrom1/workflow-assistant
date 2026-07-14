@@ -305,11 +305,20 @@ archivo y su texto plano:
 }
 ```
 
-`texto`: primeras 3 páginas extraídas con pdfplumber (`ingestor/app/v6/extract_text.py`),
-capado a 12000 chars en el cliente y re-capado a `config('ingesta.max_text_chars')` (8000)
+`texto`: primeras **10** páginas extraídas con pdfplumber (`ingestor/app/v6/extract_text.py`),
+capado a 20000 chars en el cliente y re-capado a `config('ingesta.max_text_chars')` (16000)
 en el servidor — el cap server-side le pone techo al costo por documento
 independientemente de lo que mande el cliente. `schema_version` distinto de 2 → 422 (v1
 retirado, un solo cliente controlado).
+
+> **Por qué 10 páginas y no 3 (corrección 2026-07-13, primera corrida real).** Las
+> compañías que empaquetan la póliza completa en un solo PDF (Galicia: 22–29 páginas)
+> ponen carátulas administrativas adelante (constancia de recepción, carta de bienvenida)
+> y el frente con los datos (tomador/DNI/patente/vigencias) recién arranca en la página
+> 4–6. Con el recorte original de 3 páginas el LLM clasificaba bien (la carátula dice
+> "Póliza") pero extraía vacío — nunca veía los datos. Verificado con el corpus: mismo
+> PDF de Galicia pasó de DNI/patente/vigencias = null a extraerlos todos al subir el cap.
+> Costo por documento con el cap nuevo: ~$0.0017 (medido) — sigue despreciable.
 
 ### 9.2 Pipeline server-side
 

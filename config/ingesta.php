@@ -17,8 +17,12 @@ return [
     'extraction_model' => env('INGESTA_EXTRACTION_MODEL', 'deepseek-chat'),
 
     // Cap duro del texto que se manda al LLM (le pone techo al costo por documento,
-    // independiente de lo que mande el cliente).
-    'max_text_chars' => 8000,
+    // independiente de lo que mande el cliente). 16000 y no menos: las pólizas
+    // empaquetadas (Galicia, 22-29 páginas) traen carátulas administrativas adelante y
+    // el frente con los datos (DNI en pág. 6) suma ~10k chars desde el inicio — con un
+    // cap menor el LLM clasifica bien pero extrae vacío (hallazgo 2026-07-13).
+    // ~4k tokens ≈ $0.001/doc con deepseek-chat: sigue siendo despreciable.
+    'max_text_chars' => 16000,
 
     /*
     |--------------------------------------------------------------------------
