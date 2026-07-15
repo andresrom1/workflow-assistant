@@ -21,15 +21,29 @@ class CoverageDocumentController extends Controller
     {
         $search = $request->input('search', '');
         $perPage = $request->input('per_page', 25);
+        $sort = $request->input('sort');
+        $direction = strtolower((string) $request->input('direction', 'asc'));
+        $direction = in_array($direction, ['asc', 'desc'], true) ? $direction : 'asc';
 
-        $documents = CoverageDocument::query()
+        $query = CoverageDocument::query()
             ->withCount('chunks')
             ->when($search, fn ($q, $s) => $q->where('company_name', 'like', "%{$s}%")
-                ->orWhere('original_filename', 'like', "%{$s}%"))
-            ->orderBy('company_slug')
-            ->orderByDesc('is_active')
-            ->orderByDesc('updated_at')
-            ->paginate($perPage)
+                ->orWhere('original_filename', 'like', "%{$s}%"));
+
+        $allowedSorts = [
+            'company_name', 'company_slug', 'document_type', 'original_filename',
+            'extraction_status', 'extraction_mode', 'is_active', 'version',
+            'updated_at', 'created_at', 'chunks_count',
+        ];
+        if (in_array($sort, $allowedSorts, true)) {
+            $query->orderBy($sort, $direction);
+        } else {
+            $query->orderBy('company_slug')
+                ->orderByDesc('is_active')
+                ->orderByDesc('updated_at');
+        }
+
+        $documents = $query->paginate($perPage)
             ->through(fn (CoverageDocument $doc): array => [
                 'id' => $doc->id,
                 'company_name' => $doc->company_name,
@@ -46,7 +60,12 @@ class CoverageDocumentController extends Controller
 
         return Inertia::render('CoverageDocuments/Index', [
             'documents' => $documents,
-            'filters' => ['search' => $search, 'per_page' => $perPage],
+            'filters' => [
+                'search' => $search,
+                'per_page' => $perPage,
+                'sort' => $sort,
+                'direction' => $direction,
+            ],
         ]);
     }
 

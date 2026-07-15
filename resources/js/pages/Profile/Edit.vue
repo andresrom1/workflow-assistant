@@ -1,5 +1,9 @@
 <script setup>
 import { useForm, usePage } from '@inertiajs/vue3'
+import { Button } from '@/components/UI/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/UI/card'
+import { Input } from '@/components/UI/input'
+import { FormControl, FormItem, FormLabel, FormMessage } from '@/components/UI/form'
 
 const props = defineProps({
   auth: { type: Object, required: true },
@@ -39,121 +43,80 @@ const submitPassword = () => {
 
 <template>
   <div class="py-6 px-4 sm:py-8">
-    <div class="max-w-2xl mx-auto space-y-5">
+    <div class="max-w-2xl mx-auto flex flex-col gap-5">
 
       <!-- Header -->
       <div>
         <h1 class="text-xl sm:text-2xl font-semibold tracking-tight" style="color: var(--text-1);">
           Mi perfil
         </h1>
-        <p class="text-sm mt-0.5" style="color: var(--text-3);">
+        <p class="text-sm mt-0.5 text-muted-foreground">
           Actualizá tu información personal y contraseña.
         </p>
       </div>
 
-<!-- ── Información personal ──────────────────────────────── -->
-      <div class="card p-6">
-        <h2 class="text-sm font-semibold mb-5" style="color: var(--text-1);">
-          Información personal
-        </h2>
+      <!-- Información personal -->
+      <Card>
+        <CardHeader>
+          <CardTitle>Información personal</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form @submit.prevent="submitInfo" class="flex flex-col gap-4">
+            <FormItem name="name" :error="infoForm.errors.name">
+              <FormLabel>Nombre completo</FormLabel>
+              <FormControl>
+                <Input v-model="infoForm.name" type="text" autocomplete="name" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
 
-        <form @submit.prevent="submitInfo" class="flex flex-col gap-4">
-          <div>
-            <label class="block text-xs font-medium mb-1.5" style="color: var(--text-2);" for="name">
-              Nombre completo
-            </label>
-            <input
-              id="name"
-              v-model="infoForm.name"
-              type="text"
-              autocomplete="name"
-              class="field"
-              :class="{ 'field-error': infoForm.errors.name }"
-            />
-            <p v-if="infoForm.errors.name" class="mt-1 text-xs" style="color: #dc2626;">
-              {{ infoForm.errors.name }}
-            </p>
-          </div>
+            <FormItem name="email" :error="infoForm.errors.email">
+              <FormLabel>Correo electrónico</FormLabel>
+              <FormControl>
+                <Input v-model="infoForm.email" type="email" autocomplete="email" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
 
-          <div>
-            <label class="block text-xs font-medium mb-1.5" style="color: var(--text-2);" for="email">
-              Correo electrónico
-            </label>
-            <input
-              id="email"
-              v-model="infoForm.email"
-              type="email"
-              autocomplete="email"
-              class="field"
-              :class="{ 'field-error': infoForm.errors.email }"
-            />
-            <p v-if="infoForm.errors.email" class="mt-1 text-xs" style="color: #dc2626;">
-              {{ infoForm.errors.email }}
-            </p>
-          </div>
+            <Button type="submit" class="w-full" :disabled="infoForm.processing">
+              {{ infoForm.processing ? 'Guardando…' : 'Guardar cambios' }}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-          <button
-            type="submit"
-            class="btn btn-primary w-full mt-1"
-            :disabled="infoForm.processing"
-          >
-            {{ infoForm.processing ? 'Guardando…' : 'Guardar cambios' }}
-          </button>
-        </form>
-      </div>
+      <!-- Cambiar contraseña -->
+      <Card>
+        <CardHeader>
+          <CardTitle>Cambiar contraseña</CardTitle>
+          <CardDescription>
+            Dejá los campos vacíos para no cambiar la contraseña.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form @submit.prevent="submitPassword" class="flex flex-col gap-4">
+            <FormItem name="password" :error="passwordForm.errors.password">
+              <FormLabel>Nueva contraseña</FormLabel>
+              <FormControl>
+                <Input v-model="passwordForm.password" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
 
-      <!-- ── Cambiar contraseña ─────────────────────────────────── -->
-      <div class="card p-6">
-        <h2 class="text-sm font-semibold mb-1" style="color: var(--text-1);">
-          Cambiar contraseña
-        </h2>
-        <p class="text-xs mb-5" style="color: var(--text-3);">
-          Dejá los campos vacíos para no cambiar la contraseña.
-        </p>
+            <FormItem name="password_confirmation" :error="passwordForm.errors.password_confirmation">
+              <FormLabel>Confirmar nueva contraseña</FormLabel>
+              <FormControl>
+                <Input v-model="passwordForm.password_confirmation" type="password" autocomplete="new-password" placeholder="Repetí la contraseña" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
 
-        <form @submit.prevent="submitPassword" class="flex flex-col gap-4">
-          <div>
-            <label class="block text-xs font-medium mb-1.5" style="color: var(--text-2);" for="password">
-              Nueva contraseña
-            </label>
-            <input
-              id="password"
-              v-model="passwordForm.password"
-              type="password"
-              autocomplete="new-password"
-              class="field"
-              :class="{ 'field-error': passwordForm.errors.password }"
-              placeholder="Mínimo 8 caracteres"
-            />
-            <p v-if="passwordForm.errors.password" class="mt-1 text-xs" style="color: #dc2626;">
-              {{ passwordForm.errors.password }}
-            </p>
-          </div>
-
-          <div>
-            <label class="block text-xs font-medium mb-1.5" style="color: var(--text-2);" for="password_confirmation">
-              Confirmar nueva contraseña
-            </label>
-            <input
-              id="password_confirmation"
-              v-model="passwordForm.password_confirmation"
-              type="password"
-              autocomplete="new-password"
-              class="field"
-              :class="{ 'field-error': passwordForm.errors.password_confirmation }"
-              placeholder="Repetí la contraseña"
-            />
-          </div>
-
-          <button
-            type="submit"
-            class="btn btn-primary w-full mt-1"
-            :disabled="passwordForm.processing"
-          >
-            {{ passwordForm.processing ? 'Guardando…' : 'Cambiar contraseña' }}
-          </button>
-        </form>
-      </div>
+            <Button type="submit" class="w-full" :disabled="passwordForm.processing">
+              {{ passwordForm.processing ? 'Guardando…' : 'Cambiar contraseña' }}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
     </div>
   </div>

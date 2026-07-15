@@ -2,7 +2,7 @@
   <div class="py-6 px-4 sm:py-8">
     <div class="max-w-4xl mx-auto">
 
-      <BackLink href="/policy-documents" label="Docs Pólizas" class="mb-4" />
+      <AppBackLink href="/policy-documents" label="Docs Pólizas" class="mb-4" />
 
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
@@ -80,7 +80,7 @@
         </div>
       </div>
 
-      <Pagination v-if="polizas.last_page > 1" :data="polizas" class="mt-4" />
+      <AppPagination v-if="polizas.last_page > 1" :data="polizas" class="mt-4" />
 
     </div>
   </div>
@@ -89,8 +89,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
-import Pagination from '@/components/UI/Pagination.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
+import AppPagination from '@/components/App/Pagination.vue'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 
 interface PendienteRow {

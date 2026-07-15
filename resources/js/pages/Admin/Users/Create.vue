@@ -1,6 +1,19 @@
 <script setup>
 import { ref } from 'vue'
 import { useForm, usePage } from '@inertiajs/vue3'
+import { Loader2Icon } from '@lucide/vue'
+import { Badge } from '@/components/UI/badge'
+import { Button } from '@/components/UI/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/UI/dialog'
+import { FormControl, FormItem, FormLabel, FormMessage } from '@/components/UI/form'
+import { Input } from '@/components/UI/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 
 const props = defineProps({
@@ -68,7 +81,7 @@ const submitConfirm = () => {
         </p>
       </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         <!-- ── Crear nuevo usuario ───────────────────────────── -->
         <div class="card p-6">
@@ -78,111 +91,93 @@ const submitConfirm = () => {
 
           <form @submit.prevent="submit" class="flex flex-col gap-4">
             <!-- Nombre -->
-            <div>
-              <label class="block text-xs font-medium mb-1.5" style="color: var(--text-2);" for="name">
-                Nombre completo
-              </label>
-              <input
-                id="name"
-                v-model="form.name"
-                type="text"
-                autocomplete="name"
-                class="field"
-                :class="{ 'field-error': form.errors.name }"
-                placeholder="Juan Pérez"
-              />
-              <p v-if="form.errors.name" class="mt-1 text-xs" style="color: #dc2626;">
-                {{ form.errors.name }}
-              </p>
-            </div>
+            <FormItem :error="form.errors.name">
+              <FormLabel for="name">Nombre completo</FormLabel>
+              <FormControl>
+                <Input
+                  id="name"
+                  v-model="form.name"
+                  type="text"
+                  autocomplete="name"
+                  placeholder="Juan Pérez"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
 
             <!-- Email -->
-            <div>
-              <label class="block text-xs font-medium mb-1.5" style="color: var(--text-2);" for="email">
-                Correo electrónico
-              </label>
-              <input
-                id="email"
-                v-model="form.email"
-                type="email"
-                autocomplete="off"
-                class="field"
-                :class="{ 'field-error': form.errors.email }"
-                placeholder="usuario@ejemplo.com"
-              />
-              <p v-if="form.errors.email" class="mt-1 text-xs" style="color: #dc2626;">
-                {{ form.errors.email }}
-              </p>
-            </div>
+            <FormItem :error="form.errors.email">
+              <FormLabel for="email">Correo electrónico</FormLabel>
+              <FormControl>
+                <Input
+                  id="email"
+                  v-model="form.email"
+                  type="email"
+                  autocomplete="off"
+                  placeholder="usuario@ejemplo.com"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
 
             <!-- Contraseña -->
-            <div>
-              <label class="block text-xs font-medium mb-1.5" style="color: var(--text-2);" for="password">
-                Contraseña
-              </label>
-              <input
-                id="password"
-                v-model="form.password"
-                type="password"
-                autocomplete="new-password"
-                class="field"
-                :class="{ 'field-error': form.errors.password }"
-                placeholder="Mínimo 8 caracteres"
-              />
-              <p v-if="form.errors.password" class="mt-1 text-xs" style="color: #dc2626;">
-                {{ form.errors.password }}
-              </p>
-            </div>
+            <FormItem :error="form.errors.password">
+              <FormLabel for="password">Contraseña</FormLabel>
+              <FormControl>
+                <Input
+                  id="password"
+                  v-model="form.password"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="Mínimo 8 caracteres"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
 
             <!-- Confirmar contraseña -->
-            <div>
-              <label class="block text-xs font-medium mb-1.5" style="color: var(--text-2);" for="password_confirmation">
-                Confirmar contraseña
-              </label>
-              <input
-                id="password_confirmation"
-                v-model="form.password_confirmation"
-                type="password"
-                autocomplete="new-password"
-                class="field"
-                :class="{ 'field-error': form.errors.password_confirmation }"
-                placeholder="Repetí la contraseña"
-              />
-            </div>
+            <FormItem :error="form.errors.password_confirmation">
+              <FormLabel for="password_confirmation">Confirmar contraseña</FormLabel>
+              <FormControl>
+                <Input
+                  id="password_confirmation"
+                  v-model="form.password_confirmation"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="Repetí la contraseña"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
 
             <!-- Rol -->
-            <div>
-              <label class="block text-xs font-medium mb-1.5" style="color: var(--text-2);" for="role">
-                Rol
-              </label>
-              <Select v-model="form.role">
-                <SelectTrigger id="role" class="w-full h-[38px]" :aria-invalid="!!form.errors.role || undefined">
-                  <SelectValue placeholder="Seleccionar rol" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem v-for="role in roles" :key="role.value" :value="role.value">
-                      {{ role.label }}
-                    </SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <p v-if="form.errors.role" class="mt-1 text-xs" style="color: #dc2626;">
-                {{ form.errors.role }}
-              </p>
-            </div>
+            <FormItem :error="form.errors.role">
+              <FormLabel for="role">Rol</FormLabel>
+              <FormControl>
+                <Select v-model="form.role">
+                  <SelectTrigger id="role" class="w-full">
+                    <SelectValue placeholder="Seleccionar rol" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem v-for="role in roles" :key="role.value" :value="role.value">
+                        {{ role.label }}
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
 
-            <button
+            <Button
               type="submit"
-              class="btn btn-primary w-full mt-1"
+              class="w-full mt-1"
               :disabled="form.processing"
             >
-              <svg v-if="form.processing" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
+              <Loader2Icon v-if="form.processing" class="animate-spin" data-icon="inline-start" />
               {{ form.processing ? 'Creando…' : 'Crear usuario' }}
-            </button>
+            </Button>
           </form>
         </div>
 
@@ -212,31 +207,28 @@ const submitConfirm = () => {
               </div>
 
               <div class="flex items-center gap-2 flex-shrink-0">
-                <span
-                  class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                  :style="user.role === 'admin'
-                    ? 'background: var(--badge-accent-bg); color: var(--badge-accent-txt);'
-                    : 'background: var(--bg-raised); color: var(--text-2);'"
-                >
+                <Badge :variant="user.role === 'admin' ? 'default' : 'secondary'">
                   {{ user.role === 'admin' ? 'Admin' : 'Usuario' }}
-                </span>
+                </Badge>
 
-                <button
-                  class="btn btn-secondary text-xs px-2.5 py-1"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   :disabled="resetForm.processing"
                   @click="resetPassword(user.id)"
                 >
                   Resetear
-                </button>
+                </Button>
 
-                <button
+                <Button
                   v-if="user.id !== currentUserId"
-                  class="btn btn-danger text-xs px-2.5 py-1"
+                  variant="destructive"
+                  size="sm"
                   :disabled="deleteForm.processing"
                   @click="deleteUser(user.id, user.name)"
                 >
                   Eliminar
-                </button>
+                </Button>
               </div>
             </li>
           </ul>
@@ -247,39 +239,22 @@ const submitConfirm = () => {
   </div>
 
   <!-- Modal de confirmación -->
-  <Transition name="fade">
-    <div v-if="confirmTarget" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="fixed inset-0 bg-black/50" @click="confirmTarget = null" />
-      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
-           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">
-          {{ confirmTarget.title }}
-        </h3>
-        <p class="text-sm mb-5" style="color: var(--text-2);">
-          {{ confirmTarget.description }}
-        </p>
-        <div class="flex justify-end gap-2">
-          <button
-            @click="confirmTarget = null"
-            class="px-4 py-2 rounded-lg text-sm font-semibold"
-            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
-          >
-            Cancelar
-          </button>
-          <button
-            @click="submitConfirm"
-            class="px-4 py-2 rounded-lg text-sm font-semibold"
-            style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);"
-          >
-            {{ confirmTarget.actionLabel }}
-          </button>
-        </div>
-      </div>
-    </div>
-  </Transition>
+  <Dialog :open="!!confirmTarget" @update:open="confirmTarget = $event ? confirmTarget : null">
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>{{ confirmTarget?.title }}</DialogTitle>
+        <DialogDescription>
+          {{ confirmTarget?.description }}
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter>
+        <Button variant="secondary" @click="confirmTarget = null">
+          Cancelar
+        </Button>
+        <Button variant="destructive" @click="submitConfirm">
+          {{ confirmTarget?.actionLabel }}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>
-
-<style scoped>
-.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
-</style>

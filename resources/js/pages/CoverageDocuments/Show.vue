@@ -3,7 +3,7 @@
     <div class="max-w-4xl mx-auto">
 
       <!-- Back link -->
-      <BackLink href="/coverage-documents" label="Documentacion" class="mb-4" />
+      <AppBackLink href="/coverage-documents" label="Documentacion" class="mb-4" />
 
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
@@ -162,7 +162,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useForm } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
 
 interface Document {
   id: number

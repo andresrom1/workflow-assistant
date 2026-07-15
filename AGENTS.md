@@ -215,4 +215,22 @@ This project has domain-specific skills available. You MUST activate the relevan
 Vue components must have a single root element.
 - IMPORTANT: Activate `inertia-vue-development` when working with Inertia Vue client-side patterns.
 
+=== frontend refactor conventions ===
+
+# Frontend Component Conventions
+
+This project is undergoing a UI standardization using shadcn-vue (style `reka-nova`) on top of reka-ui primitives.
+
+- Use shadcn-vue components from `resources/js/components/UI/*` whenever possible.
+- Use application wrappers from `resources/js/components/App/*` for repeated patterns:
+  - `App/DataTable.vue` for paginated tables with backend sorting.
+  - `App/Pagination.vue` for Inertia pagination links.
+  - `App/Sidebar.vue` for the main navigation sidebar.
+  - `App/BackLink.vue` for navigation back buttons.
+- Keep the existing color palette (CSS variables such as `--bg-card`, `--sb-*`, `--accent-600`).
+- Use `@lucide/vue` for icons.
+- Landing pages and checkout flows are out of scope for this refactor unless explicitly requested.
+- For backend sorting, always whitelist allowed columns, validate `direction` as `asc`/`desc`, and pass `sort`/`direction` back to the page via `filters`.
+- When adding or updating paginated index pages, write PHPUnit tests covering sort ascending, descending, invalid sort parameters, and sort combined with search/filters.
+
 </laravel-boost-guidelines>

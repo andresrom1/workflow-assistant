@@ -37,11 +37,15 @@ class CustomerController extends Controller
     {
         $search = (string) $request->input('search', '');
         $perPage = (int) $request->input('per_page', 15);
+        $sort = $request->input('sort');
+        $direction = strtolower((string) $request->input('direction', 'asc'));
 
         $customers = $this->customerRepository->getAllWithRelations(
             ['vehicles', 'conversations', 'risks.polizas'],
             $search,
-            $perPage
+            $perPage,
+            is_string($sort) ? $sort : null,
+            in_array($direction, ['asc', 'desc'], true) ? $direction : 'asc',
         );
 
         return Inertia::render('Customers/Index', [
@@ -60,7 +64,12 @@ class CustomerController extends Controller
                     ->where('estado', PolizaEstado::Vigente)
                     ->count(),
             ]),
-            'filters' => ['search' => $search, 'per_page' => $perPage],
+            'filters' => [
+                'search' => $search,
+                'per_page' => $perPage,
+                'sort' => $sort,
+                'direction' => $direction,
+            ],
         ]);
     }
 

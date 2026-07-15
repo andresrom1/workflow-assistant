@@ -5,7 +5,7 @@
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div class="flex items-center gap-3">
-          <BackLink href="/admin/agent-prompts" label="Agentes" />
+          <AppBackLink href="/admin/agent-prompts" label="Agentes" />
           <div>
             <div class="flex items-center gap-2.5 flex-wrap">
               <h1 class="text-xl sm:text-2xl font-semibold tracking-tight" style="color: var(--text-1);">
@@ -507,7 +507,7 @@ import { ref, computed, reactive } from 'vue'
 import { usePage, router } from '@inertiajs/vue3'
 import { marked } from 'marked'
 import { diffLines, type Change } from 'diff'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 

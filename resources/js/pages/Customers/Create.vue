@@ -2,64 +2,73 @@
   <div class="py-6 px-4 sm:py-8">
     <div class="max-w-xl mx-auto">
 
-      <BackLink href="/customers" label="Clientes" class="mb-4" />
+      <AppBackLink href="/customers" label="Clientes" class="mb-4" />
 
       <h1 class="text-xl sm:text-2xl font-semibold tracking-tight mb-6" style="color: var(--text-1);">
         Nuevo cliente
       </h1>
 
-      <form @submit.prevent="submit"
-        class="rounded-[14px] p-5 space-y-4"
-        style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+      <Card>
+        <form @submit.prevent="submit" class="p-5 flex flex-col gap-4">
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label class="field-label">Nombre</label>
-            <input v-model="form.first_name" type="text" class="field"
-              :class="{ 'field-error': form.errors.first_name }" placeholder="Juan" />
-            <p v-if="form.errors.first_name" class="field-error-text">{{ form.errors.first_name }}</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FormItem name="first_name" :error="form.errors.first_name">
+              <FormLabel>Nombre</FormLabel>
+              <FormControl>
+                <Input v-model="form.first_name" type="text" placeholder="Juan" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+
+            <FormItem name="last_name" :error="form.errors.last_name">
+              <FormLabel>Apellido</FormLabel>
+              <FormControl>
+                <Input v-model="form.last_name" type="text" placeholder="Pérez" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
           </div>
-          <div>
-            <label class="field-label">Apellido</label>
-            <input v-model="form.last_name" type="text" class="field"
-              :class="{ 'field-error': form.errors.last_name }" placeholder="Pérez" />
-            <p v-if="form.errors.last_name" class="field-error-text">{{ form.errors.last_name }}</p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FormItem name="dni" :error="form.errors.dni">
+              <FormLabel>DNI</FormLabel>
+              <FormControl>
+                <Input v-model="form.dni" type="text" placeholder="30123456" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+
+            <FormItem name="phone" :error="form.errors.phone">
+              <FormLabel>Teléfono</FormLabel>
+              <FormControl>
+                <Input v-model="form.phone" type="text" placeholder="+5493512345678" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
           </div>
-        </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label class="field-label">DNI</label>
-            <input v-model="form.dni" type="text" class="field"
-              :class="{ 'field-error': form.errors.dni }" placeholder="30123456" />
-            <p v-if="form.errors.dni" class="field-error-text">{{ form.errors.dni }}</p>
+          <FormItem name="email" :error="form.errors.email">
+            <FormLabel>Email</FormLabel>
+            <FormControl>
+              <Input v-model="form.email" type="email" placeholder="cliente@email.com" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+
+          <p class="text-xs text-muted-foreground">
+            Ingresá al menos un identificador: DNI, email o teléfono. El resto del perfil del tomador se completa luego en la edición.
+          </p>
+
+          <div class="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="secondary" size="sm" as-child>
+              <Link href="/customers">Cancelar</Link>
+            </Button>
+            <Button type="submit" size="sm" :disabled="form.processing">
+              {{ form.processing ? 'Guardando...' : 'Crear cliente' }}
+            </Button>
           </div>
-          <div>
-            <label class="field-label">Teléfono</label>
-            <input v-model="form.phone" type="text" class="field"
-              :class="{ 'field-error': form.errors.phone }" placeholder="+5493512345678" />
-            <p v-if="form.errors.phone" class="field-error-text">{{ form.errors.phone }}</p>
-          </div>
-        </div>
-
-        <div>
-          <label class="field-label">Email</label>
-          <input v-model="form.email" type="email" class="field"
-            :class="{ 'field-error': form.errors.email }" placeholder="cliente@email.com" />
-          <p v-if="form.errors.email" class="field-error-text">{{ form.errors.email }}</p>
-        </div>
-
-        <p class="text-xs" style="color: var(--text-3);">
-          Ingresá al menos un identificador: DNI, email o teléfono. El resto del perfil del tomador se completa luego en la edición.
-        </p>
-
-        <div class="flex justify-end gap-2 pt-1">
-          <Link href="/customers" class="btn btn-secondary text-sm">Cancelar</Link>
-          <button type="submit" class="btn btn-primary text-sm" :disabled="form.processing">
-            {{ form.processing ? 'Guardando...' : 'Crear cliente' }}
-          </button>
-        </div>
-      </form>
+        </form>
+      </Card>
 
     </div>
   </div>
@@ -67,7 +76,11 @@
 
 <script setup lang="ts">
 import { Link, useForm } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
+import { Button } from '@/components/UI/button'
+import { Card } from '@/components/UI/card'
+import { Input } from '@/components/UI/input'
+import { FormControl, FormItem, FormLabel, FormMessage } from '@/components/UI/form'
 
 const form = useForm({
   first_name: '',

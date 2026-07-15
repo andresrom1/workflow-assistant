@@ -16,12 +16,35 @@ class QuoteController extends Controller
         protected CoveragePreference $coveragePreference,
     ) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
-        $quotes = Quote::with(['riskSnapshot', 'conversation.customer'])
-            ->withCount('alternatives')
-            ->latest()
-            ->paginate(15);
+        $perPage = (int) $request->input('per_page', 15);
+        $sort = $request->input('sort');
+        $direction = strtolower((string) $request->input('direction', 'asc'));
+        $direction = in_array($direction, ['asc', 'desc'], true) ? $direction : 'asc';
+
+        $query = Quote::with(['riskSnapshot', 'conversation.customer'])
+            ->withCount('alternatives');
+
+        $allowedSorts = ['id', 'status', 'created_at', 'alternatives_count', 'customer_name', 'vehiculo'];
+        if (in_array($sort, $allowedSorts, true)) {
+            match ($sort) {
+                'customer_name' => $query
+                    ->leftJoin('conversations', 'quotes.conversation_id', '=', 'conversations.id')
+                    ->leftJoin('customers', 'conversations.customer_id', '=', 'customers.id')
+                    ->orderByRaw("LOWER(customers.name) {$direction}")
+                    ->select('quotes.*'),
+                'vehiculo' => $query
+                    ->leftJoin('risk_snapshots', 'quotes.risk_snapshot_id', '=', 'risk_snapshots.id')
+                    ->orderByRaw("LOWER(CONCAT(COALESCE(risk_snapshots.marca, ''), ' ', COALESCE(risk_snapshots.modelo, ''))) {$direction}")
+                    ->select('quotes.*'),
+                default => $query->orderBy($sort, $direction),
+            };
+        } else {
+            $query->latest();
+        }
+
+        $quotes = $query->paginate($perPage)->withQueryString();
 
         return Inertia::render('Quotes/Index', [
             'quotes' => $quotes->through(fn ($q): array => [
@@ -41,6 +64,11 @@ class QuoteController extends Controller
                 'dni' => $q->riskSnapshot?->dni,
                 'alternatives_count' => $q->alternatives_count,
             ]),
+            'filters' => [
+                'per_page' => $perPage,
+                'sort' => $sort,
+                'direction' => $direction,
+            ],
         ]);
     }
 

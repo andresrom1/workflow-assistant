@@ -5,7 +5,7 @@
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div class="flex items-center gap-3">
-          <BackLink href="/customers" label="Clientes" />
+          <AppBackLink href="/customers" label="Clientes" />
           <div class="w-px h-4" style="background: var(--border);"></div>
           <Avatar :name="customer.name" />
           <div>
@@ -267,7 +267,7 @@
 <script setup lang="ts">
 import { ref, computed, defineComponent, h } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
 import Avatar from '@/components/UI/Avatar.vue'
 
 interface Divergencia { field: string; label: string; customer: string | null; checkout: string }

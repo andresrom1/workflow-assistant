@@ -2,7 +2,7 @@
   <div class="py-6 px-4 sm:py-8">
     <div class="max-w-4xl mx-auto">
 
-      <BackLink href="/policy-documents" label="Documentos de Póliza" class="mb-4" />
+      <AppBackLink href="/policy-documents" label="Documentos de Póliza" class="mb-4" />
 
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
@@ -36,7 +36,7 @@
         <form @submit.prevent="submitUpload" enctype="multipart/form-data">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="field-label">Tipo de documento *</label>
+              <Label class="mb-1.5 block text-xs">Tipo de documento *</Label>
               <Select v-model="uploadForm.kind">
                 <SelectTrigger class="w-full h-[38px]" :aria-invalid="!!uploadForm.errors.kind || undefined">
                   <SelectValue placeholder="Seleccionar..." />
@@ -47,20 +47,27 @@
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <p v-if="uploadForm.errors.kind" class="field-error-text">{{ uploadForm.errors.kind }}</p>
+              <p v-if="uploadForm.errors.kind" class="text-xs mt-1" style="color: var(--badge-danger-txt);">{{ uploadForm.errors.kind }}</p>
             </div>
             <div>
-              <label class="field-label">Archivo (PDF o imagen) *</label>
-              <input type="file" accept=".pdf,.jpg,.jpeg,.png" @change="onFileSelect" class="field text-sm"
-                :class="{ 'field-error': uploadForm.errors.file }" />
-              <p v-if="uploadForm.errors.file" class="field-error-text">{{ uploadForm.errors.file }}</p>
+              <Label class="mb-1.5 block text-xs">Archivo (PDF o imagen) *</Label>
+              <Input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                @change="onFileSelect"
+                :aria-invalid="!!uploadForm.errors.file || undefined"
+              />
+              <p v-if="uploadForm.errors.file" class="text-xs mt-1" style="color: var(--badge-danger-txt);">{{ uploadForm.errors.file }}</p>
             </div>
             <div class="sm:col-span-2">
-              <label class="field-label">Etiqueta (opcional)</label>
-              <input v-model="uploadForm.label" type="text" class="field"
-                :class="{ 'field-error': uploadForm.errors.label }"
-                placeholder="Ej: Endoso cambio de uso — junio 2026" />
-              <p v-if="uploadForm.errors.label" class="field-error-text">{{ uploadForm.errors.label }}</p>
+              <Label class="mb-1.5 block text-xs">Etiqueta (opcional)</Label>
+              <Input
+                v-model="uploadForm.label"
+                type="text"
+                placeholder="Ej: Endoso cambio de uso — junio 2026"
+                :aria-invalid="!!uploadForm.errors.label || undefined"
+              />
+              <p v-if="uploadForm.errors.label" class="text-xs mt-1" style="color: var(--badge-danger-txt);">{{ uploadForm.errors.label }}</p>
             </div>
           </div>
 
@@ -69,9 +76,9 @@
           </p>
 
           <div class="flex justify-end mt-4">
-            <button type="submit" class="btn btn-primary text-sm" :disabled="uploadForm.processing">
+            <Button type="submit" size="sm" :disabled="uploadForm.processing">
               {{ uploadForm.processing ? 'Subiendo...' : 'Subir documento' }}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
@@ -191,7 +198,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
+import { Button } from '@/components/UI/button'
+import { Input } from '@/components/UI/input'
+import { Label } from '@/components/UI/label'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 
 interface DocumentItem {

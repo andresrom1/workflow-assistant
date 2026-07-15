@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\CheckoutSession;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -14,12 +15,39 @@ class CheckoutAuditController extends Controller
     /**
      * Lista de checkout sessions pendientes de procesar.
      */
-    public function index(): Response
+    public function index(Request $request): Response
     {
-        $sessions = CheckoutSession::with(['quote', 'quoteAlternative', 'processedBy'])
-            ->orderByRaw("CASE WHEN status = 'submitted' THEN 0 ELSE 1 END")
-            ->orderByDesc('submitted_at')
-            ->paginate(20);
+        $perPage = (int) $request->input('per_page', 20);
+        $sort = $request->input('sort');
+        $direction = strtolower((string) $request->input('direction', 'asc'));
+        $direction = in_array($direction, ['asc', 'desc'], true) ? $direction : 'asc';
+
+        $query = CheckoutSession::with(['quote', 'quoteAlternative', 'processedBy']);
+
+        $allowedSorts = ['status', 'cliente', 'nombre', 'email', 'submitted_at', 'aseguradora', 'titulo', 'precio'];
+        if (in_array($sort, $allowedSorts, true)) {
+            match ($sort) {
+                'cliente' => $query->orderByRaw("LOWER(nombre) {$direction}"),
+                'aseguradora' => $query
+                    ->leftJoin('quote_alternatives', 'checkout_sessions.quote_alternative_id', '=', 'quote_alternatives.id')
+                    ->orderByRaw("LOWER(quote_alternatives.aseguradora) {$direction}")
+                    ->select('checkout_sessions.*'),
+                'titulo' => $query
+                    ->leftJoin('quote_alternatives', 'checkout_sessions.quote_alternative_id', '=', 'quote_alternatives.id')
+                    ->orderByRaw("LOWER(quote_alternatives.titulo) {$direction}")
+                    ->select('checkout_sessions.*'),
+                'precio' => $query
+                    ->leftJoin('quote_alternatives', 'checkout_sessions.quote_alternative_id', '=', 'quote_alternatives.id')
+                    ->orderBy('quote_alternatives.precio', $direction)
+                    ->select('checkout_sessions.*'),
+                default => $query->orderBy($sort, $direction),
+            };
+        } else {
+            $query->orderByRaw("CASE WHEN status = 'submitted' THEN 0 ELSE 1 END")
+                ->orderByDesc('submitted_at');
+        }
+
+        $sessions = $query->paginate($perPage)->withQueryString();
 
         return Inertia::render('Admin/CheckoutSessions/Index', [
             'sessions' => $sessions->through(fn ($s): array => [
@@ -27,14 +55,17 @@ class CheckoutAuditController extends Controller
                 'status' => $s->status,
                 'nombre' => $s->nombre,
                 'email' => $s->email,
-                'cc_brand' => $s->cc_brand,
-                'cc_cleared' => $s->isCcCleared(),
                 'submitted_at' => $s->submitted_at?->toIso8601String(),
                 'quote_id' => $s->quote_id,
                 'aseguradora' => $s->quoteAlternative?->aseguradora,
                 'titulo' => $s->quoteAlternative?->titulo,
                 'precio' => $s->quoteAlternative?->precio,
             ]),
+            'filters' => [
+                'per_page' => $perPage,
+                'sort' => $sort,
+                'direction' => $direction,
+            ],
         ]);
     }
 

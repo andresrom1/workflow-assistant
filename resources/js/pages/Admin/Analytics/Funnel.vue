@@ -5,8 +5,9 @@
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 class="text-xl sm:text-2xl font-semibold tracking-tight" style="color: var(--text-1);">
-            📊 Funnel de cotización
+          <h1 class="text-xl sm:text-2xl font-semibold tracking-tight flex items-center gap-2" style="color: var(--text-1);">
+            <BarChart3Icon class="size-6" />
+            Funnel de cotización
           </h1>
           <p class="text-sm" style="color: var(--text-3);">
             Métricas por step — últimos 7 días por defecto.
@@ -15,31 +16,28 @@
 
         <!-- Date range -->
         <div class="flex items-center gap-2 flex-wrap">
-          <input
+          <Input
             type="date"
             :value="from"
+            class="w-auto"
             @change="applyRange('from', ($event.target as HTMLInputElement).value)"
-            class="rounded-lg px-3 py-1.5 text-[13px]"
-            style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text-1);"
           />
           <span class="text-[12px]" style="color: var(--text-3);">–</span>
-          <input
+          <Input
             type="date"
             :value="to"
+            class="w-auto"
             @change="applyRange('to', ($event.target as HTMLInputElement).value)"
-            class="rounded-lg px-3 py-1.5 text-[13px]"
-            style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text-1);"
           />
         </div>
       </div>
 
       <!-- Funnel visual + metrics -->
       <div class="space-y-3">
-        <div
+        <Card
           v-for="step in steps"
           :key="step.step"
-          class="rounded-[14px] overflow-hidden"
-          style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);"
+          class="overflow-hidden"
         >
           <!-- Bar track -->
           <div class="relative h-2" style="background: var(--bg-raised);">
@@ -52,8 +50,7 @@
             ></div>
           </div>
 
-          <!-- Content -->
-          <div class="px-4 py-3 sm:px-5">
+          <CardContent class="pt-4">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <!-- Left: label + abandonment -->
               <div class="flex items-center gap-3">
@@ -84,7 +81,7 @@
                   :value="step.avg_time_seconds !== null ? formatSeconds(step.avg_time_seconds) : '—'"
                 />
                 <MetricCell
-                  label="👎 Anotaciones"
+                  label="Anotaciones"
                   :value="step.negative_annotations.toString()"
                   :danger="step.negative_annotations > 0"
                 />
@@ -93,55 +90,63 @@
 
             <!-- Drill-down link + toggle de versiones -->
             <div class="mt-2 flex items-center justify-end gap-3">
-              <button
+              <Button
                 v-if="(promptBreakdown[step.step]?.length ?? 0) > 0"
                 type="button"
+                variant="ghost"
+                size="sm"
+                class="px-0 h-auto text-[11px]"
+                style="color: var(--text-3);"
                 @click="toggleVersions(step.step)"
-                class="text-[11px] transition-colors"
-                style="color: var(--text-3);"
               >
-                {{ expandedStep === step.step ? '▾' : '▸' }} Por versión de prompt
-              </button>
-              <Link
-                :href="`/admin/conversations?step=${step.step}`"
-                class="text-[11px] transition-colors"
-                style="color: var(--text-3);"
-              >
-                Ver conversaciones de este step →
-              </Link>
+                <ChevronDownIcon v-if="expandedStep === step.step" class="size-3" />
+                <ChevronRightIcon v-else class="size-3" />
+                Por versión de prompt
+              </Button>
+              <Button as-child variant="ghost" size="sm" class="px-0 h-auto text-[11px]" style="color: var(--text-3);">
+                <Link :href="`/admin/conversations?step=${step.step}`">
+                  Ver conversaciones de este step
+                  <ArrowRightIcon class="size-3" />
+                </Link>
+              </Button>
             </div>
 
             <!-- Desglose por versión de prompt -->
             <div v-if="expandedStep === step.step" class="mt-2 rounded-[10px] overflow-hidden"
               style="border: 1px solid var(--border-sub);">
-              <table class="w-full text-[11px]">
-                <thead>
-                  <tr style="background: var(--bg-raised);">
-                    <th class="text-left px-3 py-1.5 font-semibold" style="color: var(--text-3);">Versión</th>
-                    <th class="text-left px-3 py-1.5 font-semibold" style="color: var(--text-3);">Notas</th>
-                    <th class="text-right px-3 py-1.5 font-semibold" style="color: var(--text-3);">Entraron</th>
-                    <th class="text-right px-3 py-1.5 font-semibold" style="color: var(--text-3);">Completaron</th>
-                    <th class="text-right px-3 py-1.5 font-semibold" style="color: var(--text-3);">Conversión</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in promptBreakdown[step.step]" :key="row.agent_prompt_id ?? 'none'"
-                    style="border-top: 1px solid var(--border-sub);">
-                    <td class="px-3 py-1.5" style="color: var(--text-1);">
-                      {{ row.version !== null ? `v${row.version}` : 'sin versión' }}
-                    </td>
-                    <td class="px-3 py-1.5 truncate max-w-[220px]" style="color: var(--text-2);">{{ row.notes ?? '—' }}</td>
-                    <td class="px-3 py-1.5 text-right" style="color: var(--text-2);">{{ row.entered }}</td>
-                    <td class="px-3 py-1.5 text-right" style="color: var(--text-2);">{{ row.completed }}</td>
-                    <td class="px-3 py-1.5 text-right font-semibold" style="color: var(--text-1);">
-                      {{ Math.round(row.conversion * 100) }}%
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              <DataTable
+                :columns="breakdownColumns"
+                :data="promptBreakdown[step.step]"
+                empty-message="Sin desglose para este step."
+              >
+                <template #cell-version="{ item }">
+                  {{ item.version !== null ? `v${item.version}` : 'sin versión' }}
+                </template>
+
+                <template #cell-conversion="{ item }">
+                  <span class="font-semibold">{{ Math.round(item.conversion * 100) }}%</span>
+                </template>
+
+                <template #mobile-row="{ item }">
+                  <div
+                    class="rounded-[10px] p-3 text-[11px]"
+                    style="background: var(--bg-card); border: 1px solid var(--border-sub);"
+                  >
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="font-semibold">{{ item.version !== null ? `v${item.version}` : 'sin versión' }}</span>
+                      <span class="font-semibold">{{ Math.round(item.conversion * 100) }}%</span>
+                    </div>
+                    <p class="truncate" style="color: var(--text-2);">{{ item.notes ?? '—' }}</p>
+                    <div class="flex gap-3 mt-1" style="color: var(--text-3);">
+                      <span>Entraron: {{ item.entered }}</span>
+                      <span>Completaron: {{ item.completed }}</span>
+                    </div>
+                  </div>
+                </template>
+              </DataTable>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       <!-- Empty state -->
@@ -160,6 +165,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
+import { Button } from '@/components/UI/button'
+import { Input } from '@/components/UI/input'
+import { Card, CardContent } from '@/components/UI/card'
+import { BarChart3 as BarChart3Icon, ChevronDown as ChevronDownIcon, ChevronRight as ChevronRightIcon, ArrowRight as ArrowRightIcon } from '@lucide/vue'
+import DataTable from '@/components/App/DataTable.vue'
 
 interface StepMetric {
   step: number
@@ -212,6 +222,14 @@ const formatSeconds = (secs: number): string => {
   if (secs < 3600) return `${Math.round(secs / 60)}m`
   return `${(secs / 3600).toFixed(1)}h`
 }
+
+const breakdownColumns = [
+  { key: 'version', label: 'Versión', sortable: false },
+  { key: 'notes', label: 'Notas', sortable: false },
+  { key: 'entered', label: 'Entraron', sortable: false, align: 'right' as const },
+  { key: 'completed', label: 'Completaron', sortable: false, align: 'right' as const },
+  { key: 'conversion', label: 'Conversión', sortable: false, align: 'right' as const },
+]
 
 const applyRange = (field: 'from' | 'to', value: string) => {
   router.get('/admin/analytics/funnel', {

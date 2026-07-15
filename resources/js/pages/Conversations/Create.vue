@@ -2,7 +2,7 @@
   <div class="py-6 px-4 sm:py-8">
     <div class="max-w-xl mx-auto">
 
-      <BackLink href="/conversations" label="Conversaciones" class="mb-4" />
+      <AppBackLink href="/conversations" label="Conversaciones" class="mb-4" />
 
       <h1 class="text-xl sm:text-2xl font-semibold tracking-tight mb-6" style="color: var(--text-1);">
         Nuevo cliente
@@ -59,7 +59,7 @@
 
 <script setup lang="ts">
 import { Link, useForm } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
 
 const form = useForm({
   name: '',

@@ -5,7 +5,7 @@
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div class="flex items-center gap-3">
-          <BackLink href="/quotes" label="Cotizaciones" />
+          <AppBackLink href="/quotes" label="Cotizaciones" />
           <div class="w-px h-4" style="background: var(--border);"></div>
           <div>
             <h1 class="text-xl sm:text-2xl font-semibold tracking-tight" style="color: var(--text-1);">
@@ -161,7 +161,7 @@
 </template>
 
 <script setup lang="ts">
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
 
 defineProps<{
   quote: {

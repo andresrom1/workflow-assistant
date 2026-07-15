@@ -4,6 +4,7 @@
 
 namespace App\Repositories;
 
+use App\Enums\PolizaEstado;
 use App\Models\Customer;
 use App\Models\Vehicle;
 use App\Support\DocumentoIdentidad;
@@ -184,12 +185,17 @@ class CustomerRepository
     }
 
     /**
-     * Obtener todos los customers con relaciones, búsqueda y paginación
+     * Obtener todos los customers con relaciones, búsqueda, paginación y ordenamiento.
      *
      * @return LengthAwarePaginator<int, Customer>
      */
-    public function getAllWithRelations(array $relations = [], string $search = '', int $perPage = 15)
-    {
+    public function getAllWithRelations(
+        array $relations = [],
+        string $search = '',
+        int $perPage = 15,
+        ?string $sort = null,
+        string $direction = 'asc',
+    ) {
         $query = Customer::with($relations);
 
         if ($search !== '' && $search !== '0') {
@@ -199,6 +205,23 @@ class CustomerRepository
                     ->orWhere('phone', 'like', "%$search%")
                     ->orWhere('dni', 'like', "%$search%");
             });
+        }
+
+        $allowedSorts = [
+            'name', 'dni', 'email', 'phone', 'created_at', 'updated_at',
+            'vehicles_count', 'conversations_count', 'polizas_vigentes_count',
+        ];
+
+        if (in_array($sort, $allowedSorts, true) && in_array(strtolower($direction), ['asc', 'desc'], true)) {
+            match ($sort) {
+                'vehicles_count' => $query->withCount('vehicles')->orderBy('vehicles_count', $direction),
+                'conversations_count' => $query->withCount('conversations')->orderBy('conversations_count', $direction),
+                'polizas_vigentes_count' => $query->orderByRaw(
+                    "(SELECT COUNT(*) FROM polizas JOIN risks ON polizas.risk_id = risks.id WHERE risks.customer_id = customers.id AND polizas.estado = ?) {$direction}",
+                    [PolizaEstado::Vigente->value]
+                ),
+                default => $query->orderBy($sort, $direction),
+            };
         }
 
         return $query->paginate($perPage);

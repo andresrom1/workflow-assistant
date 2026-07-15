@@ -12,7 +12,7 @@
             Parámetros de operación. Los cambios tienen efecto inmediato.
           </p>
         </div>
-        <BackLink href="/admin/checkout-sessions" label="Auditoría" />
+        <AppBackLink href="/admin/checkout-sessions" label="Auditoría" />
       </div>
 
 <!-- Dashboard de estado -->
@@ -175,7 +175,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, defineComponent, h } from 'vue'
 import { usePage, router } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
 
 // ─── Sub-componentes inline con tokens CSS ────────────────────────────────
 

@@ -4,7 +4,7 @@
 
       <!-- Header -->
       <div class="flex items-center gap-3">
-        <BackLink :href="`/admin/conversations/${conversation.id}`" label="Conversación" />
+        <AppBackLink :href="`/admin/conversations/${conversation.id}`" label="Conversación" />
         <div>
           <h1 class="text-xl font-semibold tracking-tight" style="color: var(--text-1);">
             🧪 Reevaluación de turn #{{ log.id }}
@@ -128,7 +128,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import axios from 'axios'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
 
 interface Props {
   log: {

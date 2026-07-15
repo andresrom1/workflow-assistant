@@ -2,7 +2,7 @@
   <div class="py-6 px-4 sm:py-8">
     <div class="max-w-4xl mx-auto">
 
-      <BackLink href="/polizas" label="Pólizas" class="mb-4" />
+      <AppBackLink href="/polizas" label="Pólizas" class="mb-4" />
 
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
@@ -69,7 +69,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 
 interface VencimientoRow {

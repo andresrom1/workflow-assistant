@@ -37,12 +37,28 @@ class ConversationController extends Controller
             $allowedFlags,
         ));
 
+        $sort = $request->input('sort');
+        $direction = strtolower((string) $request->input('direction', 'asc'));
+        $direction = in_array($direction, ['asc', 'desc'], true) ? $direction : 'asc';
+
         $query = Conversation::with('customer')
-            ->withCount('messages')
-            ->orderByDesc('updated_at');
+            ->withCount('messages');
 
         if ($selectedFlags !== []) {
             $repo->applyFlags($query, $selectedFlags);
+        }
+
+        $allowedSorts = ['updated_at', 'created_at', 'status', 'channel', 'messages_count', 'customer_name'];
+        if (in_array($sort, $allowedSorts, true)) {
+            match ($sort) {
+                'customer_name' => $query
+                    ->leftJoin('customers', 'conversations.customer_id', '=', 'customers.id')
+                    ->orderByRaw("LOWER(customers.name) {$direction}")
+                    ->select('conversations.*'),
+                default => $query->orderBy($sort, $direction),
+            };
+        } else {
+            $query->orderByDesc('updated_at');
         }
 
         $conversations = $query->paginate(25)->withQueryString();
@@ -73,6 +89,8 @@ class ConversationController extends Controller
             ]),
             'filters' => [
                 'flags' => $selectedFlags,
+                'sort' => $sort,
+                'direction' => $direction,
             ],
             'flag_counts' => $flagCounts,
         ]);

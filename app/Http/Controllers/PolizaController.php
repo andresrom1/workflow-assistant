@@ -30,8 +30,11 @@ class PolizaController extends Controller
     {
         $search = trim((string) $request->input('search', ''));
         $perPage = (int) $request->input('per_page', 25);
+        $sort = $request->input('sort');
+        $direction = strtolower((string) $request->input('direction', 'asc'));
+        $direction = in_array($direction, ['asc', 'desc'], true) ? $direction : 'asc';
 
-        $polizas = Poliza::query()
+        $query = Poliza::query()
             ->with('risk.customer')
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($q) use ($search): void {
@@ -39,9 +42,25 @@ class PolizaController extends Controller
                         ->orWhereHas('risk', fn ($r) => $r->where('metadata->patente', 'ilike', "%{$search}%"))
                         ->orWhereHas('risk.customer', fn ($c) => $c->where('name', 'ilike', "%{$search}%"));
                 });
-            })
-            ->orderByDesc('updated_at')
-            ->paginate($perPage)
+            });
+
+        $allowedSorts = ['numero', 'company', 'coverage', 'estado', 'vigencia', 'updated_at', 'created_at', 'patente', 'cliente'];
+        if (in_array($sort, $allowedSorts, true)) {
+            match ($sort) {
+                'patente' => $query->orderByRaw("LOWER((SELECT metadata->>'patente' FROM risks WHERE risks.id = polizas.risk_id)) {$direction}"),
+                'cliente' => $query
+                    ->leftJoin('risks', 'polizas.risk_id', '=', 'risks.id')
+                    ->leftJoin('customers', 'risks.customer_id', '=', 'customers.id')
+                    ->orderByRaw("LOWER(customers.name) {$direction}")
+                    ->select('polizas.*'),
+                'estado' => $query->orderByRaw("estado::text {$direction}"),
+                default => $query->orderBy($sort, $direction),
+            };
+        } else {
+            $query->orderByDesc('updated_at');
+        }
+
+        $polizas = $query->paginate($perPage)
             ->withQueryString()
             ->through(fn (Poliza $poliza): array => [
                 'id' => $poliza->id,
@@ -56,7 +75,12 @@ class PolizaController extends Controller
 
         return Inertia::render('Polizas/Index', [
             'polizas' => $polizas,
-            'filters' => ['search' => $search, 'per_page' => $perPage],
+            'filters' => [
+                'search' => $search,
+                'per_page' => $perPage,
+                'sort' => $sort,
+                'direction' => $direction,
+            ],
         ]);
     }
 

@@ -6,152 +6,174 @@
         Auditoría de Checkout
       </h1>
 
-      <div v-if="!sessions.data.length"
-        class="rounded-[14px] p-12 text-center text-sm"
-        style="background: var(--bg-card); border: 1px dashed var(--border); color: var(--text-3);">
-        No hay sesiones de checkout para procesar.
-      </div>
+      <DataTable
+        :columns="columns"
+        :data="sessions.data"
+        :sort="currentSort"
+        :direction="currentDirection"
+        compact
+        empty-message="No hay sesiones de checkout para procesar."
+        @sort="handleSort"
+        @row-click="(item) => irA(`/admin/checkout-sessions/${item.id}`)"
+      >
+        <template #cell-id="{ item }">
+          <span class="text-[11px] font-mono text-muted-foreground">{{ item.id }}</span>
+        </template>
 
-      <template v-else>
-        <!-- DESKTOP — tabla ≥ md -->
-        <div class="hidden md:block rounded-[14px] overflow-hidden"
-          style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-          <table class="min-w-full text-sm">
-            <thead>
-              <tr style="background: var(--bg-raised); border-bottom: 1px solid var(--border);">
-                <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">#</th>
-                <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Tomador</th>
-                <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Cobertura</th>
-                <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Tarjeta</th>
-                <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Estado</th>
-                <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Recibido</th>
-                <th class="px-4 py-3 w-10"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="s in sessions.data" :key="s.id"
-                class="cursor-pointer transition-colors"
-                style="border-bottom: 1px solid var(--border-sub);"
-                @mouseenter="$event.currentTarget.style.background = 'var(--border-sub)'"
-                @mouseleave="$event.currentTarget.style.background = 'transparent'"
-                @click="irA(`/admin/checkout-sessions/${s.id}`)"
-              >
-                <td class="px-4 py-3 text-[11px] font-mono" style="color: var(--text-3);">{{ s.id }}</td>
-                <td class="px-4 py-3">
-                  <p class="text-sm font-semibold" style="color: var(--text-1);">{{ s.nombre }}</p>
-                  <p class="text-[11px] mt-0.5" style="color: var(--text-3);">{{ s.email }}</p>
-                </td>
-                <td class="px-4 py-3">
-                  <p class="text-sm font-medium" style="color: var(--text-1);">{{ s.aseguradora }}</p>
-                  <p class="text-[11px] mt-0.5" style="color: var(--text-3);">{{ s.titulo }}</p>
-                </td>
-                <td class="px-4 py-3">
-                  <span class="text-[11px] font-bold uppercase tracking-wide" :style="brandStyle(s.cc_brand)">
-                    {{ s.cc_brand }}
-                  </span>
-                  <span v-if="s.cc_cleared" class="ml-1 text-[11px]" style="color: var(--text-3);">(eliminados)</span>
-                </td>
-                <td class="px-4 py-3">
-                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
-                    :style="statusStyle(s.status)">
-                    <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" :style="dotStyle(s.status)"></span>
-                    {{ statusLabel(s.status) }}
-                  </span>
-                </td>
-                <td class="px-4 py-3 text-[11px] whitespace-nowrap" style="color: var(--text-3);">
-                  {{ formatDate(s.submitted_at) }}
-                </td>
-                <td class="px-4 py-3" @click.stop>
-                  <RowActionMin :href="`/admin/checkout-sessions/${s.id}`" label="Ver sesión" />
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <template #cell-status="{ item }">
+          <Badge variant="outline" :class="statusBadgeClass(item.status)">
+            <span class="size-1.5 rounded-full flex-shrink-0" :class="statusDotClass(item.status)" />
+            {{ statusLabel(item.status) }}
+          </Badge>
+        </template>
 
-        <!-- MOBILE — cards < md -->
-        <div class="md:hidden space-y-2">
-          <Link v-for="s in sessions.data" :key="s.id"
-            :href="`/admin/checkout-sessions/${s.id}`"
-            class="block rounded-[14px] p-4 transition-all"
-            style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <div class="flex items-center gap-2 mb-1.5">
-                  <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                    :style="statusStyle(s.status)">
-                    {{ statusLabel(s.status) }}
-                  </span>
-                  <span class="text-[10px] font-bold uppercase tracking-wide" :style="brandStyle(s.cc_brand)">
-                    {{ s.cc_brand }}
-                  </span>
+        <template #cell-cliente="{ item }">
+          <p class="text-sm font-semibold truncate" style="color: var(--text-1);">{{ item.nombre }}</p>
+          <p class="text-[11px] text-muted-foreground truncate">{{ item.email }}</p>
+        </template>
+
+        <template #cell-plan="{ item }">
+          <p class="text-sm font-medium" style="color: var(--text-1);">{{ item.aseguradora ?? '—' }}</p>
+          <p class="text-[11px] text-muted-foreground truncate">{{ item.titulo ?? '—' }}</p>
+          <p class="text-xs font-medium text-foreground">{{ formatPrice(item.precio) }}</p>
+        </template>
+
+        <template #cell-submitted_at="{ item }">
+          <span class="text-[11px] whitespace-nowrap text-muted-foreground">
+            {{ formatDate(item.submitted_at) }}
+          </span>
+        </template>
+
+        <template #cell-action="{ item }">
+          <div @click.stop>
+            <Button variant="ghost" size="icon" class="h-7 w-7" as-child>
+              <Link :href="`/admin/checkout-sessions/${item.id}`" title="Ver sesión">
+                <ChevronRight class="size-4" />
+              </Link>
+            </Button>
+          </div>
+        </template>
+
+        <template #mobile-row="{ item }">
+          <Link :href="`/admin/checkout-sessions/${item.id}`" class="block">
+            <Card class="p-4 transition-all hover:bg-muted/50">
+              <CardContent class="p-0">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2 mb-1.5">
+                      <Badge variant="outline" :class="statusBadgeClass(item.status)">
+                        {{ statusLabel(item.status) }}
+                      </Badge>
+                    </div>
+                    <p class="text-sm font-semibold truncate" style="color: var(--text-1);">{{ item.nombre }}</p>
+                    <p class="text-xs truncate mt-0.5 text-muted-foreground">{{ item.email }}</p>
+                    <p class="text-xs mt-1 text-foreground">
+                      {{ item.aseguradora }} · {{ item.titulo }}
+                    </p>
+                    <p class="text-xs mt-0.5 font-medium text-foreground">
+                      {{ formatPrice(item.precio) }}
+                    </p>
+                  </div>
+                  <ChevronRight class="size-4 text-muted-foreground flex-shrink-0" />
                 </div>
-                <p class="text-sm font-semibold truncate" style="color: var(--text-1);">{{ s.nombre }}</p>
-                <p class="text-xs truncate mt-0.5" style="color: var(--text-3);">{{ s.email }}</p>
-                <p class="text-xs mt-1" style="color: var(--text-2);">
-                  {{ s.aseguradora }} · {{ s.titulo }}
-                </p>
-              </div>
-              <ChevronRight />
-            </div>
-            <p class="text-[11px] mt-2" style="color: var(--text-3);">{{ formatDate(s.submitted_at) }}</p>
+                <p class="text-[11px] mt-2 text-muted-foreground">{{ formatDate(item.submitted_at) }}</p>
+              </CardContent>
+            </Card>
           </Link>
-        </div>
-      </template>
+        </template>
+      </DataTable>
 
+      <AppPagination v-if="sessions.last_page > 1" :data="sessions" class="mt-4" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Link, router } from '@inertiajs/vue3'
-import RowActionMin from '@/components/UI/RowActionMin.vue'
-import ChevronRight from '@/components/UI/ChevronRight.vue'
+import { computed } from 'vue'
+import { Link, router, usePage } from '@inertiajs/vue3'
+import { Badge } from '@/components/UI/badge'
+import { Button } from '@/components/UI/button'
+import { Card, CardContent } from '@/components/UI/card'
+import { ChevronRight } from '@lucide/vue'
+import AppPagination from '@/components/App/Pagination.vue'
+import DataTable, { type SortDirection } from '@/components/App/DataTable.vue'
 
-defineProps<{
+const props = defineProps<{
   sessions: {
     data: Array<{
-      id: number; status: string; nombre: string; email: string
-      cc_brand: string; cc_cleared: boolean
-      submitted_at: string | null; quote_id: number
-      aseguradora: string | null; titulo: string | null; precio: number | null
+      id: number
+      status: string
+      nombre: string
+      email: string
+      submitted_at: string | null
+      quote_id: number
+      aseguradora: string | null
+      titulo: string | null
+      precio: number | null
     }>
+    from: number
+    to: number
+    total: number
+    current_page: number
+    last_page: number
+    links: Array<{ label: string; url: string | null; active: boolean }>
   }
 }>()
 
+const page = usePage()
+const queryParams = computed(() => new URLSearchParams(page.url.split('?')[1] ?? ''))
+const currentSort = computed(() => queryParams.value.get('sort') || null)
+const currentDirection = computed<SortDirection>(() => (queryParams.value.get('direction') as SortDirection) || 'asc')
+
+const columns = [
+  { key: 'id', label: '#', sortable: false, class: 'w-[60px]' },
+  { key: 'status', label: 'Estado', sortable: true, class: 'w-[120px]' },
+  { key: 'cliente', label: 'Cliente', sortable: true, class: 'min-w-[180px]' },
+  { key: 'plan', label: 'Plan / Cotización', sortable: false, class: 'min-w-[200px]' },
+  { key: 'submitted_at', label: 'Recibido', sortable: true, class: 'w-[140px]' },
+  { key: 'action', label: '', sortable: false, align: 'center' as const, class: 'w-[60px]' },
+]
+
 const irA = (href: string) => router.visit(href)
 
+const handleSort = (column: string, direction: SortDirection) => {
+  router.get('/admin/checkout-sessions', { sort: column, direction }, { preserveState: true, preserveScroll: true, replace: true })
+}
+
 const statusLabel = (s: string) => ({
-  pending: 'Pendiente', submitted: 'Por procesar',
-  processed: 'Procesado', expired: 'Expirado',
+  pending: 'Pendiente',
+  submitted: 'Por procesar',
+  processed: 'Procesado',
+  expired: 'Expirado',
 }[s] ?? s)
 
-const statusStyle = (s: string) => ({
-  pending:   'background:var(--border-sub);         color:var(--text-2);',
-  submitted: 'background:var(--badge-pending-bg);   color:var(--badge-pending-txt);',
-  processed: 'background:var(--badge-ok-bg);         color:var(--badge-ok-txt);',
-  expired:   'background:var(--badge-danger-bg);     color:var(--badge-danger-txt);',
-}[s] ?? 'background:var(--border-sub); color:var(--text-3);')
+const statusBadgeClass = (s: string) => {
+  const map: Record<string, string> = {
+    pending: 'bg-muted text-foreground border-border',
+    submitted: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    processed: 'bg-green-100 text-green-700 border-green-200',
+    expired: 'bg-destructive/10 text-destructive border-destructive/20',
+  }
+  return map[s] ?? 'bg-muted text-muted-foreground border-border'
+}
 
-const dotStyle = (s: string) => ({
-  pending:   'background:var(--text-3);',
-  submitted: 'background:var(--dot-pending);',
-  processed: 'background:var(--dot-ok);',
-  expired:   'background:var(--dot-danger);',
-}[s] ?? 'background:var(--text-3);')
-
-const brandStyle = (b: string) => ({
-  visa:       'color:#1a56db;',
-  mastercard: 'color:#dc2626;',
-  amex:       'color:#4338ca;',
-  naranja:    'color:#ea580c;',
-  cabal:      'color:#16a349;',
-  maestro:    'color:#0d9488;',
-}[b] ?? 'color:var(--text-2);')
+const statusDotClass = (s: string) => {
+  const map: Record<string, string> = {
+    pending: 'bg-muted-foreground',
+    submitted: 'bg-yellow-500',
+    processed: 'bg-green-500',
+    expired: 'bg-destructive',
+  }
+  return map[s] ?? 'bg-muted-foreground'
+}
 
 const formatDate = (iso: string | null) => {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+const formatPrice = (value: number | null) => {
+  if (value == null) return '—'
+  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value)
 }
 </script>

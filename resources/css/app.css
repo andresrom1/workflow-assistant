@@ -86,69 +86,18 @@
 
 /* ══════════════════════════════════════════════════════
    DARK MODE  ([data-theme="dark"]  +  fallback OS)
-══════════════════════════════════════════════════════ */
-[data-theme="dark"],
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg-app:    #0a0b0f;
-    --bg-card:   #13151c;
-    --bg-raised: #1e2130;
-    /* text-1 reducido para evitar halación (astigmatismo) */
-    --text-1:    #c0c3d8;
-    --text-2:    #9499b8;
-    /* text-3 aclarado para cumplir WCAG AA ~4.6:1 */
-    --text-3:    #6b7194;
-    --border:    #2d3148;
-    /* border-sub elevado para que las filas de tabla sean visibles */
-    --border-sub:#2d3148;
-
-    --accent-50:  #1a1a2e;
-    --accent-100: #1e1e3f;
-    --accent-700: #4a4de8;
-    --shadow-card: 0 1px 4px rgba(0,0,0,.3);
-    /* focus ring más luminoso y opaco para dark mode */
-    --shadow-focus: 0 0 0 3px rgba(155,157,251,.45);
-
-    /* Badges de estado semántico — dark */
-    --badge-pending-bg:   #1c1009;  --badge-pending-txt:  #fbbf24;
-    --badge-ok-bg:        #052e16;  --badge-ok-txt:       #4ade80;
-    --badge-danger-bg:    #1f0a0a;  --badge-danger-txt:   #f87171;
-    --badge-orange-bg:    #1c0a00;  --badge-orange-txt:   #fb923c;
-    --badge-violet-bg:    #1e1033;  --badge-violet-txt:   #a78bfa;
-    --badge-teal-bg:      #042f2e;  --badge-teal-txt:     #5eead4;
-    --badge-accent-bg:    #1a1a2e;  --badge-accent-txt:   #9b9dfb;
-
-    --dot-pending:    #fbbf24;
-    --dot-ok:         #4ade80;
-    --dot-danger:     #f87171;
-    --dot-orange:     #fb923c;
-    --dot-violet:     #a78bfa;
-    --dot-teal:       #5eead4;
-    --dot-accent:     #9b9dfb;
-
-    /* Sidebar dark */
-    --sb-bg:          #0a0b0f;
-    --sb-border:      #1e2130;
-    --sb-divider:     #1e2130;
-    --sb-logo-text:   #eff0f7;
-    --sb-group-label: #454a66;
-    --sb-item-text:   #6b7194;
-    --sb-item-hover-bg:   #1e2130;
-    --sb-item-hover-text: #c0c3d8;
-    --sb-collapse-text:   #454a66;
-    --sb-collapse-hover:  #1e2130;
-  }
-}
-
-/* Cuando el atributo está explícito en html, override la media query */
+   ══════════════════════════════════════════════════════ */
 [data-theme="dark"] {
   --bg-app:    #0a0b0f;
   --bg-card:   #13151c;
   --bg-raised: #1e2130;
+  /* text-1 reducido para evitar halación (astigmatismo) */
   --text-1:    #c0c3d8;
   --text-2:    #9499b8;
+  /* text-3 aclarado para cumplir WCAG AA ~4.6:1 */
   --text-3:    #6b7194;
   --border:    #2d3148;
+  /* border-sub elevado para que las filas de tabla sean visibles */
   --border-sub:#2d3148;
 
   --accent-50:  #1a1a2e;
@@ -156,6 +105,7 @@
   --accent-200: #2d2d5c;
   --accent-700: #4a4de8;
   --shadow-card: 0 1px 4px rgba(0,0,0,.3);
+  /* focus ring más luminoso y opaco para dark mode */
   --shadow-focus: 0 0 0 3px rgba(155,157,251,.45);
 
   /* Badges de estado semántico — dark */
@@ -175,6 +125,7 @@
   --dot-teal:       #5eead4;
   --dot-accent:     #9b9dfb;
 
+  /* Sidebar dark */
   --sb-bg:          #0a0b0f;
   --sb-border:      #1e2130;
   --sb-divider:     #1e2130;
@@ -185,6 +136,52 @@
   --sb-item-hover-text: #c0c3d8;
   --sb-collapse-text:   #454a66;
   --sb-collapse-hover:  #1e2130;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-app:    #0a0b0f;
+    --bg-card:   #13151c;
+    --bg-raised: #1e2130;
+    --text-1:    #c0c3d8;
+    --text-2:    #9499b8;
+    --text-3:    #6b7194;
+    --border:    #2d3148;
+    --border-sub:#2d3148;
+
+    --accent-50:  #1a1a2e;
+    --accent-100: #1e1e3f;
+    --accent-700: #4a4de8;
+    --shadow-card: 0 1px 4px rgba(0,0,0,.3);
+    --shadow-focus: 0 0 0 3px rgba(155,157,251,.45);
+
+    --badge-pending-bg:   #1c1009;  --badge-pending-txt:  #fbbf24;
+    --badge-ok-bg:        #052e16;  --badge-ok-txt:       #4ade80;
+    --badge-danger-bg:    #1f0a0a;  --badge-danger-txt:   #f87171;
+    --badge-orange-bg:    #1c0a00;  --badge-orange-txt:   #fb923c;
+    --badge-violet-bg:    #1e1033;  --badge-violet-txt:   #a78bfa;
+    --badge-teal-bg:      #042f2e;  --badge-teal-txt:     #5eead4;
+    --badge-accent-bg:    #1a1a2e;  --badge-accent-txt:   #9b9dfb;
+
+    --dot-pending:    #fbbf24;
+    --dot-ok:         #4ade80;
+    --dot-danger:     #f87171;
+    --dot-orange:     #fb923c;
+    --dot-violet:     #a78bfa;
+    --dot-teal:       #5eead4;
+    --dot-accent:     #9b9dfb;
+
+    --sb-bg:          #0a0b0f;
+    --sb-border:      #1e2130;
+    --sb-divider:     #1e2130;
+    --sb-logo-text:   #eff0f7;
+    --sb-group-label: #454a66;
+    --sb-item-text:   #6b7194;
+    --sb-item-hover-bg:   #1e2130;
+    --sb-item-hover-text: #c0c3d8;
+    --sb-collapse-text:   #454a66;
+    --sb-collapse-hover:  #1e2130;
+  }
 }
 
 /* ── Body base ────────────────────────────────────────────────────────────── */
@@ -208,6 +205,57 @@ body {
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) body {
     font-weight: 500;
+  }
+}
+
+/* ── Scrollbars en modo oscuro ───────────────────────────────────────────── */
+[data-theme="dark"] ::-webkit-scrollbar,
+[data-theme="dark"] *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: var(--sb-divider, #1e2130);
+  border-radius: 4px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--sb-group-label, #454a66);
+}
+
+[data-theme="dark"] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb-divider, #1e2130) transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) ::-webkit-scrollbar,
+  :root:not([data-theme="light"]) *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  :root:not([data-theme="light"]) ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  :root:not([data-theme="light"]) ::-webkit-scrollbar-thumb {
+    background: var(--sb-divider, #1e2130);
+    border-radius: 4px;
+  }
+
+  :root:not([data-theme="light"]) ::-webkit-scrollbar-thumb:hover {
+    background: var(--sb-group-label, #454a66);
+  }
+
+  :root:not([data-theme="light"]) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sb-divider, #1e2130) transparent;
   }
 }
 
@@ -338,6 +386,7 @@ body {
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --font-heading: var(--font-sans);
 }
 
 /*

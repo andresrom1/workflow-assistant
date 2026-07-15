@@ -12,193 +12,248 @@
             Emisión de Facturas C contra AFIP · Punto de venta {{ puntoVenta }}.
           </p>
         </div>
-        <a href="/admin/facturacion/configuracion" class="btn text-sm py-1.5 px-3 whitespace-nowrap" style="background: var(--bg-subtle); color: var(--text-2);">
-          ⚙ Configuración
-        </a>
+        <Button as-child variant="secondary" size="sm">
+          <Link href="/admin/facturacion/configuracion">
+            <SettingsIcon class="size-3.5" />
+            Configuración
+          </Link>
+        </Button>
       </div>
 
       <!-- Lote en proceso: progreso en vivo -->
-      <div v-if="batchEnProceso"
-        class="rounded-[14px] p-4 mb-6"
-        style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-        <div class="flex items-center justify-between mb-3">
-          <div>
-            <p class="text-sm font-semibold" style="color: var(--text-1);">
-              Lote {{ batchEnProceso.codigo }} — emitiendo…
-            </p>
-            <p class="text-[11px]" style="color: var(--text-3);">{{ batchEnProceso.concepto }}</p>
+      <Card v-if="batchEnProceso" class="mb-6">
+        <CardHeader class="pb-2">
+          <div class="flex items-center justify-between">
+            <div>
+              <CardTitle>Lote {{ batchEnProceso.codigo }} — emitiendo…</CardTitle>
+              <CardDescription>{{ batchEnProceso.concepto }}</CardDescription>
+            </div>
+            <span class="inline-flex items-center gap-2 text-xs" style="color: var(--text-3);">
+              <span class="w-2 h-2 rounded-full animate-pulse" style="background: var(--accent-600);"></span>
+              Procesando contra AFIP
+            </span>
           </div>
-          <span class="inline-flex items-center gap-2 text-xs" style="color: var(--text-3);">
-            <span class="w-2 h-2 rounded-full animate-pulse" style="background: var(--accent-600);"></span>
-            Procesando contra AFIP
-          </span>
-        </div>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            :columns="batchColumns"
+            :data="batchEnProceso.invoices"
+            empty-message="Sin facturas en este lote."
+          >
+            <template #cell-importe="{ item }">
+              <span class="font-mono tabular-nums">{{ money(item.importe) }}</span>
+            </template>
 
-        <div class="overflow-x-auto">
-          <table class="w-full text-xs" style="color: var(--text-2);">
-            <thead>
-              <tr style="color: var(--text-3);" class="text-left">
-                <th class="py-1.5 pr-3 font-semibold">Compañía</th>
-                <th class="py-1.5 pr-3 font-semibold right">Importe</th>
-                <th class="py-1.5 pr-3 font-semibold">N° comp.</th>
-                <th class="py-1.5 pr-3 font-semibold">Estado</th>
-                <th class="py-1.5 font-semibold">Observaciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="i in batchEnProceso.invoices" :key="i.id" style="border-top: 1px solid var(--border);">
-                <td class="py-1.5 pr-3">{{ i.company }}</td>
-                <td class="py-1.5 pr-3 font-mono tabular-nums text-right">{{ money(i.importe) }}</td>
-                <td class="py-1.5 pr-3 font-mono">{{ i.numero_comprobante ?? '—' }}</td>
-                <td class="py-1.5 pr-3">
-                  <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold" :style="estadoStyle(i.estado)">
-                    {{ i.estado_label }}
-                  </span>
-                </td>
-                <td class="py-1.5" style="color: var(--badge-danger-txt);">{{ i.observaciones || '' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+            <template #cell-numero_comprobante="{ item }">
+              <span class="font-mono">{{ item.numero_comprobante ?? '—' }}</span>
+            </template>
+
+            <template #cell-estado="{ item }">
+              <Badge :variant="estadoBadgeVariant(item.estado)">{{ item.estado_label }}</Badge>
+            </template>
+
+            <template #cell-observaciones="{ item }">
+              <span style="color: var(--badge-danger-txt);">{{ item.observaciones || '' }}</span>
+            </template>
+
+            <template #mobile-row="{ item }">
+              <div
+                class="rounded-[14px] p-3 text-xs"
+                style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);"
+              >
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-semibold" style="color: var(--text-1);">{{ item.company }}</span>
+                  <Badge :variant="estadoBadgeVariant(item.estado)">{{ item.estado_label }}</Badge>
+                </div>
+                <div class="flex items-center justify-between" style="color: var(--text-2);">
+                  <span class="font-mono tabular-nums">{{ money(item.importe) }}</span>
+                  <span class="font-mono">N° {{ item.numero_comprobante ?? '—' }}</span>
+                </div>
+                <p v-if="item.observaciones" class="mt-1" style="color: var(--badge-danger-txt);">{{ item.observaciones }}</p>
+              </div>
+            </template>
+          </DataTable>
+        </CardContent>
+      </Card>
 
       <!-- Formulario de nuevo lote (solo si no hay uno en proceso) -->
-      <form v-else
-        class="rounded-[14px] p-4 mb-6"
-        style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);"
-        @submit.prevent="abrirConfirmacion">
+      <Card v-else class="mb-6">
+        <CardContent>
+          <form @submit.prevent="abrirConfirmacion">
+            <!-- Datos comunes -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              <label class="block">
+                <span class="text-xs font-semibold" style="color: var(--text-2);">Código</span>
+                <Input v-model="form.codigo" type="text" placeholder="0006" class="mt-1" />
+                <span v-if="form.errors.codigo" class="text-[11px]" style="color: var(--badge-danger-txt);">{{ form.errors.codigo }}</span>
+              </label>
+              <label class="block">
+                <span class="text-xs font-semibold" style="color: var(--text-2);">Producto / Servicio</span>
+                <Input v-model="form.concepto" type="text" placeholder="Comisiones correspondientes a Junio 2026" class="mt-1" />
+                <span v-if="form.errors.concepto" class="text-[11px]" style="color: var(--badge-danger-txt);">{{ form.errors.concepto }}</span>
+              </label>
+              <label class="block">
+                <span class="text-xs font-semibold" style="color: var(--text-2);">Servicios desde</span>
+                <Input v-model="form.fecha_servicio_desde" type="date" class="mt-1" />
+              </label>
+              <label class="block">
+                <span class="text-xs font-semibold" style="color: var(--text-2);">Servicios hasta</span>
+                <Input v-model="form.fecha_servicio_hasta" type="date" class="mt-1" />
+              </label>
+              <label class="block">
+                <span class="text-xs font-semibold" style="color: var(--text-2);">Vencimiento de pago</span>
+                <Input v-model="form.fecha_vto_pago" type="date" class="mt-1" />
+              </label>
+            </div>
 
-        <!-- Datos comunes -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-          <label class="block">
-            <span class="text-xs font-semibold" style="color: var(--text-2);">Código</span>
-            <input v-model="form.codigo" type="text" placeholder="0006" class="field mt-1" />
-            <span v-if="form.errors.codigo" class="text-[11px]" style="color: var(--badge-danger-txt);">{{ form.errors.codigo }}</span>
-          </label>
-          <label class="block">
-            <span class="text-xs font-semibold" style="color: var(--text-2);">Producto / Servicio</span>
-            <input v-model="form.concepto" type="text" placeholder="Comisiones correspondientes a Junio 2026" class="field mt-1" />
-            <span v-if="form.errors.concepto" class="text-[11px]" style="color: var(--badge-danger-txt);">{{ form.errors.concepto }}</span>
-          </label>
-          <label class="block">
-            <span class="text-xs font-semibold" style="color: var(--text-2);">Servicios desde</span>
-            <input v-model="form.fecha_servicio_desde" type="date" class="field mt-1" />
-          </label>
-          <label class="block">
-            <span class="text-xs font-semibold" style="color: var(--text-2);">Servicios hasta</span>
-            <input v-model="form.fecha_servicio_hasta" type="date" class="field mt-1" />
-          </label>
-          <label class="block">
-            <span class="text-xs font-semibold" style="color: var(--text-2);">Vencimiento de pago</span>
-            <input v-model="form.fecha_vto_pago" type="date" class="field mt-1" />
-          </label>
-        </div>
+            <!-- Listado de compañías -->
+            <DataTable
+              :columns="companyColumns"
+              :data="rows"
+              empty-message="No hay compañías configuradas."
+            >
+              <template #cell-checkbox="{ item }">
+                <Checkbox v-model:checked="item.checked" />
+              </template>
 
-        <!-- Listado de compañías -->
-        <div class="rounded-[10px] overflow-hidden" style="border: 1px solid var(--border);">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="text-left text-xs" style="color: var(--text-3); background: var(--bg-subtle);">
-                <th class="py-2 px-3 font-semibold w-10"></th>
-                <th class="py-2 px-3 font-semibold">Compañía</th>
-                <th class="py-2 px-3 font-semibold text-right">Importe</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in rows" :key="row.id" style="border-top: 1px solid var(--border);"
-                :style="row.checked ? '' : 'opacity: 0.5;'">
-                <td class="py-1.5 px-3">
-                  <input type="checkbox" v-model="row.checked" />
-                </td>
-                <td class="py-1.5 px-3" style="color: var(--text-1);">
-                  {{ row.razon_social }}
-                  <span v-if="yaFacturada(row.id)" class="ml-1 text-[11px]" style="color: var(--badge-warn-txt, #b45309);">
+              <template #cell-razon_social="{ item }">
+                <span style="color: var(--text-1);">
+                  {{ item.razon_social }}
+                  <span v-if="yaFacturada(item.id)" class="ml-1 text-[11px]" style="color: var(--badge-warn-txt, #b45309);">
                     · ya facturada con código {{ form.codigo }}
                   </span>
-                </td>
-                <td class="py-1.5 px-3">
-                  <input
-                    type="text" inputmode="decimal" placeholder="0,00"
-                    class="field text-right font-mono tabular-nums"
-                    :disabled="!row.checked"
-                    v-model="row.importeRaw"
-                    @blur="reformatRow(row)"
-                    :style="rowInvalid(row) ? 'border-color: var(--badge-danger-txt);' : ''" />
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                </span>
+              </template>
 
-        <!-- Total + acción -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
-          <p class="text-sm" style="color: var(--text-2);">
-            Seleccionadas: <strong>{{ seleccionadas.length }}</strong> ·
-            Total: <strong class="font-mono tabular-nums">{{ money(totalLote) }}</strong>
-          </p>
-          <button class="btn btn-primary text-sm py-1.5 px-4" type="submit" :disabled="!puedeEmitir || form.processing">
-            {{ form.processing ? 'Emitiendo…' : 'Facturar seleccionadas' }}
-          </button>
-        </div>
-        <p v-if="hayFilasInvalidas" class="text-[11px] mt-2 text-right" style="color: var(--badge-danger-txt);">
-          Hay compañías tildadas sin importe. Cargá el monto o destildalas.
-        </p>
-      </form>
+              <template #cell-importe="{ item }">
+                <Input
+                  v-model="item.importeRaw"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="0,00"
+                  :disabled="!item.checked"
+                  class="text-right font-mono tabular-nums"
+                  :class="rowInvalid(item) ? 'border-destructive' : ''"
+                  @blur="reformatRow(item)"
+                />
+              </template>
+
+              <template #mobile-row="{ item }">
+                <div
+                  class="rounded-[14px] p-3 text-sm"
+                  style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);"
+                  :style="item.checked ? '' : 'opacity: 0.5;'"
+                >
+                  <div class="flex items-center justify-between gap-3">
+                    <label class="flex items-center gap-2 min-w-0">
+                      <Checkbox v-model:checked="item.checked" />
+                      <span class="truncate" style="color: var(--text-1);">{{ item.razon_social }}</span>
+                    </label>
+                    <Input
+                      v-model="item.importeRaw"
+                      type="text"
+                      inputmode="decimal"
+                      placeholder="0,00"
+                      :disabled="!item.checked"
+                      class="w-28 text-right font-mono tabular-nums"
+                      :class="rowInvalid(item) ? 'border-destructive' : ''"
+                      @blur="reformatRow(item)"
+                    />
+                  </div>
+                  <p v-if="yaFacturada(item.id)" class="text-[11px] mt-1" style="color: var(--badge-warn-txt, #b45309);">
+                    Ya facturada con código {{ form.codigo }}
+                  </p>
+                </div>
+              </template>
+            </DataTable>
+
+            <!-- Total + acción -->
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
+              <p class="text-sm" style="color: var(--text-2);">
+                Seleccionadas: <strong>{{ seleccionadas.length }}</strong> ·
+                Total: <strong class="font-mono tabular-nums">{{ money(totalLote) }}</strong>
+              </p>
+              <Button type="submit" :disabled="!puedeEmitir || form.processing">
+                {{ form.processing ? 'Emitiendo…' : 'Facturar seleccionadas' }}
+              </Button>
+            </div>
+            <p v-if="hayFilasInvalidas" class="text-[11px] mt-2 text-right" style="color: var(--badge-danger-txt);">
+              Hay compañías tildadas sin importe. Cargá el monto o destildalas.
+            </p>
+          </form>
+        </CardContent>
+      </Card>
 
       <!-- Lotes recientes -->
       <div v-if="recientes.length">
         <h2 class="text-sm font-semibold mb-2" style="color: var(--text-2);">Lotes recientes</h2>
         <div class="space-y-2">
-          <div v-for="b in recientes" :key="b.id"
-            class="rounded-[10px] p-3 flex items-center justify-between gap-3 text-xs"
-            style="background: var(--bg-card); border: 1px solid var(--border);">
-            <Link :href="`/admin/facturacion/batches/${b.id}`" class="min-w-0 hover:underline">
-              <p class="font-semibold truncate" style="color: var(--text-1);">{{ b.codigo }} · {{ b.concepto }}</p>
-              <p class="truncate" style="color: var(--text-3);">{{ b.finished_at }}</p>
-            </Link>
-            <div class="flex items-center gap-3 whitespace-nowrap">
-              <span v-if="b.summary" class="font-mono tabular-nums" style="color: var(--text-3);">
-                {{ b.summary.autorizadas }} ok · {{ b.summary.rechazadas }} rech.
-              </span>
-              <Link :href="`/admin/facturacion/batches/${b.id}`" class="btn text-xs py-1 px-3" style="background: var(--bg-subtle); color: var(--text-2);">Detalle</Link>
-              <a v-if="b.summary && b.summary.autorizadas > 0"
-                :href="`/admin/facturacion/batches/${b.id}/download`"
-                class="btn btn-primary text-xs py-1 px-3">ZIP</a>
-            </div>
-          </div>
+          <Card v-for="b in recientes" :key="b.id" size="sm">
+            <CardContent class="flex items-center justify-between gap-3 py-3">
+              <Link :href="`/admin/facturacion/batches/${b.id}`" class="min-w-0 hover:underline">
+                <p class="font-semibold truncate text-sm" style="color: var(--text-1);">{{ b.codigo }} · {{ b.concepto }}</p>
+                <p class="truncate text-xs" style="color: var(--text-3);">{{ b.finished_at }}</p>
+              </Link>
+              <div class="flex items-center gap-2 whitespace-nowrap">
+                <span v-if="b.summary" class="font-mono tabular-nums text-xs" style="color: var(--text-3);">
+                  {{ b.summary.autorizadas }} ok · {{ b.summary.rechazadas }} rech.
+                </span>
+                <Button as-child variant="secondary" size="xs">
+                  <Link :href="`/admin/facturacion/batches/${b.id}`">Detalle</Link>
+                </Button>
+                <Button v-if="b.summary && b.summary.autorizadas > 0" as-child size="xs">
+                  <a :href="`/admin/facturacion/batches/${b.id}/download`">ZIP</a>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
 
     <!-- Modal confirmar -->
-    <Transition name="fade">
-      <div v-if="confirmando" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-        @click.self="confirmando = false">
-        <div class="w-full max-w-sm rounded-[14px] p-5"
-          style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-          <h2 class="text-base font-semibold mb-1" style="color: var(--text-1);">Confirmar facturación</h2>
-          <div class="text-sm mb-4 space-y-1" style="color: var(--text-3);">
-            <p>Código: <strong>{{ form.codigo }}</strong></p>
-            <p>{{ form.concepto }}</p>
-            <p>Período: {{ form.fecha_servicio_desde }} al {{ form.fecha_servicio_hasta }}</p>
-            <p>Compañías: <strong>{{ seleccionadas.length }}</strong> · Total: <strong class="font-mono">{{ money(totalLote) }}</strong></p>
-          </div>
-          <div class="flex justify-end gap-2">
-            <button class="btn text-sm py-1.5 px-3" style="background: var(--bg-subtle); color: var(--text-2);"
-              @click="confirmando = false">Cancelar</button>
-            <button class="btn btn-primary text-sm py-1.5 px-3" :disabled="form.processing" @click="emitir">
-              {{ form.processing ? 'Emitiendo…' : 'Emitir' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
+    <Dialog v-model:open="confirmando">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Confirmar facturación</DialogTitle>
+          <DialogDescription as="div">
+            <div class="text-sm space-y-1 mt-1">
+              <p>Código: <strong>{{ form.codigo }}</strong></p>
+              <p>{{ form.concepto }}</p>
+              <p>Período: {{ form.fecha_servicio_desde }} al {{ form.fecha_servicio_hasta }}</p>
+              <p>Compañías: <strong>{{ seleccionadas.length }}</strong> · Total: <strong class="font-mono">{{ money(totalLote) }}</strong></p>
+            </div>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="secondary" @click="confirmando = false">Cancelar</Button>
+          <Button :disabled="form.processing" @click="emitir">
+            {{ form.processing ? 'Emitiendo…' : 'Emitir' }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Link, useForm, usePoll } from '@inertiajs/vue3'
+import { Button } from '@/components/UI/button'
+import { Input } from '@/components/UI/input'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/UI/card'
+import { Badge } from '@/components/UI/badge'
+import { Checkbox } from '@/components/UI/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/UI/dialog'
+import { Settings as SettingsIcon } from '@lucide/vue'
+import DataTable from '@/components/App/DataTable.vue'
 
 interface Company { id: number; razon_social: string; cuit: string; condicion_iva: string }
 interface BatchInvoice {
@@ -242,6 +297,30 @@ const rows = reactive<Row[]>(
 const reformatRow = (row: Row): void => {
   const n = parseMoney(row.importeRaw)
   row.importeRaw = formatMoney(n)
+}
+
+const opacityClass = (row: Row): string => row.checked ? '' : 'opacity-50'
+
+const companyColumns = [
+  { key: 'checkbox', label: '', sortable: false, align: 'center' as const, class: 'w-10', cellClass: opacityClass },
+  { key: 'razon_social', label: 'Compañía', sortable: false, cellClass: opacityClass },
+  { key: 'importe', label: 'Importe', sortable: false, align: 'right' as const, cellClass: opacityClass },
+]
+
+const batchColumns = [
+  { key: 'company', label: 'Compañía', sortable: false },
+  { key: 'importe', label: 'Importe', sortable: false, align: 'right' as const },
+  { key: 'numero_comprobante', label: 'N° comp.', sortable: false },
+  { key: 'estado', label: 'Estado', sortable: false },
+  { key: 'observaciones', label: 'Observaciones', sortable: false, cellClass: 'text-destructive' },
+]
+
+const estadoBadgeVariant = (estado: string): 'default' | 'secondary' | 'destructive' => {
+  switch (estado) {
+    case 'authorized': return 'default'
+    case 'rejected': return 'destructive'
+    default: return 'secondary'
+  }
 }
 
 // `form` se declara ANTES de yaFacturada/watch: el getter del watch corre en el setup
@@ -295,12 +374,4 @@ watch(
   (activo) => { activo ? start() : stop() },
   { immediate: true },
 )
-
-const estadoStyle = (estado: string): string => {
-  switch (estado) {
-    case 'authorized': return 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);'
-    case 'rejected': return 'background: var(--badge-danger-bg); color: var(--badge-danger-txt);'
-    default: return 'background: var(--bg-subtle); color: var(--text-3);'
-  }
-}
 </script>

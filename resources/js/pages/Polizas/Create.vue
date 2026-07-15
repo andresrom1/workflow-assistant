@@ -2,7 +2,7 @@
   <div class="py-6 px-4 sm:py-8">
     <div class="max-w-2xl mx-auto">
 
-      <BackLink href="/polizas" label="Pólizas" class="mb-4" />
+      <AppBackLink href="/polizas" label="Pólizas" class="mb-4" />
 
       <h1 class="text-xl sm:text-2xl font-semibold tracking-tight mb-6" style="color: var(--text-1);">
         Nueva póliza
@@ -14,9 +14,12 @@
         style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
         <h2 class="text-sm font-semibold mb-3" style="color: var(--text-1);">¿Para qué cliente?</h2>
         <form @submit.prevent="searchCustomer" class="flex gap-2">
-          <input v-model="customerSearchInput" type="text" class="field flex-1"
-            placeholder="Buscar por nombre, DNI, email o teléfono..." />
-          <button type="submit" class="btn btn-primary">Buscar</button>
+          <FormItem class="flex-1">
+            <FormControl>
+              <Input v-model="customerSearchInput" type="text" placeholder="Buscar por nombre, DNI, email o teléfono..." />
+            </FormControl>
+          </FormItem>
+          <Button type="submit">Buscar</Button>
         </form>
 
         <div v-if="customerMatches.length" class="mt-4 space-y-2">
@@ -71,56 +74,91 @@
 
           <!-- existente -->
           <div v-if="riskMode === 'existing'">
-            <label class="field-label">Vehículo del cliente *</label>
-            <Select v-model="form.risk_id">
-              <SelectTrigger class="w-full h-[38px]" :aria-invalid="!!form.errors.risk_id || undefined">
-                <SelectValue placeholder="Seleccionar..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem v-for="r in customer.risks" :key="r.id" :value="r.id">
-                    {{ r.label }}{{ r.patente ? ` — ${r.patente}` : '' }}
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <p v-if="form.errors.risk_id" class="field-error-text">{{ form.errors.risk_id }}</p>
+            <FormItem :error="form.errors.risk_id">
+              <FormLabel>Vehículo del cliente *</FormLabel>
+              <FormControl>
+                <Select v-model="form.risk_id">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Seleccionar..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem v-for="r in customer.risks" :key="r.id" :value="r.id">
+                        {{ r.label }}{{ r.patente ? ` — ${r.patente}` : '' }}
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
           </div>
 
           <!-- nuevo -->
           <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="field-label">Patente</label>
-              <input v-model="form.risk.patente" type="text" class="field uppercase" />
-            </div>
-            <div>
-              <label class="field-label">Marca</label>
-              <input v-model="form.risk.marca" type="text" class="field" />
-            </div>
-            <div>
-              <label class="field-label">Modelo</label>
-              <input v-model="form.risk.modelo" type="text" class="field" />
-            </div>
-            <div>
-              <label class="field-label">Versión</label>
-              <input v-model="form.risk.version" type="text" class="field" />
-            </div>
-            <div>
-              <label class="field-label">Año</label>
-              <input v-model="form.risk.year" type="number" class="field" />
-            </div>
-            <div>
-              <label class="field-label">Combustible</label>
-              <input v-model="form.risk.combustible" type="text" class="field" />
-            </div>
-            <div>
-              <label class="field-label">Uso</label>
-              <input v-model="form.risk.uso" type="text" class="field" placeholder="particular / comercial" />
-            </div>
-            <div>
-              <label class="field-label">Código postal</label>
-              <input v-model="form.risk.codigo_postal" type="text" class="field" />
-            </div>
+            <FormItem :error="form.errors['risk.patente']">
+              <FormLabel>Patente</FormLabel>
+              <FormControl>
+                <Input v-model="form.risk.patente" type="text" class="uppercase" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+
+            <FormItem :error="form.errors['risk.marca']">
+              <FormLabel>Marca</FormLabel>
+              <FormControl>
+                <Input v-model="form.risk.marca" type="text" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+
+            <FormItem :error="form.errors['risk.modelo']">
+              <FormLabel>Modelo</FormLabel>
+              <FormControl>
+                <Input v-model="form.risk.modelo" type="text" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+
+            <FormItem :error="form.errors['risk.version']">
+              <FormLabel>Versión</FormLabel>
+              <FormControl>
+                <Input v-model="form.risk.version" type="text" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+
+            <FormItem :error="form.errors['risk.year']">
+              <FormLabel>Año</FormLabel>
+              <FormControl>
+                <Input v-model="form.risk.year" type="number" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+
+            <FormItem :error="form.errors['risk.combustible']">
+              <FormLabel>Combustible</FormLabel>
+              <FormControl>
+                <Input v-model="form.risk.combustible" type="text" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+
+            <FormItem :error="form.errors['risk.uso']">
+              <FormLabel>Uso</FormLabel>
+              <FormControl>
+                <Input v-model="form.risk.uso" type="text" placeholder="particular / comercial" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+
+            <FormItem :error="form.errors['risk.codigo_postal']">
+              <FormLabel>Código postal</FormLabel>
+              <FormControl>
+                <Input v-model="form.risk.codigo_postal" type="text" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
           </div>
         </div>
 
@@ -132,10 +170,12 @@
         </div>
 
         <div class="flex justify-end gap-2">
-          <Link href="/polizas" class="btn btn-secondary text-sm">Cancelar</Link>
-          <button type="submit" class="btn btn-primary text-sm" :disabled="form.processing">
+          <Button variant="secondary" as-child>
+            <Link href="/polizas">Cancelar</Link>
+          </Button>
+          <Button type="submit" :disabled="form.processing">
             {{ form.processing ? 'Guardando...' : 'Crear póliza' }}
-          </button>
+          </Button>
         </div>
       </form>
 
@@ -146,9 +186,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
-import PolizaFields from './PolizaFields.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
+import { Button } from '@/components/UI/button'
+import { FormControl, FormItem, FormLabel, FormMessage } from '@/components/UI/form'
+import { Input } from '@/components/UI/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
+import PolizaFields from './PolizaFields.vue'
 
 interface CustomerProp {
   id: number
@@ -185,6 +228,7 @@ const form = useForm({
   numero: '', company: '', coverage: '', coverage_detail: '',
   sum_asegurada: '' as string | number, cuota: '' as string | number,
   cuota_due: '', vigencia: '', emitida_en: '', estado: 'vigente',
+  periodo_corto: false,
 })
 
 const submit = () => {

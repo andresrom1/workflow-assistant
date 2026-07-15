@@ -2,7 +2,7 @@
   <div class="py-6 px-4 sm:py-8">
     <div class="max-w-2xl mx-auto">
 
-      <BackLink href="/polizas" label="Pólizas" class="mb-4" />
+      <AppBackLink href="/polizas" label="Pólizas" class="mb-4" />
 
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
@@ -16,10 +16,13 @@
           </p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
-          <Link v-if="poliza.es_renovable" :href="`/polizas/${poliza.id}/renovar`"
-            class="btn btn-secondary text-sm">Renovar</Link>
-          <Link :href="`/policy-documents/${poliza.id}`" class="btn btn-secondary text-sm">Gestionar documentos →</Link>
-          <button @click="showDelete = true" class="btn btn-danger text-sm">Eliminar</button>
+          <Button v-if="poliza.es_renovable" variant="secondary" as-child>
+            <Link :href="`/polizas/${poliza.id}/renovar`">Renovar</Link>
+          </Button>
+          <Button variant="secondary" as-child>
+            <Link :href="`/policy-documents/${poliza.id}`">Gestionar documentos →</Link>
+          </Button>
+          <Button variant="destructive" @click="showDelete = true">Eliminar</Button>
         </div>
       </div>
 
@@ -42,7 +45,7 @@
         <p class="text-sm font-medium" style="color: var(--badge-danger-txt);">
           Marcada como no renovable — no figura en la cola de mantenimiento.
         </p>
-        <button @click="reactivar" class="btn btn-secondary text-xs py-1.5 px-3 flex-shrink-0">Reactivar</button>
+        <Button variant="secondary" size="sm" @click="reactivar">Reactivar</Button>
       </div>
 
       <!-- Form -->
@@ -51,10 +54,12 @@
         style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
         <PolizaFields :form="form" :estados="estados" />
         <div class="flex justify-end gap-2 mt-5">
-          <Link href="/polizas" class="btn btn-secondary text-sm">Cancelar</Link>
-          <button type="submit" class="btn btn-primary text-sm" :disabled="form.processing">
+          <Button variant="secondary" as-child>
+            <Link href="/polizas">Cancelar</Link>
+          </Button>
+          <Button type="submit" :disabled="form.processing">
             {{ form.processing ? 'Guardando...' : 'Guardar cambios' }}
-          </button>
+          </Button>
         </div>
       </form>
 
@@ -62,36 +67,35 @@
   </div>
 
   <!-- Modal eliminar -->
-  <Transition name="fade">
-    <div v-if="showDelete" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="fixed inset-0 bg-black/50" @click="showDelete = false" />
-      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
-           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">¿Eliminar esta póliza?</h3>
-        <p class="text-sm mb-5" style="color: var(--text-2);">
+  <Dialog v-model:open="showDelete">
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>¿Eliminar esta póliza?</DialogTitle>
+        <DialogDescription>
           La póliza se archiva (soft-delete). Los documentos cargados no se borran.
-        </p>
-        <div class="flex justify-end gap-2">
-          <button @click="showDelete = false"
-            class="px-4 py-2 rounded-lg text-sm font-semibold"
-            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);">
-            Cancelar
-          </button>
-          <button @click="submitDelete"
-            class="px-4 py-2 rounded-lg text-sm font-semibold"
-            style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);">
-            Eliminar
-          </button>
-        </div>
-      </div>
-    </div>
-  </Transition>
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter>
+        <Button variant="secondary" @click="showDelete = false">Cancelar</Button>
+        <Button variant="destructive" @click="submitDelete">Eliminar</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
+import { Button } from '@/components/UI/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/UI/dialog'
 import PolizaFields from './PolizaFields.vue'
 
 interface Poliza {
@@ -138,8 +142,3 @@ const reactivar = () => {
   router.delete(`/polizas/${props.poliza.id}/descartar-renovacion`, { preserveScroll: true })
 }
 </script>
-
-<style scoped>
-.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
-</style>

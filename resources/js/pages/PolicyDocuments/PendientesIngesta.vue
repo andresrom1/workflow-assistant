@@ -2,7 +2,7 @@
   <div class="py-6 px-4 sm:py-8">
     <div class="max-w-4xl mx-auto">
 
-      <BackLink href="/policy-documents" label="Docs Pólizas" class="mb-4" />
+      <AppBackLink href="/policy-documents" label="Docs Pólizas" class="mb-4" />
 
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
@@ -292,7 +292,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from 'vue'
 import { router } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
 
 interface IngestaDoc {
   id: number

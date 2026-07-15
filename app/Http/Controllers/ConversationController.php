@@ -22,11 +22,15 @@ class ConversationController extends Controller
     {
         $search = $request->input('search', '');
         $perPage = $request->input('per_page', 15);
+        $sort = $request->input('sort');
+        $direction = strtolower((string) $request->input('direction', 'asc'));
 
         $customers = $this->customerRepository->getAllWithRelations(
             ['vehicles', 'conversations'],
             $search,
-            $perPage
+            $perPage,
+            is_string($sort) ? $sort : null,
+            in_array($direction, ['asc', 'desc'], true) ? $direction : 'asc',
         );
 
         return Inertia::render('Conversations/Index', [
@@ -43,7 +47,12 @@ class ConversationController extends Controller
                 'vehicles_count' => $c->vehicles->count(),
                 'conversations_count' => $c->conversations->count(),
             ]),
-            'filters' => ['search' => $search, 'per_page' => $perPage],
+            'filters' => [
+                'search' => $search,
+                'per_page' => $perPage,
+                'sort' => $sort,
+                'direction' => $direction,
+            ],
         ]);
     }
 

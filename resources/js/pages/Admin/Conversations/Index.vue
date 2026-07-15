@@ -7,298 +7,250 @@
         <h1 class="text-xl sm:text-2xl font-semibold tracking-tight" style="color: var(--text-1);">
           Conversaciones
         </h1>
-        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
-          style="background: #fff3cd; color: #92400e; border: 1px solid #fcd34d;">
+        <Badge class="bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100">
           DEV TOOL
-        </span>
+        </Badge>
       </div>
 
-<!-- Filtros por salud -->
-      <div class="mb-5">
+      <!-- Filtros por salud -->
+      <Card class="p-4 mb-5">
         <div class="flex flex-wrap items-center gap-2">
-          <span class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Filtrar:
           </span>
-          <button
+          <Button
             v-for="flag in flagDefs"
             :key="flag.key"
-            @click="toggleFlag(flag.key)"
             type="button"
-            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors"
-            :style="chipStyle(flag.key)"
+            size="xs"
+            :variant="isFlagActive(flag.key) ? 'destructive' : 'outline'"
+            :class="[!isFlagActive(flag.key) && flag.tier === 2 && 'border-dashed']"
+            @click="toggleFlag(flag.key)"
           >
             <span>{{ flag.emoji }}</span>
             <span>{{ flag.label }}</span>
-            <span class="px-1 rounded text-[10px]"
-              :style="isFlagActive(flag.key)
-                ? 'background:rgba(255,255,255,0.25); color:inherit;'
-                : 'background:var(--border); color:var(--text-3);'">
+            <span
+              class="rounded px-1 text-[10px]"
+              :class="isFlagActive(flag.key) ? 'bg-white/25' : 'bg-muted text-muted-foreground'"
+            >
               {{ flagCounts[flag.key] ?? 0 }}
             </span>
-          </button>
-          <button
+          </Button>
+          <Button
             v-if="filters.flags.length"
-            @click="clearFlags"
             type="button"
-            class="ml-1 text-[11px] underline"
-            style="color: var(--text-3);"
+            variant="ghost"
+            size="xs"
+            @click="clearFlags"
           >
             Limpiar
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
-      <!-- Empty state -->
-      <div v-if="!conversations.data.length"
-        class="rounded-[14px] p-12 text-center text-sm"
-        style="background: var(--bg-card); border: 1px dashed var(--border); color: var(--text-3);">
-        No hay conversaciones registradas.
-      </div>
+      <DataTable
+        :columns="columns"
+        :data="conversations.data"
+        :sort="currentSort"
+        :direction="currentDirection"
+        empty-message="No hay conversaciones registradas."
+        @sort="handleSort"
+      >
+        <template #cell-customer_name="{ item }">
+          <p class="text-sm font-semibold" style="color: var(--text-1);">
+            {{ item.customer?.name ?? item.ext_username ?? 'Anónimo' }}
+          </p>
+          <p class="text-[11px] font-mono text-muted-foreground">
+            {{ item.customer?.phone ?? item.ext_user_id ?? '—' }}
+          </p>
+          <div class="flex items-center gap-1.5 mt-0.5">
+            <p class="text-[10px] font-mono text-muted-foreground/60">#{{ item.id }}</p>
+            <Badge v-if="item.status === 'archived'" variant="secondary" class="text-[9px] h-3 px-1 py-0 leading-none">
+              Archivada
+            </Badge>
+          </div>
+        </template>
 
-      <template v-else>
-        <!-- DESKTOP — tabla ≥ md -->
-        <div class="hidden md:block rounded-[14px] overflow-hidden"
-          style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-          <table class="min-w-full text-sm">
-            <thead>
-              <tr style="background: var(--bg-raised); border-bottom: 1px solid var(--border);">
-                <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Canal</th>
-                <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Cliente</th>
-                <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Estado del flujo</th>
-                <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Mensajes</th>
-                <th class="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Última actividad</th>
-                <th class="px-4 py-3 w-36"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="c in conversations.data" :key="c.id"
-                style="border-bottom: 1px solid var(--border-sub);"
+        <template #cell-status="{ item }">
+          <div class="flex flex-wrap gap-1 max-h-[44px] overflow-hidden">
+            <template v-for="(done, flag) in item.ai_state" :key="flag">
+              <span
+                v-if="done"
+                class="inline-flex items-center gap-1 px-1.5 py-0 rounded text-[10px] font-medium bg-green-100 text-green-700"
               >
-                <!-- Canal -->
-                <td class="px-4 py-3">
-                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
-                    :style="channelStyle(c.channel)">
-                    {{ channelLabel(c.channel) }}
-                  </span>
-                </td>
-
-                <!-- Cliente -->
-                <td class="px-4 py-3">
-                  <div class="flex items-center gap-2 mb-0.5">
-                    <p class="text-sm font-semibold" style="color: var(--text-1);">
-                      {{ c.customer?.name ?? c.ext_username ?? 'Anónimo' }}
-                    </p>
-                    <span v-if="c.status === 'archived'"
-                      class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold"
-                      style="background: var(--border-sub); color: var(--text-3);">
-                      Archivada
-                    </span>
-                  </div>
-                  <p class="text-[11px] font-mono" style="color: var(--text-3);">
-                    {{ c.customer?.phone ?? c.ext_user_id ?? '—' }}
-                  </p>
-                  <p class="text-[10px] font-mono mt-0.5" style="color: var(--text-3); opacity: 0.6;">#{{ c.id }}</p>
-                </td>
-
-                <!-- Estado del flujo AI -->
-                <td class="px-4 py-3">
-                  <div class="flex flex-wrap gap-1">
-                    <span v-for="(done, flag) in c.ai_state" :key="flag"
-                      class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium"
-                      :style="done
-                        ? 'background:var(--badge-ok-bg); color:var(--badge-ok-txt);'
-                        : 'background:var(--border-sub); color:var(--text-3);'">
-                      <span class="w-1 h-1 rounded-full flex-shrink-0"
-                        :style="done ? 'background:var(--dot-ok);' : 'background:var(--text-3);'"></span>
-                      {{ flagLabel(flag) }}
-                    </span>
-                  </div>
-                </td>
-
-                <!-- Mensajes -->
-                <td class="px-4 py-3 text-sm text-center" style="color: var(--text-2);">
-                  {{ c.messages_count }}
-                </td>
-
-                <!-- Última actividad -->
-                <td class="px-4 py-3 text-[11px] whitespace-nowrap" style="color: var(--text-3);">
-                  {{ formatDate(c.last_message_at ?? c.created_at) }}
-                </td>
-
-                <!-- Acciones -->
-                <td class="px-4 py-3">
-                  <div class="flex items-center justify-end gap-2">
-                    <a
-                      :href="`/admin/conversations/${c.id}`"
-                      class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-colors"
-                      style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
-                    >
-                      Ver →
-                    </a>
-                    <form
-                      v-if="c.status !== 'archived'"
-                      :action="`/admin/conversations/${c.id}/reset`"
-                      method="POST"
-                      @submit.prevent="confirmReset($event, c)"
-                    >
-                      <input type="hidden" name="_token" :value="csrfToken" />
-                      <button
-                        type="submit"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-colors"
-                        style="background: var(--badge-danger-bg); color: var(--badge-danger-txt); border: 1px solid transparent;"
-                        @mouseenter="$event.currentTarget.style.opacity = '0.8'"
-                        @mouseleave="$event.currentTarget.style.opacity = '1'"
-                      >
-                        ↺ Archivar
-                      </button>
-                    </form>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- MOBILE — cards < md -->
-        <div class="md:hidden space-y-2">
-          <div v-for="c in conversations.data" :key="c.id"
-            class="rounded-[14px] p-4"
-            style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-
-            <div class="flex items-start justify-between gap-2 mb-2">
-              <div class="min-w-0">
-                <div class="flex items-center gap-2 mb-1">
-                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                    :style="channelStyle(c.channel)">
-                    {{ channelLabel(c.channel) }}
-                  </span>
-                  <span class="text-[10px]" style="color: var(--text-3);">{{ c.messages_count }} msgs</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <p class="text-sm font-semibold truncate" style="color: var(--text-1);">
-                    {{ c.customer?.name ?? c.ext_username ?? 'Anónimo' }}
-                  </p>
-                  <span v-if="c.status === 'archived'"
-                    class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0"
-                    style="background: var(--border-sub); color: var(--text-3);">
-                    Archivada
-                  </span>
-                </div>
-                <p class="text-[11px] font-mono mt-0.5" style="color: var(--text-3);">
-                  {{ c.customer?.phone ?? c.ext_user_id ?? '—' }}
-                </p>
-                <p class="text-[10px] font-mono mt-0.5" style="color: var(--text-3); opacity: 0.6;">#{{ c.id }}</p>
-              </div>
-            </div>
-
-            <!-- AI state mini-flags -->
-            <div class="flex flex-wrap gap-1 mb-3">
-              <span v-for="(done, flag) in c.ai_state" :key="flag"
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium"
-                :style="done
-                  ? 'background:var(--badge-ok-bg); color:var(--badge-ok-txt);'
-                  : 'background:var(--border-sub); color:var(--text-3);'">
+                <span class="size-1 rounded-full flex-shrink-0 bg-green-500" />
                 {{ flagLabel(flag) }}
               </span>
-            </div>
-
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-[11px]" style="color: var(--text-3);">
-                {{ formatDate(c.last_message_at ?? c.created_at) }}
-              </span>
-              <div class="flex items-center gap-2">
-                <a
-                  :href="`/admin/conversations/${c.id}`"
-                  class="inline-flex items-center px-2.5 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap"
-                  style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
-                >
-                  Ver →
-                </a>
-                <form
-                  v-if="c.status !== 'archived'"
-                  :action="`/admin/conversations/${c.id}/reset`"
-                  method="POST"
-                  @submit.prevent="confirmReset($event, c)"
-                >
-                  <input type="hidden" name="_token" :value="csrfToken" />
-                  <button
-                    type="submit"
-                    class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap"
-                    style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);"
-                  >
-                    ↺ Archivar
-                  </button>
-                </form>
-              </div>
-            </div>
+            </template>
+            <span
+              v-if="Object.values(item.ai_state).filter(Boolean).length === 0"
+              class="text-[10px] text-muted-foreground"
+            >
+              —
+            </span>
           </div>
-        </div>
+        </template>
 
-        <!-- Pagination -->
-        <div v-if="conversations.last_page > 1" class="mt-4 flex items-center justify-center gap-2 text-sm">
-          <a
-            v-if="conversations.prev_page_url"
-            :href="conversations.prev_page_url"
-            class="px-3 py-1.5 rounded-lg text-[12px]"
-            style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text-2);"
-          >← Anterior</a>
-          <span class="text-[12px]" style="color: var(--text-3);">
-            Pág. {{ conversations.current_page }} / {{ conversations.last_page }}
+        <template #cell-messages_count="{ item }">
+          <div class="flex flex-col items-center gap-0.5">
+            <span class="text-sm text-foreground">{{ item.messages_count }}</span>
+            <Badge variant="outline" class="text-[9px] h-4 px-1 py-0" :class="channelBadgeClass(item.channel)">
+              {{ channelLabel(item.channel) }}
+            </Badge>
+          </div>
+        </template>
+
+        <template #cell-updated_at="{ item }">
+          <span class="text-[11px] whitespace-nowrap text-muted-foreground">
+            {{ formatDate(item.last_message_at ?? item.created_at) }}
           </span>
-          <a
-            v-if="conversations.next_page_url"
-            :href="conversations.next_page_url"
-            class="px-3 py-1.5 rounded-lg text-[12px]"
-            style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text-2);"
-          >Siguiente →</a>
-        </div>
-      </template>
+        </template>
 
+        <template #cell-created_at="{ item }">
+          <span class="text-[11px] whitespace-nowrap text-muted-foreground">
+            {{ formatDate(item.created_at) }}
+          </span>
+        </template>
+
+        <template #cell-action="{ item }">
+          <div class="flex items-center justify-end gap-1" @click.stop>
+            <Button variant="ghost" size="icon" class="h-7 w-7" as-child>
+              <Link :href="`/admin/conversations/${item.id}`">
+                <Eye class="size-4" />
+              </Link>
+            </Button>
+            <Button
+              v-if="item.status !== 'archived'"
+              variant="ghost"
+              size="icon"
+              class="h-7 w-7 text-destructive hover:text-destructive"
+              @click="openArchive(item)"
+            >
+              <Archive class="size-4" />
+            </Button>
+          </div>
+        </template>
+
+        <template #mobile-row="{ item }">
+          <Card class="p-4">
+            <CardContent class="p-0 space-y-3">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 mb-1">
+                    <Badge variant="outline" :class="channelBadgeClass(item.channel)">
+                      {{ channelLabel(item.channel) }}
+                    </Badge>
+                    <span class="text-[10px] text-muted-foreground">{{ item.messages_count }} msgs</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <p class="text-sm font-semibold truncate" style="color: var(--text-1);">
+                      {{ item.customer?.name ?? item.ext_username ?? 'Anónimo' }}
+                    </p>
+                    <Badge v-if="item.status === 'archived'" variant="secondary" class="text-[10px] h-4 px-1 flex-shrink-0">
+                      Archivada
+                    </Badge>
+                  </div>
+                  <p class="text-[11px] font-mono text-muted-foreground">
+                    {{ item.customer?.phone ?? item.ext_user_id ?? '—' }}
+                  </p>
+                  <p class="text-[10px] font-mono text-muted-foreground/60">#{{ item.id }}</p>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-1">
+                <span
+                  v-for="(done, flag) in item.ai_state"
+                  :key="flag"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                  :class="done ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground'"
+                >
+                  {{ flagLabel(flag) }}
+                </span>
+              </div>
+
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] text-muted-foreground">
+                  {{ formatDate(item.last_message_at ?? item.created_at) }}
+                </span>
+                <div class="flex items-center gap-2">
+                  <Button variant="outline" size="xs" as-child>
+                    <Link :href="`/admin/conversations/${item.id}`">
+                      Ver
+                    </Link>
+                  </Button>
+                  <Button
+                    v-if="item.status !== 'archived'"
+                    variant="destructive"
+                    size="xs"
+                    @click="openArchive(item)"
+                  >
+                    Archivar
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </template>
+      </DataTable>
+
+      <AppPagination v-if="conversations.last_page > 1" :data="conversations" class="mt-4" />
     </div>
   </div>
 
   <!-- Modal de confirmación de archivado -->
-  <Transition name="fade">
-    <div v-if="archiveTarget" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="fixed inset-0 bg-black/50" @click="archiveTarget = null" />
-      <div class="relative z-10 rounded-2xl p-6 max-w-sm w-full"
-           style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-        <h3 class="text-base font-semibold mb-3" style="color: var(--text-1);">
-          ¿Archivar conversación?
-        </h3>
-        <p class="text-sm font-medium mb-3" style="color: var(--text-2);">
-          {{ archiveTarget.identifier }}
-        </p>
-        <ul class="text-sm space-y-1.5 mb-5">
-          <li style="color: var(--badge-ok-txt);">✓ Mensajes, cotizaciones y contexto del LLM conservados</li>
-          <li style="color: var(--badge-ok-txt);">✓ Conversación accesible para auditoría</li>
-          <li style="color: var(--badge-danger-txt);">✗ El próximo mensaje inicia el flujo desde cero</li>
-        </ul>
-        <div class="flex justify-end gap-2">
-          <button
-            @click="archiveTarget = null"
-            class="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-            style="background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--border);"
-          >
-            Cancelar
-          </button>
-          <button
-            @click="submitArchive"
-            class="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-            style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);"
-          >
-            Archivar
-          </button>
-        </div>
-      </div>
-    </div>
-  </Transition>
+  <Dialog :open="!!archiveTarget" @update:open="(open) => { if (!open) archiveTarget = null }">
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>¿Archivar conversación?</DialogTitle>
+        <DialogDescription>
+          {{ archiveTarget?.identifier }}
+        </DialogDescription>
+      </DialogHeader>
+
+      <ul class="text-sm space-y-2">
+        <li class="flex items-center gap-2" style="color: var(--badge-ok-txt);">
+          <Check class="size-4" />
+          Mensajes, cotizaciones y contexto del LLM conservados
+        </li>
+        <li class="flex items-center gap-2" style="color: var(--badge-ok-txt);">
+          <Check class="size-4" />
+          Conversación accesible para auditoría
+        </li>
+        <li class="flex items-center gap-2" style="color: var(--badge-danger-txt);">
+          <X class="size-4" />
+          El próximo mensaje inicia el flujo desde cero
+        </li>
+      </ul>
+
+      <DialogFooter>
+        <Button variant="outline" @click="archiveTarget = null">
+          Cancelar
+        </Button>
+        <Button variant="destructive" @click="submitArchive">
+          Archivar
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { router } from '@inertiajs/vue3'
+import { computed, ref } from 'vue'
+import { Link, router, usePage } from '@inertiajs/vue3'
+import { Badge } from '@/components/UI/badge'
+import { Button } from '@/components/UI/button'
+import { Card, CardContent } from '@/components/UI/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/UI/dialog'
+import { Archive, Check, Eye, X } from '@lucide/vue'
+import AppPagination from '@/components/App/Pagination.vue'
+import DataTable, { type SortDirection } from '@/components/App/DataTable.vue'
 
 type Tier1Flag = 'loops' | 'stuck' | 'tool_errors' | 'abandoned' | 'long'
 type Tier2Flag = 'user_frustrated' | 'agent_confused' | 'semantic_loop' | 'context_loss' | 'hallucination' | 'incorrect_answer'
@@ -320,10 +272,12 @@ const props = defineProps<{
       last_message_at: string | null
       created_at: string
     }>
+    from: number
+    to: number
+    total: number
     current_page: number
     last_page: number
-    prev_page_url: string | null
-    next_page_url: string | null
+    links: Array<{ label: string; url: string | null; active: boolean }>
   }
   filters: { flags: HealthFlag[] }
   flag_counts: Record<HealthFlag, number>
@@ -331,67 +285,93 @@ const props = defineProps<{
 
 const flagCounts = props.flag_counts
 
+const page = usePage()
+const queryParams = computed(() => new URLSearchParams(page.url.split('?')[1] ?? ''))
+const currentSort = computed(() => queryParams.value.get('sort') || null)
+const currentDirection = computed<SortDirection>(() => (queryParams.value.get('direction') as SortDirection) || 'asc')
+
+const columns = [
+  { key: 'customer_name', label: 'Cliente', sortable: true, class: 'w-[220px]' },
+  { key: 'status', label: 'Estado', sortable: true, class: 'w-[260px]' },
+  { key: 'messages_count', label: 'Mensajes', sortable: true, align: 'center' as const, class: 'w-[90px]' },
+  { key: 'updated_at', label: 'Última actividad', sortable: true, class: 'w-[140px]' },
+  { key: 'created_at', label: 'Creado', sortable: true, class: 'w-[140px]' },
+  { key: 'action', label: '', sortable: false, align: 'center' as const, class: 'w-[80px]' },
+]
+
 type FlagDef = { key: HealthFlag; label: string; emoji: string; tier: 1 | 2 }
 
 const flagDefs: FlagDef[] = [
-  { key: 'loops',             label: 'Loops',        emoji: '🔁', tier: 1 },
-  { key: 'stuck',             label: 'Estancadas',   emoji: '⏳', tier: 1 },
-  { key: 'tool_errors',       label: 'Tool errors',  emoji: '⚠️', tier: 1 },
-  { key: 'abandoned',         label: 'Abandonadas',  emoji: '🕒', tier: 1 },
-  { key: 'long',              label: 'Largas',       emoji: '📜', tier: 1 },
-  { key: 'user_frustrated',   label: 'Frustrado',    emoji: '😤', tier: 2 },
-  { key: 'agent_confused',    label: 'Confundido',   emoji: '🤔', tier: 2 },
-  { key: 'semantic_loop',     label: 'Loop semántico', emoji: '🔂', tier: 2 },
-  { key: 'context_loss',      label: 'Perdió contexto', emoji: '🧠', tier: 2 },
-  { key: 'hallucination',     label: 'Alucinación',  emoji: '👻', tier: 2 },
-  { key: 'incorrect_answer',  label: 'Resp. incorrecta', emoji: '❌', tier: 2 },
+  { key: 'loops', label: 'Loops', emoji: '🔁', tier: 1 },
+  { key: 'stuck', label: 'Estancadas', emoji: '⏳', tier: 1 },
+  { key: 'tool_errors', label: 'Tool errors', emoji: '⚠️', tier: 1 },
+  { key: 'abandoned', label: 'Abandonadas', emoji: '🕒', tier: 1 },
+  { key: 'long', label: 'Largas', emoji: '📜', tier: 1 },
+  { key: 'user_frustrated', label: 'Frustrado', emoji: '😤', tier: 2 },
+  { key: 'agent_confused', label: 'Confundido', emoji: '🤔', tier: 2 },
+  { key: 'semantic_loop', label: 'Loop semántico', emoji: '🔂', tier: 2 },
+  { key: 'context_loss', label: 'Perdió contexto', emoji: '🧠', tier: 2 },
+  { key: 'hallucination', label: 'Alucinación', emoji: '👻', tier: 2 },
+  { key: 'incorrect_answer', label: 'Resp. incorrecta', emoji: '❌', tier: 2 },
 ]
 
 const isFlagActive = (flag: HealthFlag) => props.filters.flags.includes(flag)
 
-const chipStyle = (flag: HealthFlag) => {
-  const def = flagDefs.find((f) => f.key === flag)
-  const active = isFlagActive(flag)
-  if (active) {
-    return 'background:var(--badge-danger-bg); color:var(--badge-danger-txt); border:1px solid var(--badge-danger-txt);'
+const buildFilterParams = () => {
+  const params: Record<string, any> = {}
+  if (currentSort.value) {
+    params.sort = currentSort.value
+    params.direction = currentDirection.value
   }
-  // Tier 2 = outline (bg transparente) para distinguir de Tier 1 (filled)
-  if (def?.tier === 2) {
-    return 'background:transparent; color:var(--text-2); border:1px dashed var(--border);'
-  }
-  return 'background:var(--bg-card); color:var(--text-2); border:1px solid var(--border);'
+  return params
 }
 
 const toggleFlag = (flag: HealthFlag) => {
   const next = isFlagActive(flag)
     ? props.filters.flags.filter((f) => f !== flag)
     : [...props.filters.flags, flag]
-  router.get('', { flags: next }, { preserveState: true, preserveScroll: true, replace: true })
+  router.get('/admin/conversations', { flags: next, ...buildFilterParams() }, { preserveState: true, preserveScroll: true, replace: true })
 }
 
 const clearFlags = () => {
-  router.get('', {}, { preserveState: true, preserveScroll: true, replace: true })
+  router.get('/admin/conversations', buildFilterParams(), { preserveState: true, preserveScroll: true, replace: true })
 }
 
-const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? ''
+const handleSort = (column: string, direction: SortDirection) => {
+  router.get('/admin/conversations', {
+    flags: props.filters.flags,
+    sort: column,
+    direction,
+  }, { preserveState: true, preserveScroll: true, replace: true })
+}
 
 interface ArchiveTarget {
-  form: HTMLFormElement
+  id: number
   identifier: string
 }
 
 const archiveTarget = ref<ArchiveTarget | null>(null)
 
-const confirmReset = (e: Event, c: { ext_user_id: string | null; ext_username: string | null; customer: { name: string | null } | null }) => {
+const openArchive = (c: {
+  id: number
+  ext_user_id: string | null
+  ext_username: string | null
+  customer: { name: string | null } | null
+}) => {
   archiveTarget.value = {
-    form: e.target as HTMLFormElement,
+    id: c.id,
     identifier: c.customer?.name ?? c.ext_username ?? c.ext_user_id ?? 'este usuario',
   }
 }
 
 const submitArchive = () => {
-  archiveTarget.value?.form.submit()
-  archiveTarget.value = null
+  if (!archiveTarget.value) {
+    return
+  }
+  router.post(`/admin/conversations/${archiveTarget.value.id}/reset`, {}, {
+    preserveScroll: true,
+    onFinish: () => { archiveTarget.value = null },
+  })
 }
 
 const channelLabel = (ch: string) => ({
@@ -400,18 +380,21 @@ const channelLabel = (ch: string) => ({
   telegram: 'Telegram',
 }[ch] ?? ch)
 
-const channelStyle = (ch: string) => ({
-  whatsapp: 'background:#dcfce7; color:#16a34a;',
-  web:      'background:#dbeafe; color:#1d4ed8;',
-  telegram: 'background:#e0f2fe; color:#0369a1;',
-}[ch] ?? 'background:var(--border-sub); color:var(--text-3);')
+const channelBadgeClass = (ch: string) => {
+  const map: Record<string, string> = {
+    whatsapp: 'bg-green-100 text-green-700 border-green-200',
+    web: 'bg-blue-100 text-blue-700 border-blue-200',
+    telegram: 'bg-sky-100 text-sky-700 border-sky-200',
+  }
+  return map[ch] ?? 'bg-muted text-muted-foreground'
+}
 
 const flagLabel = (flag: string) => ({
   customer_identified: 'cliente',
-  vehicle_identified:  'vehículo',
-  coverage_set:        'cobertura',
-  quote_ready:         'cotización',
-  checkout_done:       'checkout',
+  vehicle_identified: 'vehículo',
+  coverage_set: 'cobertura',
+  quote_ready: 'cotización',
+  checkout_done: 'checkout',
 }[flag] ?? flag)
 
 const formatDate = (iso: string | null) => {
@@ -419,8 +402,3 @@ const formatDate = (iso: string | null) => {
   return new Date(iso).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
 }
 </script>
-
-<style scoped>
-.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
-</style>

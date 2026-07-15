@@ -2,7 +2,7 @@
   <div class="py-6 px-4 sm:py-8">
     <div class="max-w-2xl mx-auto">
 
-      <BackLink :href="`/polizas/${anterior.id}/edit`" label="Volver a la póliza" class="mb-4" />
+      <AppBackLink :href="`/polizas/${anterior.id}/edit`" label="Volver a la póliza" class="mb-4" />
 
       <!-- Header -->
       <div class="mb-6">
@@ -34,10 +34,12 @@
         <h2 class="text-sm font-semibold mb-4" style="color: var(--text-1);">Datos de la póliza nueva</h2>
         <PolizaFields :form="form" :show-estado="false" />
         <div class="flex justify-end gap-2 mt-5">
-          <Link :href="`/polizas/${anterior.id}/edit`" class="btn btn-secondary text-sm">Cancelar</Link>
-          <button type="submit" class="btn btn-primary text-sm" :disabled="form.processing">
+          <Button variant="secondary" as-child>
+            <Link :href="`/polizas/${anterior.id}/edit`">Cancelar</Link>
+          </Button>
+          <Button type="submit" :disabled="form.processing">
             {{ form.processing ? 'Renovando...' : 'Renovar' }}
-          </button>
+          </Button>
         </div>
       </form>
 
@@ -47,7 +49,8 @@
 
 <script setup lang="ts">
 import { Link, useForm } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
+import { Button } from '@/components/UI/button'
 import PolizaFields from './PolizaFields.vue'
 
 interface Anterior {

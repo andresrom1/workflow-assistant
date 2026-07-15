@@ -35,8 +35,11 @@ class PolicyDocumentController extends Controller
         $filter = in_array($request->input('filter'), ['with', 'without'], true)
             ? $request->input('filter')
             : 'all';
+        $sort = $request->input('sort');
+        $direction = strtolower((string) $request->input('direction', 'asc'));
+        $direction = in_array($direction, ['asc', 'desc'], true) ? $direction : 'asc';
 
-        $polizas = Poliza::query()
+        $query = Poliza::query()
             ->with(['risk.customer', 'latestDocument', 'documents:id,poliza_id,kind'])
             ->withCount('documents')
             ->withCount(['documents as visible_documents_count' => fn ($q) => $q->where('visible_to_client', true)])
@@ -48,11 +51,29 @@ class PolicyDocumentController extends Controller
                 });
             })
             ->when($filter === 'with', fn ($q) => $q->has('documents'))
-            ->when($filter === 'without', fn ($q) => $q->doesntHave('documents'))
-            // Documentación-céntrico: las pólizas con carga más reciente arriba; las sin docs al final.
-            ->orderByRaw('(select max(captured_at) from policy_documents where policy_documents.poliza_id = polizas.id) desc nulls last')
-            ->orderByDesc('updated_at')
-            ->paginate($perPage)
+            ->when($filter === 'without', fn ($q) => $q->doesntHave('documents'));
+
+        $allowedSorts = ['numero', 'company', 'estado', 'updated_at', 'created_at', 'patente', 'label', 'cliente', 'documents_count', 'visible_count', 'last_document_at'];
+        if (in_array($sort, $allowedSorts, true)) {
+            match ($sort) {
+                'patente' => $query->orderByRaw("LOWER((SELECT metadata->>'patente' FROM risks WHERE risks.id = polizas.risk_id)) {$direction}"),
+                'label' => $query->orderByRaw("LOWER((SELECT label FROM risks WHERE risks.id = polizas.risk_id)) {$direction}"),
+                'cliente' => $query
+                    ->leftJoin('risks', 'polizas.risk_id', '=', 'risks.id')
+                    ->leftJoin('customers', 'risks.customer_id', '=', 'customers.id')
+                    ->orderByRaw("LOWER(customers.name) {$direction}")
+                    ->select('polizas.*'),
+                'estado' => $query->orderByRaw("estado::text {$direction}"),
+                'last_document_at' => $query->orderByRaw("(select max(captured_at) from policy_documents where policy_documents.poliza_id = polizas.id) {$direction} nulls last"),
+                default => $query->orderBy($sort, $direction),
+            };
+        } else {
+            $query
+                ->orderByRaw('(select max(captured_at) from policy_documents where policy_documents.poliza_id = polizas.id) desc nulls last')
+                ->orderByDesc('updated_at');
+        }
+
+        $polizas = $query->paginate($perPage)
             ->withQueryString()
             ->through(function (Poliza $poliza): array {
                 $present = $poliza->documents->map(fn (PolicyDocument $d): PolicyDocumentKind => $d->kind)->unique();
@@ -77,7 +98,13 @@ class PolicyDocumentController extends Controller
 
         return Inertia::render('PolicyDocuments/Index', [
             'polizas' => $polizas,
-            'filters' => ['search' => $search, 'per_page' => $perPage, 'filter' => $filter],
+            'filters' => [
+                'search' => $search,
+                'per_page' => $perPage,
+                'filter' => $filter,
+                'sort' => $sort,
+                'direction' => $direction,
+            ],
         ]);
     }
 

@@ -2,176 +2,236 @@
   <div class="py-6 px-4 sm:py-8">
     <div class="max-w-2xl mx-auto">
 
-      <BackLink :href="`/customers/${customer.id}`" label="Cliente" class="mb-4" />
+      <AppBackLink :href="`/customers/${customer.id}`" label="Cliente" class="mb-4" />
 
       <h1 class="text-xl sm:text-2xl font-semibold tracking-tight mb-6" style="color: var(--text-1);">
         Editar cliente
       </h1>
 
-      <form @submit.prevent="submit" class="space-y-5">
+      <form @submit.prevent="submit" class="flex flex-col gap-5">
 
         <!-- Identidad del tomador -->
-        <div class="rounded-[14px] p-5 space-y-4" style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-          <h2 class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Datos del tomador</h2>
+        <Card>
+          <CardContent class="p-5 flex flex-col gap-4">
+            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Datos del tomador
+            </h2>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="field-label">Nombre</label>
-              <input v-model="form.first_name" type="text" class="field" :class="{ 'field-error': form.errors.first_name }" />
-              <p v-if="form.errors.first_name" class="field-error-text">{{ form.errors.first_name }}</p>
-            </div>
-            <div>
-              <label class="field-label">Apellido</label>
-              <input v-model="form.last_name" type="text" class="field" :class="{ 'field-error': form.errors.last_name }" />
-              <p v-if="form.errors.last_name" class="field-error-text">{{ form.errors.last_name }}</p>
-            </div>
-          </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormItem name="first_name" :error="form.errors.first_name">
+                <FormLabel>Nombre</FormLabel>
+                <FormControl>
+                  <Input v-model="form.first_name" type="text" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label class="field-label">Tipo doc.</label>
-              <Select v-model="form.document_type_id">
-                <SelectTrigger class="h-[38px] w-full"><SelectValue /></SelectTrigger>
+              <FormItem name="last_name" :error="form.errors.last_name">
+                <FormLabel>Apellido</FormLabel>
+                <FormControl>
+                  <Input v-model="form.last_name" type="text" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormItem name="document_type_id" :error="form.errors.document_type_id">
+                <FormLabel>Tipo doc.</FormLabel>
+                <Select v-model="form.document_type_id">
+                  <FormControl>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="dni">DNI</SelectItem>
+                      <SelectItem value="cuit">CUIT</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+
+              <FormItem class="sm:col-span-2" name="dni" :error="form.errors.dni">
+                <FormLabel>Número de documento</FormLabel>
+                <FormControl>
+                  <Input v-model="form.dni" type="text" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormItem name="birthdate" :error="form.errors.birthdate">
+                <FormLabel>Nacimiento</FormLabel>
+                <FormControl>
+                  <Input v-model="form.birthdate" type="date" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+
+              <FormItem name="sex_id" :error="form.errors.sex_id">
+                <FormLabel>Sexo</FormLabel>
+                <Select v-model="form.sex_id">
+                  <FormControl>
+                    <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="M">Masculino</SelectItem>
+                      <SelectItem value="F">Femenino</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+
+              <FormItem name="person_type_id" :error="form.errors.person_type_id">
+                <FormLabel>Tipo persona</FormLabel>
+                <Select v-model="form.person_type_id">
+                  <FormControl>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="fisica">Física</SelectItem>
+                      <SelectItem value="juridica">Jurídica</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            </div>
+
+            <FormItem name="tax_condition_id" :error="form.errors.tax_condition_id">
+              <FormLabel>Condición fiscal</FormLabel>
+              <Select v-model="form.tax_condition_id">
+                <FormControl>
+                  <SelectTrigger><SelectValue placeholder="Seleccioná" /></SelectTrigger>
+                </FormControl>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="dni">DNI</SelectItem>
-                    <SelectItem value="cuit">CUIT</SelectItem>
+                    <SelectItem v-for="tc in taxConditions" :key="tc.ref" :value="tc.ref">{{ tc.label }}</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
-            </div>
-            <div class="sm:col-span-2">
-              <label class="field-label">Número de documento</label>
-              <input v-model="form.dni" type="text" class="field" :class="{ 'field-error': form.errors.dni }" />
-              <p v-if="form.errors.dni" class="field-error-text">{{ form.errors.dni }}</p>
-            </div>
-          </div>
+              <FormMessage />
+            </FormItem>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label class="field-label">Nacimiento</label>
-              <input v-model="form.birthdate" type="date" class="field" :class="{ 'field-error': form.errors.birthdate }" />
-              <p v-if="form.errors.birthdate" class="field-error-text">{{ form.errors.birthdate }}</p>
-            </div>
-            <div>
-              <label class="field-label">Sexo</label>
-              <Select v-model="form.sex_id">
-                <SelectTrigger class="h-[38px] w-full"><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="M">Masculino</SelectItem>
-                    <SelectItem value="F">Femenino</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label class="field-label">Tipo persona</label>
-              <Select v-model="form.person_type_id">
-                <SelectTrigger class="h-[38px] w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="fisica">Física</SelectItem>
-                    <SelectItem value="juridica">Jurídica</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormItem name="email" :error="form.errors.email">
+                <FormLabel>Email</FormLabel>
+                <FormControl>
+                  <Input v-model="form.email" type="email" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
 
-          <div>
-            <label class="field-label">Condición fiscal</label>
-            <Select v-model="form.tax_condition_id">
-              <SelectTrigger class="h-[38px] w-full"><SelectValue placeholder="Seleccioná" /></SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem v-for="tc in taxConditions" :key="tc.ref" :value="tc.ref">{{ tc.label }}</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="field-label">Email</label>
-              <input v-model="form.email" type="email" class="field" :class="{ 'field-error': form.errors.email }" />
-              <p v-if="form.errors.email" class="field-error-text">{{ form.errors.email }}</p>
+              <FormItem name="phone" :error="form.errors.phone">
+                <FormLabel>Teléfono</FormLabel>
+                <FormControl>
+                  <Input v-model="form.phone" type="text" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
             </div>
-            <div>
-              <label class="field-label">Teléfono</label>
-              <input v-model="form.phone" type="text" class="field" :class="{ 'field-error': form.errors.phone }" />
-              <p v-if="form.errors.phone" class="field-error-text">{{ form.errors.phone }}</p>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         <!-- Domicilio del tomador -->
-        <div class="rounded-[14px] p-5 space-y-4" style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-          <h2 class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Domicilio del tomador</h2>
-          <p class="text-xs" style="color: var(--text-3);">Domicilio legal/facturación. La ubicación de guarda del vehículo (que tarifa) vive en el riesgo.</p>
+        <Card>
+          <CardContent class="p-5 flex flex-col gap-4">
+            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Domicilio del tomador
+            </h2>
+            <p class="text-xs text-muted-foreground">
+              Domicilio legal/facturación. La ubicación de guarda del vehículo (que tarifa) vive en el riesgo.
+            </p>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div class="sm:col-span-2">
-              <label class="field-label">Calle</label>
-              <input v-model="form.domicilio_calle" type="text" class="field" />
-            </div>
-            <div>
-              <label class="field-label">Número</label>
-              <input v-model="form.domicilio_numero" type="text" class="field" />
-            </div>
-          </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormItem class="sm:col-span-2" name="domicilio_calle">
+                <FormLabel>Calle</FormLabel>
+                <FormControl>
+                  <Input v-model="form.domicilio_calle" type="text" />
+                </FormControl>
+              </FormItem>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label class="field-label">Código Postal</label>
-              <input v-model="form.domicilio_cp" type="text" class="field" />
+              <FormItem name="domicilio_numero">
+                <FormLabel>Número</FormLabel>
+                <FormControl>
+                  <Input v-model="form.domicilio_numero" type="text" />
+                </FormControl>
+              </FormItem>
             </div>
-            <div>
-              <label class="field-label">Provincia</label>
-              <Select v-model="form.domicilio_provincia">
-                <SelectTrigger class="h-[38px] w-full"><SelectValue placeholder="—" /></SelectTrigger>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormItem name="domicilio_cp">
+                <FormLabel>Código Postal</FormLabel>
+                <FormControl>
+                  <Input v-model="form.domicilio_cp" type="text" />
+                </FormControl>
+              </FormItem>
+
+              <FormItem name="domicilio_provincia">
+                <FormLabel>Provincia</FormLabel>
+                <Select v-model="form.domicilio_provincia">
+                  <FormControl>
+                    <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem v-for="p in provincias" :key="p" :value="p">{{ p }}</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+
+              <FormItem name="domicilio_localidad">
+                <FormLabel>Localidad</FormLabel>
+                <FormControl>
+                  <Input v-model="form.domicilio_localidad" type="text" />
+                </FormControl>
+              </FormItem>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Gestión -->
+        <Card>
+          <CardContent class="p-5 flex flex-col gap-4">
+            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Gestión</h2>
+
+            <FormItem name="pas_id">
+              <FormLabel>PAS asignado</FormLabel>
+              <Select v-model="form.pas_id">
+                <FormControl>
+                  <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                </FormControl>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem v-for="p in provincias" :key="p" :value="p">{{ p }}</SelectItem>
+                    <SelectItem :value="NONE">Sin asignar</SelectItem>
+                    <SelectItem v-for="u in pasUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
-            </div>
-            <div>
-              <label class="field-label">Localidad</label>
-              <input v-model="form.domicilio_localidad" type="text" class="field" />
-            </div>
-          </div>
-        </div>
+            </FormItem>
 
-        <!-- Gestión -->
-        <div class="rounded-[14px] p-5 space-y-4" style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-          <h2 class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--text-3);">Gestión</h2>
-
-          <div>
-            <label class="field-label">PAS asignado</label>
-            <Select v-model="form.pas_id">
-              <SelectTrigger class="h-[38px] w-full"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem :value="NONE">Sin asignar</SelectItem>
-                  <SelectItem v-for="u in pasUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <label class="field-label">Notas</label>
-            <textarea v-model="form.notes" rows="3" class="field" placeholder="Observaciones del productor..."></textarea>
-          </div>
-        </div>
+            <FormItem name="notes">
+              <FormLabel>Notas</FormLabel>
+              <FormControl>
+                <Textarea v-model="form.notes" rows="3" placeholder="Observaciones del productor..." />
+              </FormControl>
+            </FormItem>
+          </CardContent>
+        </Card>
 
         <div class="flex justify-end gap-2">
-          <Link :href="`/customers/${customer.id}`" class="btn btn-secondary text-sm">Cancelar</Link>
-          <button type="submit" class="btn btn-primary text-sm" :disabled="form.processing">
+          <Button type="button" variant="secondary" size="sm" as-child>
+            <Link :href="`/customers/${customer.id}`">Cancelar</Link>
+          </Button>
+          <Button type="submit" size="sm" :disabled="form.processing">
             {{ form.processing ? 'Guardando...' : 'Guardar cambios' }}
-          </button>
+          </Button>
         </div>
       </form>
 
@@ -181,8 +241,20 @@
 
 <script setup lang="ts">
 import { Link, useForm } from '@inertiajs/vue3'
-import BackLink from '@/components/UI/BackLink.vue'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
+import AppBackLink from '@/components/App/BackLink.vue'
+import { Button } from '@/components/UI/button'
+import { Card, CardContent } from '@/components/UI/card'
+import { Input } from '@/components/UI/input'
+import { Textarea } from '@/components/UI/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/UI/select'
+import { FormControl, FormItem, FormLabel, FormMessage } from '@/components/UI/form'
 
 const NONE = '__none__'
 

@@ -3,8 +3,10 @@
 namespace App\Models;
 
 use Carbon\Carbon;
+use Database\Factories\CoverageDocumentFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Cache;
@@ -33,6 +35,9 @@ use Illuminate\Support\Str;
  */
 class CoverageDocument extends Model
 {
+    /** @use HasFactory<CoverageDocumentFactory> */
+    use HasFactory;
+
     protected $fillable = [
         'company_slug',
         'company_name',

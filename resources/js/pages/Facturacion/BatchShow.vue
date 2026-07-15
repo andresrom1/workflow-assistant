@@ -5,94 +5,121 @@
       <!-- Header -->
       <div class="mb-6 flex items-start justify-between gap-3">
         <div>
-          <Link href="/admin/facturacion" class="text-xs hover:underline" style="color: var(--text-3);">← Volver a facturación</Link>
+          <Button as-child variant="link" size="sm" class="px-0 h-auto">
+            <Link href="/admin/facturacion">
+              <ArrowLeftIcon class="size-3.5" />
+              Volver a facturación
+            </Link>
+          </Button>
           <h1 class="text-xl sm:text-2xl font-semibold tracking-tight mt-1" style="color: var(--text-1);">
             Lote {{ batch.codigo }}
           </h1>
           <p class="text-sm mt-1" style="color: var(--text-3);">{{ batch.concepto }}</p>
         </div>
-        <a v-if="puedeDescargarZip"
-          :href="`/admin/facturacion/batches/${batch.id}/download`"
-          class="btn btn-primary text-sm py-1.5 px-4 whitespace-nowrap">
-          Descargar todo (ZIP)
-        </a>
+        <Button v-if="puedeDescargarZip" as-child size="sm">
+          <a :href="`/admin/facturacion/batches/${batch.id}/download`">
+            <DownloadIcon class="size-3.5" />
+            Descargar todo (ZIP)
+          </a>
+        </Button>
       </div>
 
       <!-- Datos del lote -->
-      <div class="rounded-[14px] p-4 mb-6 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm"
-        style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-        <div>
-          <p class="text-[11px] font-semibold" style="color: var(--text-3);">Punto de venta</p>
-          <p class="font-mono" style="color: var(--text-1);">{{ batch.punto_venta }}</p>
-        </div>
-        <div>
-          <p class="text-[11px] font-semibold" style="color: var(--text-3);">Fecha comprobante</p>
-          <p style="color: var(--text-1);">{{ fmtDate(batch.fecha_comprobante) }}</p>
-        </div>
-        <div>
-          <p class="text-[11px] font-semibold" style="color: var(--text-3);">Período facturado</p>
-          <p style="color: var(--text-1);">{{ fmtDate(batch.fecha_servicio_desde) }} al {{ fmtDate(batch.fecha_servicio_hasta) }}</p>
-        </div>
-        <div>
-          <p class="text-[11px] font-semibold" style="color: var(--text-3);">Vto. de pago</p>
-          <p style="color: var(--text-1);">{{ fmtDate(batch.fecha_vto_pago) }}</p>
-        </div>
-      </div>
+      <Card class="mb-6">
+        <CardContent class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          <div>
+            <p class="text-[11px] font-semibold" style="color: var(--text-3);">Punto de venta</p>
+            <p class="font-mono" style="color: var(--text-1);">{{ batch.punto_venta }}</p>
+          </div>
+          <div>
+            <p class="text-[11px] font-semibold" style="color: var(--text-3);">Fecha comprobante</p>
+            <p style="color: var(--text-1);">{{ fmtDate(batch.fecha_comprobante) }}</p>
+          </div>
+          <div>
+            <p class="text-[11px] font-semibold" style="color: var(--text-3);">Período facturado</p>
+            <p style="color: var(--text-1);">{{ fmtDate(batch.fecha_servicio_desde) }} al {{ fmtDate(batch.fecha_servicio_hasta) }}</p>
+          </div>
+          <div>
+            <p class="text-[11px] font-semibold" style="color: var(--text-3);">Vto. de pago</p>
+            <p style="color: var(--text-1);">{{ fmtDate(batch.fecha_vto_pago) }}</p>
+          </div>
+        </CardContent>
+      </Card>
 
       <!-- Resumen -->
       <div v-if="batch.summary" class="flex flex-wrap gap-2 mb-4">
-        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold tabular-nums"
-          style="background: var(--badge-ok-bg); color: var(--badge-ok-txt);">
+        <Badge variant="default" class="tabular-nums">
           Autorizadas: {{ batch.summary.autorizadas }}
-        </span>
-        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold tabular-nums"
-          style="background: var(--badge-danger-bg); color: var(--badge-danger-txt);">
+        </Badge>
+        <Badge variant="destructive" class="tabular-nums">
           Rechazadas: {{ batch.summary.rechazadas }}
-        </span>
-        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold tabular-nums"
-          style="background: var(--bg-subtle); color: var(--text-2);">
+        </Badge>
+        <Badge variant="secondary" class="tabular-nums">
           Total: {{ money(totalAutorizado) }}
-        </span>
+        </Badge>
       </div>
 
       <!-- Facturas -->
-      <div class="rounded-[14px] p-4" style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm" style="color: var(--text-2);">
-            <thead>
-              <tr class="text-left text-xs" style="color: var(--text-3);">
-                <th class="py-2 pr-3 font-semibold">Compañía</th>
-                <th class="py-2 pr-3 font-semibold text-right">Importe</th>
-                <th class="py-2 pr-3 font-semibold">N° comprobante</th>
-                <th class="py-2 pr-3 font-semibold">CAE</th>
-                <th class="py-2 pr-3 font-semibold">Vto. CAE</th>
-                <th class="py-2 pr-3 font-semibold">Estado</th>
-                <th class="py-2 font-semibold text-right">PDF</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="i in batch.invoices" :key="i.id" style="border-top: 1px solid var(--border);">
-                <td class="py-2 pr-3" style="color: var(--text-1);">{{ i.company }}</td>
-                <td class="py-2 pr-3 font-mono tabular-nums text-right">{{ money(i.importe) }}</td>
-                <td class="py-2 pr-3 font-mono">{{ i.numero_comprobante ?? '—' }}</td>
-                <td class="py-2 pr-3 font-mono">{{ i.cae ?? '—' }}</td>
-                <td class="py-2 pr-3">{{ i.cae_vencimiento ? fmtDate(i.cae_vencimiento) : '—' }}</td>
-                <td class="py-2 pr-3">
-                  <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold" :style="estadoStyle(i.estado)">
-                    {{ i.estado_label }}
-                  </span>
-                  <span v-if="i.observaciones" class="block text-[11px] mt-0.5" style="color: var(--badge-danger-txt);">{{ i.observaciones }}</span>
-                </td>
-                <td class="py-2 text-right">
-                  <a v-if="i.estado === 'authorized'" :href="`/admin/facturacion/invoices/${i.id}/pdf`"
-                    class="text-xs underline" style="color: var(--accent-600);">Descargar</a>
-                  <span v-else class="text-xs" style="color: var(--text-3);">—</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Facturas</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            :columns="columns"
+            :data="batch.invoices"
+            empty-message="Este lote no tiene facturas."
+          >
+            <template #cell-importe="{ item }">
+              <span class="font-mono tabular-nums">{{ money(item.importe) }}</span>
+            </template>
+
+            <template #cell-cae="{ item }">
+              <span class="font-mono">{{ item.cae ?? '—' }}</span>
+            </template>
+
+            <template #cell-cae_vencimiento="{ item }">
+              {{ item.cae_vencimiento ? fmtDate(item.cae_vencimiento) : '—' }}
+            </template>
+
+            <template #cell-estado="{ item }">
+              <div class="space-y-0.5">
+                <Badge :variant="estadoBadgeVariant(item.estado)">{{ item.estado_label }}</Badge>
+                <p v-if="item.observaciones" class="text-[11px]" style="color: var(--badge-danger-txt);">{{ item.observaciones }}</p>
+              </div>
+            </template>
+
+            <template #cell-pdf="{ item }">
+              <Button v-if="item.estado === 'authorized'" as-child variant="link" size="sm" class="px-0 h-auto">
+                <a :href="`/admin/facturacion/invoices/${item.id}/pdf`">Descargar</a>
+              </Button>
+              <span v-else class="text-xs" style="color: var(--text-3);">—</span>
+            </template>
+
+            <template #mobile-row="{ item }">
+              <div
+                class="rounded-[14px] p-3 text-xs"
+                style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);"
+              >
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-semibold text-sm" style="color: var(--text-1);">{{ item.company }}</span>
+                  <Badge :variant="estadoBadgeVariant(item.estado)">{{ item.estado_label }}</Badge>
+                </div>
+                <div class="grid grid-cols-2 gap-2" style="color: var(--text-2);">
+                  <span>Importe: <span class="font-mono tabular-nums">{{ money(item.importe) }}</span></span>
+                  <span>N°: <span class="font-mono">{{ item.numero_comprobante ?? '—' }}</span></span>
+                  <span>CAE: <span class="font-mono">{{ item.cae ?? '—' }}</span></span>
+                  <span>Vto: {{ item.cae_vencimiento ? fmtDate(item.cae_vencimiento) : '—' }}</span>
+                </div>
+                <p v-if="item.observaciones" class="mt-1" style="color: var(--badge-danger-txt);">{{ item.observaciones }}</p>
+                <Button v-if="item.estado === 'authorized'" as-child variant="link" size="sm" class="px-0 h-auto mt-2">
+                  <a :href="`/admin/facturacion/invoices/${item.id}/pdf`">Descargar PDF</a>
+                </Button>
+              </div>
+            </template>
+          </DataTable>
+        </CardContent>
+      </Card>
     </div>
   </div>
 </template>
@@ -100,6 +127,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Link } from '@inertiajs/vue3'
+import { Button } from '@/components/UI/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/UI/card'
+import { Badge } from '@/components/UI/badge'
+import { ArrowLeft as ArrowLeftIcon, Download as DownloadIcon } from '@lucide/vue'
+import DataTable from '@/components/App/DataTable.vue'
 
 interface BatchInvoice {
   id: number; company: string | null; importe: string
@@ -131,11 +163,21 @@ const totalAutorizado = computed(() =>
 
 const puedeDescargarZip = computed(() => (props.batch.summary?.autorizadas ?? 0) > 0)
 
-const estadoStyle = (estado: string): string => {
+const columns = [
+  { key: 'company', label: 'Compañía', sortable: false },
+  { key: 'importe', label: 'Importe', sortable: false, align: 'right' as const },
+  { key: 'numero_comprobante', label: 'N° comprobante', sortable: false },
+  { key: 'cae', label: 'CAE', sortable: false },
+  { key: 'cae_vencimiento', label: 'Vto. CAE', sortable: false },
+  { key: 'estado', label: 'Estado', sortable: false },
+  { key: 'pdf', label: 'PDF', sortable: false, align: 'right' as const },
+]
+
+const estadoBadgeVariant = (estado: string): 'default' | 'secondary' | 'destructive' => {
   switch (estado) {
-    case 'authorized': return 'background: var(--badge-ok-bg); color: var(--badge-ok-txt);'
-    case 'rejected': return 'background: var(--badge-danger-bg); color: var(--badge-danger-txt);'
-    default: return 'background: var(--bg-subtle); color: var(--text-3);'
+    case 'authorized': return 'default'
+    case 'rejected': return 'destructive'
+    default: return 'secondary'
   }
 }
 </script>

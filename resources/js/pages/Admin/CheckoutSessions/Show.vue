@@ -5,7 +5,7 @@
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div class="flex items-center gap-3">
-          <BackLink href="/admin/checkout-sessions" label="Auditoría" />
+          <AppBackLink href="/admin/checkout-sessions" label="Auditoría" />
           <div class="w-px h-4" style="background: var(--border);"></div>
           <h1 class="text-xl sm:text-2xl font-semibold tracking-tight" style="color: var(--text-1);">
             Checkout #{{ session.id }}
@@ -227,7 +227,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import BackLink from '@/components/UI/BackLink.vue'
+import AppBackLink from '@/components/App/BackLink.vue'
 
 defineProps<{
   session: {
