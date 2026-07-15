@@ -148,7 +148,7 @@ class PolizasController extends Controller
                 'id' => $poliza?->id,
                 'risk_id' => $risk->id,
                 'label' => $risk->label,
-                'patente' => $risk->metadata['patente'] ?? null,
+                'patente' => $risk->asset->metadata['patente'] ?? null,
                 'titular' => $risk->customer->name,
                 'company' => $poliza?->company,
                 'coverage' => $poliza?->coverage,
@@ -170,7 +170,7 @@ class PolizasController extends Controller
             'id' => $p->id,
             'risk_id' => $risk->id,
             'label' => $risk->label,
-            'patente' => $risk->metadata['patente'] ?? null,
+            'patente' => $risk->asset->metadata['patente'] ?? null,
             'numero' => $p->numero,
             'company' => $p->company,
             'coverage' => $p->coverage,
@@ -180,7 +180,9 @@ class PolizasController extends Controller
             'estado' => $p->estado->value,
             // La app ofrece la descarga de documentación solo si hay algo que bajar.
             'tiene_documentos' => ($p->documents_count ?? 0) > 0,
-            'metadata' => $risk->metadata,
+            // Atributos estables del bien (patente, marca, ...) viven en el asset,
+            // no en el risk (ver docs/v3/05-modelo-insurable-asset.md).
+            'metadata' => $risk->asset->metadata,
         ];
     }
 

@@ -2,13 +2,14 @@
 
 namespace Database\Seeders;
 
+use App\Enums\AssetType;
 use App\Enums\PolizaEstado;
-use App\Enums\RiskType;
 use App\Models\Customer;
 use App\Models\MobileAccount;
 use App\Models\Poliza;
 use App\Models\Risk;
 use App\Models\SharedRisk;
+use App\Services\PolicyChainResolver;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
@@ -24,7 +25,7 @@ use Illuminate\Support\Str;
  */
 class MobileRiskSeeder extends Seeder
 {
-    public function run(): void
+    public function run(PolicyChainResolver $chain): void
     {
         $tomas = Customer::where('email', 'tomas.mango@example.com')->first();
         $lucia = Customer::where('email', 'lucia.mango@example.com')->first();
@@ -34,7 +35,7 @@ class MobileRiskSeeder extends Seeder
 
         // Risks fijos
         if ($tomas) {
-            $tomasRisk = $this->seedVehicleRisk($tomas, [
+            $tomasRisk = $this->seedVehicleRisk($chain, $tomas, [
                 'label' => 'Honda Civic 2022',
                 'patente' => 'AG 112 PK',
                 'marca' => 'Honda',
@@ -86,7 +87,7 @@ class MobileRiskSeeder extends Seeder
         }
 
         if ($lucia) {
-            $luciaRisk = $this->seedVehicleRisk($lucia, [
+            $luciaRisk = $this->seedVehicleRisk($chain, $lucia, [
                 'label' => 'Volkswagen Gol Trend 2019',
                 'patente' => 'AC 845 NK',
                 'marca' => 'Volkswagen',
@@ -113,7 +114,7 @@ class MobileRiskSeeder extends Seeder
 
         // Auto de Andrés (titular real)
         if ($devCustomer) {
-            $devRisk = $this->seedVehicleRisk($devCustomer, [
+            $devRisk = $this->seedVehicleRisk($chain, $devCustomer, [
                 'label' => 'Toyota Corolla 2021',
                 'patente' => 'AE 428 LM',
                 'marca' => 'Toyota',
@@ -167,19 +168,16 @@ class MobileRiskSeeder extends Seeder
         }
     }
 
-    /** @param  array<string, mixed>  $vehicle */
-    private function seedVehicleRisk(Customer $customer, array $vehicle): Risk
+    /**
+     * Delega en {@see PolicyChainResolver} (mismo dedup que ingesta/reporte/emisión/alta
+     * manual): idempotente por patente normalizada, no por `label` (el label ahora lo
+     * deriva el resolver de marca+modelo+patente).
+     *
+     * @param  array<string, mixed>  $vehicle
+     */
+    private function seedVehicleRisk(PolicyChainResolver $chain, Customer $customer, array $vehicle): Risk
     {
-        return Risk::updateOrCreate(
-            [
-                'customer_id' => $customer->id,
-                'type' => RiskType::Vehicle,
-                'label' => $vehicle['label'],
-            ],
-            [
-                'metadata' => collect($vehicle)->except('label')->toArray(),
-            ],
-        );
+        return $chain->resolveRisk($customer, AssetType::Vehicle, collect($vehicle)->except('label')->toArray());
     }
 
     /** @param  array<string, mixed>  $data */

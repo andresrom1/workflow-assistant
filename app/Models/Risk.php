@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Enums\RiskType;
+use App\Enums\AssetType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,27 +10,36 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Bien asegurado (auto, futuras: moto/hogar/AP/vida).
+ * Exposición sobre un {@see InsurableAsset} (ACORD simplificado), de la que
+ * cuelgan las pólizas. La identidad y los atributos estables del bien
+ * (patente, marca, modelo, ...) viven en `asset->metadata`, no acá.
  *
- * STI + JSONB. Atributos type-specific viven en $metadata: para vehicle
- * { patente, marca, modelo, version, year, combustible, uso, codigo_postal }.
+ * Hoy el Risk es 1:1 transicional con su Asset: no hay datos de exposición
+ * (uso, guarda, factores de suscripción) con consumidor todavía, así que
+ * `metadata` queda vacía en altas nuevas. Filas migradas desde el modelo
+ * viejo conservan una copia de la metadata original, que nadie lee más
+ * (ver docs/v3/05-modelo-insurable-asset.md).
  *
- * @property RiskType $type
+ * @property AssetType $type
  * @property array<string, mixed> $metadata
  */
 class Risk extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /** @var list<string> */
+    protected $with = ['asset'];
+
     protected $fillable = [
         'customer_id',
+        'asset_id',
         'type',
         'label',
         'metadata',
     ];
 
     protected $casts = [
-        'type' => RiskType::class,
+        'type' => AssetType::class,
         'metadata' => 'array',
     ];
 
@@ -38,6 +47,12 @@ class Risk extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    /** @return BelongsTo<InsurableAsset, $this> */
+    public function asset(): BelongsTo
+    {
+        return $this->belongsTo(InsurableAsset::class, 'asset_id');
     }
 
     /** @return HasMany<Poliza, $this> */

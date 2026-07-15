@@ -1,7 +1,6 @@
 <?php
 
 use App\Enums\PolizaEstado;
-use App\Enums\RiskType;
 use App\Enums\UserRole;
 use App\Models\Customer;
 use App\Models\MobileAccount;
@@ -59,11 +58,9 @@ it('cae al fallback (PAS del titular del shared_risk de mayor sum_asegurada)', f
     ]);
 
     // Risk compartido con Andrés, suma 14M
-    $risk1 = Risk::create([
+    $risk1 = Risk::factory()->create([
         'customer_id' => $tomas->id,
-        'type' => RiskType::Vehicle,
         'label' => 'Honda Civic 2022',
-        'metadata' => ['patente' => 'AG 112 PK'],
     ]);
     Poliza::create([
         'risk_id' => $risk1->id,
@@ -84,11 +81,9 @@ it('cae al fallback (PAS del titular del shared_risk de mayor sum_asegurada)', f
     $pasOtro = User::factory()->create(['role' => UserRole::Pas, 'name' => 'Otro PAS']);
     $otro = Customer::factory()->create(['pas_id' => $pasOtro->id, 'email' => 'otro@example.com']);
     $otroAccount = MobileAccount::factory()->create(['email' => 'otro@example.com', 'customer_id' => $otro->id]);
-    $risk2 = Risk::create([
+    $risk2 = Risk::factory()->create([
         'customer_id' => $otro->id,
-        'type' => RiskType::Vehicle,
         'label' => 'Gol Trend',
-        'metadata' => [],
     ]);
     Poliza::create([
         'risk_id' => $risk2->id,
@@ -126,11 +121,9 @@ it('tier 2 funciona con invitación pendiente (sin accepted_at)', function (): v
         'customer_id' => $tomas->id,
     ]);
 
-    $risk = Risk::create([
+    $risk = Risk::factory()->create([
         'customer_id' => $tomas->id,
-        'type' => RiskType::Vehicle,
         'label' => 'Honda Civic 2022',
-        'metadata' => ['patente' => 'AG 112 PK'],
     ]);
     Poliza::create([
         'risk_id' => $risk->id,

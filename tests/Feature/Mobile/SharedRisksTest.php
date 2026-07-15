@@ -1,7 +1,6 @@
 <?php
 
 use App\Enums\PolizaEstado;
-use App\Enums\RiskType;
 use App\Models\Customer;
 use App\Models\MobileAccount;
 use App\Models\Poliza;
@@ -21,11 +20,9 @@ function setupTitular(): array
         'customer_id' => $titular->id,
     ]);
 
-    $risk = Risk::create([
+    $risk = Risk::factory()->create([
         'customer_id' => $titular->id,
-        'type' => RiskType::Vehicle,
         'label' => 'Toyota Corolla 2021',
-        'metadata' => ['patente' => 'AE 428 LM'],
     ]);
 
     $poliza = Poliza::create([
@@ -76,9 +73,7 @@ it('lista shared_risks activos de una póliza propia', function (): void {
 it('rechaza listar shared_risks de una póliza ajena', function (): void {
     setupTitular();
     $otroCust = Customer::factory()->create();
-    $otroRisk = Risk::create([
-        'customer_id' => $otroCust->id, 'type' => RiskType::Vehicle, 'label' => 'X', 'metadata' => [],
-    ]);
+    $otroRisk = Risk::factory()->create(['customer_id' => $otroCust->id, 'label' => 'X']);
     $otraPoliza = Poliza::create([
         'risk_id' => $otroRisk->id, 'estado' => PolizaEstado::Vigente,
         'company' => 'X', 'coverage' => 'Y', 'sum_asegurada' => 1_000_000,

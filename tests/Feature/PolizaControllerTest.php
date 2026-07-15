@@ -1,8 +1,9 @@
 <?php
 
+use App\Enums\AssetType;
 use App\Enums\PolizaEstado;
-use App\Enums\RiskType;
 use App\Models\Customer;
+use App\Models\InsurableAsset;
 use App\Models\Poliza;
 use App\Models\Risk;
 use App\Models\User;
@@ -29,10 +30,11 @@ it('renderiza el index con el buscador', function (): void {
 
 it('filtra el index por número, patente y cliente', function (): void {
     $customer = Customer::factory()->create(['name' => 'Marta Gómez']);
-    $risk = Risk::factory()->create([
+    $asset = InsurableAsset::factory()->create([
         'customer_id' => $customer->id,
         'metadata' => ['patente' => 'AB123CD'],
     ]);
+    $risk = Risk::factory()->create(['customer_id' => $customer->id, 'asset_id' => $asset->id]);
     Poliza::factory()->create(['risk_id' => $risk->id, 'numero' => 'POL-FIND']);
     Poliza::factory()->create(['numero' => 'POL-OTHER']);
 
@@ -68,9 +70,9 @@ it('crea una póliza con un Risk nuevo', function (): void {
 
     $risk = Risk::firstOrFail();
     expect($risk->customer_id)->toBe($customer->id)
-        ->and($risk->type)->toBe(RiskType::Vehicle)
+        ->and($risk->type)->toBe(AssetType::Vehicle)
         ->and($risk->label)->toBe('Toyota Corolla (XY999ZZ)')
-        ->and($risk->metadata['patente'])->toBe('XY999ZZ');
+        ->and($risk->asset->metadata['patente'])->toBe('XY999ZZ');
 
     $poliza = Poliza::firstOrFail();
     expect($poliza->risk_id)->toBe($risk->id)

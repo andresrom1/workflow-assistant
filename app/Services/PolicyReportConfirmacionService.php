@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\AssetType;
 use App\Enums\IngestaStatus;
 use App\Enums\PolizaEstado;
 use App\Enums\ReporteOrigen;
@@ -83,7 +84,7 @@ class PolicyReportConfirmacionService
         }
 
         $customer = $this->chain->resolveCustomer($row->documento, ['razon_social' => $row->asegurado]);
-        $risk = $this->chain->resolveRisk($customer, $row->patente, []);
+        $risk = $this->chain->resolveRisk($customer, AssetType::Vehicle, ['patente' => $row->patente]);
 
         $risk->polizas()->create([
             'estado' => $estado,

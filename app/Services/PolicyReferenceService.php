@@ -2,8 +2,9 @@
 
 namespace App\Services;
 
+use App\Enums\AssetType;
 use App\Enums\PolizaEstado;
-use App\Enums\RiskType;
+use App\Models\Customer;
 use App\Models\Poliza;
 use App\Models\Quote;
 use App\Models\QuoteAlternative;
@@ -16,12 +17,17 @@ use Illuminate\Support\Facades\DB;
  * Dominio CARTERA, separado del acto de emitir: la compañía es el System of Record
  * (estado/cobertura/endosos/documentos viven allá, on-demand); MANGO guarda solo la
  * referencia mínima durable (`policy_number` + `company_id`/`product_id`) ligada a un
- * `Risk` (find-or-create por patente) y al `Quote`. NO persiste el `presale_id`: es un
- * dato de Visred acotado al ciclo de emisión, no sale del adapter. No conoce a Visred
- * ni al canal: recibe el resultado neutro de la emisión y modelos de dominio.
+ * `Risk` (find-or-create vía {@see PolicyChainResolver} — mismo dedup que ingesta/reporte/
+ * alta manual, llaveado por `natural_key` del InsurableAsset) y al `Quote`. NO persiste el
+ * `presale_id`: es un dato de Visred acotado al ciclo de emisión, no sale del adapter. No
+ * conoce a Visred ni al canal: recibe el resultado neutro de la emisión y modelos de dominio.
  */
 class PolicyReferenceService
 {
+    public function __construct(
+        private readonly PolicyChainResolver $chain,
+    ) {}
+
     /**
      * Liga la emisión a la cartera: find-or-create del `Risk` (dedup por patente)
      * + upsert de la `Poliza`-referencia por `quote_id` (idempotente).
@@ -70,42 +76,25 @@ class PolicyReferenceService
     }
 
     /**
-     * Un auto asegurado N veces (aunque cambie de compañía) es UN `Risk`
-     * (doc 10 §7): dedup por (`customer_id`, `type=vehicle`, patente). Sin patente
-     * no se puede deduplicar con seguridad → se crea uno nuevo.
+     * Un auto asegurado N veces (aunque cambie de compañía) es UN `Risk` (doc 10 §7):
+     * dedup por (`customer_id`, `type=vehicle`, `natural_key`=patente normalizada),
+     * delegado en {@see PolicyChainResolver}. Sin patente no se puede deduplicar con
+     * seguridad → se crea un asset/risk nuevo.
      */
     private function findOrCreateRisk(Quote $quote): Risk
     {
         $snapshot = $quote->riskSnapshot;
-        $customerId = $snapshot->customer_id;
-        $patente = $snapshot->vehicle->patente; // vehicle() usa withDefault() → nunca null
+        $customer = Customer::query()->findOrFail($snapshot->customer_id);
 
-        if ($patente !== null && $patente !== '') {
-            $existing = Risk::query()
-                ->where('customer_id', $customerId)
-                ->where('type', RiskType::Vehicle)
-                ->where('metadata->patente', $patente)
-                ->first();
-
-            if ($existing instanceof Risk) {
-                return $existing;
-            }
-        }
-
-        return Risk::create([
-            'customer_id' => $customerId,
-            'type' => RiskType::Vehicle,
-            'label' => trim(($snapshot->marca ?? '').' '.($snapshot->modelo ?? '')).($patente ? " ({$patente})" : ''),
-            'metadata' => array_filter([
-                'patente' => $patente,
-                'marca' => $snapshot->marca,
-                'modelo' => $snapshot->modelo,
-                'version' => $snapshot->version,
-                'year' => $snapshot->year,
-                'combustible' => $snapshot->combustible,
-                'uso' => $snapshot->uso,
-                'codigo_postal' => $snapshot->codigo_postal,
-            ], fn ($value): bool => $value !== null && $value !== ''),
+        return $this->chain->resolveRisk($customer, AssetType::Vehicle, [
+            'patente' => $snapshot->vehicle->patente, // vehicle() usa withDefault() → nunca null
+            'marca' => $snapshot->marca,
+            'modelo' => $snapshot->modelo,
+            'version' => $snapshot->version,
+            'year' => $snapshot->year,
+            'combustible' => $snapshot->combustible,
+            'uso' => $snapshot->uso,
+            'codigo_postal' => $snapshot->codigo_postal,
         ]);
     }
 }

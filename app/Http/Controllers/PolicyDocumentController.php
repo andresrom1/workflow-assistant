@@ -43,7 +43,7 @@ class PolicyDocumentController extends Controller
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($q) use ($search): void {
                     $q->where('numero', 'ilike', "%{$search}%")
-                        ->orWhereHas('risk', fn ($r) => $r->where('metadata->patente', 'ilike', "%{$search}%"))
+                        ->orWhereHas('risk.asset', fn ($a) => $a->where('metadata->patente', 'ilike', "%{$search}%"))
                         ->orWhereHas('risk.customer', fn ($c) => $c->where('name', 'ilike', "%{$search}%"));
                 });
             })
@@ -63,7 +63,7 @@ class PolicyDocumentController extends Controller
                     'numero' => $poliza->numero,
                     'company' => $poliza->company,
                     'estado' => $poliza->estado->value,
-                    'patente' => $poliza->risk->metadata['patente'] ?? null,
+                    'patente' => $poliza->risk->asset->metadata['patente'] ?? null,
                     'label' => $poliza->risk->label,
                     'cliente' => $poliza->risk->customer?->name,
                     'documents_count' => $poliza->documents_count,
@@ -110,7 +110,7 @@ class PolicyDocumentController extends Controller
                     'numero' => $poliza->numero,
                     'company' => $poliza->company,
                     'estado' => $poliza->estado->value,
-                    'patente' => $poliza->risk->metadata['patente'] ?? null,
+                    'patente' => $poliza->risk->asset->metadata['patente'] ?? null,
                     'label' => $poliza->risk->label,
                     'cliente' => $poliza->risk->customer?->name,
                     'presentes' => count($expected) - count($faltantes),
@@ -172,7 +172,7 @@ class PolicyDocumentController extends Controller
                 'numero' => $poliza->numero,
                 'company' => $poliza->company,
                 'coverage' => $poliza->coverage,
-                'patente' => $poliza->risk->metadata['patente'] ?? null,
+                'patente' => $poliza->risk->asset->metadata['patente'] ?? null,
                 'label' => $poliza->risk->label,
                 'cliente' => $poliza->risk->customer?->name,
                 'estado' => $poliza->estado->value,

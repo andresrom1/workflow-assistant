@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\AssetType;
 use App\Enums\IngestaStatus;
 use App\Enums\PolicyDocumentKind;
 use App\Enums\PolicyDocumentSource;
@@ -160,10 +161,15 @@ class IngestaConfirmacionService
             return null;
         }
 
+        $key = AssetType::Vehicle->naturalKey(['patente' => $patente]);
+        if ($key === null) {
+            return null;
+        }
+
         return Poliza::query()
             ->where('company', $company)
             ->when($doc->numero_poliza !== null, fn ($q) => $q->where('numero', '!=', $doc->numero_poliza))
-            ->whereHas('risk', fn ($r) => $r->where('metadata->patente', $patente))
+            ->whereHas('risk.asset', fn ($a) => $a->where('natural_key', $key))
             ->whereDoesntHave('sucesoras')
             ->latest('vigencia')
             ->first();
@@ -270,19 +276,23 @@ class IngestaConfirmacionService
     {
         /** @var array<string, mixed> $riesgo */
         $riesgo = (array) data_get($doc->payload, 'riesgo', []);
+        // 'tipo' es el discriminador del payload (siempre "vehicle" hoy), no un
+        // atributo del bien: no debe terminar en asset->metadata.
+        unset($riesgo['tipo']);
+        $riesgo['patente'] = ($patente !== null && trim($patente) !== '') ? trim($patente) : null;
 
-        return $this->chain->resolveRisk($customer, (string) $patente, $riesgo);
+        return $this->chain->resolveRisk($customer, AssetType::Vehicle, $riesgo);
     }
 
     private function polizaByPatente(?string $patente): ?Poliza
     {
-        $patente = $patente !== null ? trim($patente) : '';
-        if ($patente === '') {
+        $key = AssetType::Vehicle->naturalKey(['patente' => (string) $patente]);
+        if ($key === null) {
             return null;
         }
 
         return Poliza::query()
-            ->whereHas('risk', fn ($r) => $r->where('metadata->patente', $patente))
+            ->whereHas('risk.asset', fn ($a) => $a->where('natural_key', $key))
             ->orderByRaw("array_position(array['vigente','emitida','vencida','anulada']::text[], estado)")
             ->latest('vigencia')
             ->first();

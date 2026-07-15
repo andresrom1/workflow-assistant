@@ -1,15 +1,16 @@
 <?php
 
 use App\Contracts\EmissionProvider;
+use App\Enums\AssetType;
 use App\Enums\InspectionPhotoStatus;
 use App\Enums\PolicyDocumentKind;
 use App\Enums\PolicyDocumentSource;
 use App\Enums\PolizaEstado;
-use App\Enums\RiskType;
 use App\Jobs\CapturePendingPolicyDocuments;
 use App\Models\CheckoutSession;
 use App\Models\Conversation;
 use App\Models\InspectionPhoto;
+use App\Models\InsurableAsset;
 use App\Models\PolicyDocument;
 use App\Models\Poliza;
 use App\Models\PolizaProviderRef;
@@ -129,19 +130,25 @@ it('emite con el puerto, marca poliza_emitida y materializa la referencia en car
     // Ligada a un Risk find-or-create del cliente + patente del snapshot.
     expect($poliza->risk)->not->toBeNull()
         ->and($poliza->risk->customer_id)->toBe($snapshot->customer_id)
-        ->and($poliza->risk->metadata['patente'])->toBe($snapshot->vehicle->patente);
+        ->and($poliza->risk->asset->metadata['patente'])->toBe($snapshot->vehicle->patente);
 });
 
 it('no duplica el Risk al re-materializar el mismo auto (dedup por patente)', function () {
     [$quote, $session, $snapshot] = emittableQuote();
     $patente = $snapshot->vehicle->patente;
 
-    // Risk preexistente del mismo cliente + patente.
+    // Asset+Risk preexistentes del mismo cliente + patente (misma clave natural que
+    // derivará la emisión: AssetType::Vehicle->naturalKey).
+    $asset = InsurableAsset::factory()->create([
+        'customer_id' => $snapshot->customer_id,
+        'metadata' => ['patente' => $patente],
+    ]);
     $existing = Risk::create([
         'customer_id' => $snapshot->customer_id,
-        'type' => RiskType::Vehicle,
+        'asset_id' => $asset->id,
+        'type' => AssetType::Vehicle,
         'label' => 'Auto previo',
-        'metadata' => ['patente' => $patente],
+        'metadata' => [],
     ]);
 
     app(PolizaEmisionService::class)->emitir($quote, $session);
@@ -399,11 +406,16 @@ it('es idempotente: no re-emite si el quote ya está poliza_emitida (D4.2)', fun
     $quote->update(['status' => 'poliza_emitida']);
 
     // Referencia ya materializada en cartera (lo que devuelve el guard).
+    $asset = InsurableAsset::factory()->create([
+        'customer_id' => $snapshot->customer_id,
+        'metadata' => ['patente' => $snapshot->vehicle->patente],
+    ]);
     $risk = Risk::create([
         'customer_id' => $snapshot->customer_id,
-        'type' => RiskType::Vehicle,
+        'asset_id' => $asset->id,
+        'type' => AssetType::Vehicle,
         'label' => 'Auto',
-        'metadata' => ['patente' => $snapshot->vehicle->patente],
+        'metadata' => [],
     ]);
     Poliza::create([
         'risk_id' => $risk->id,

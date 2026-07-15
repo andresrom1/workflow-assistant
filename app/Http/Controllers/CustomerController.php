@@ -331,7 +331,7 @@ class CustomerController extends Controller
                     'cuota_due' => $p->cuota_due?->toDateString(),
                     'vigencia' => $p->vigencia?->toDateString(),
                     'emitida_en' => $p->emitida_en?->toDateString(),
-                    'patente' => $risk->metadata['patente'] ?? null,
+                    'patente' => $risk->asset->metadata['patente'] ?? null,
                     'label' => $risk->label,
                     'documents' => $p->documents->map(fn (PolicyDocument $d): array => [
                         'id' => $d->id,

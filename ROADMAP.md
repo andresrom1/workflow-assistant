@@ -71,12 +71,43 @@
 | **`ExtractCoverageDocumentText` (timeout=300) en cola `default`** (retry_after=90 → reclaim) | `app/Jobs/ExtractCoverageDocumentText.php` | ✅ resuelto 2026-06-05 — **Opción A aplicada**: nueva conexión `database_long` (retry_after=360 > timeout=300) + cola `documents` con worker dedicado (`queue:listen database_long`). El job ahora `onConnection('database_long')`; sacado del hot-path de WhatsApp. No corrompía pgvector (chunking borra antes de insertar) |
 | **Prod: `queue:listen` a mano sin supervisor** (Hallazgo 5) | `run.md`, deploy | ⬜ `run.md` es cheatsheet de **dev**. En prod: (1) `queue:work` (no `listen` — `listen` rebootea el framework por job) con `--max-time`/`--max-jobs`, (2) bajo supervisor (supervisord/systemd) que reinicie procesos caídos. Modo de falla actual: un worker muere y su cola se frena en silencio (es lo que pasó con `semantic-analysis`). 4 conexiones/colas a supervisar: `database_ai`(whatsapp-ai), `database`(whatsapp-outbound,default), `database_media`(media), `database_long`(documents) |
 | **Quotes en `pending` sin estado terminal** (abandono pre-cobertura) | `QuoteService::createPendingQuote`, enum `status` en `Quote` | ⬜ a implementar — tras borrar `CheckQuoteAcceptance` nada expira los `pending` abandonados (cliente que crea la quote pero nunca elige cobertura). **Regla decidida:** un `pending` expira (`status = 'expired'`) **al día siguiente de su creación a las 00:00hs**. Implementación futura: command programado (`schedule`) que barre `pending` con `created_at < hoy 00:00` → `expired`. Se alinea con el rediseño del ciclo de vida de la quote en V2-3 (polling `TaskList` Visred) |
+| **Ramos no-vehiculares (AP, hogar/combinado, vida) sin materializar** | `PolicyReportImportService::evaluate`, `AssetType` | ⬜ el modelo `InsurableAsset`/`Risk` ya soporta el llaveo por tipo (2026-07-15), pero falta (1) mapear producto/ramo del reporte a `AssetType` — el parser ya extrae `ramo` (vive en `policy_report_rows.payload`, sin columna dedicada) — y (2) decidir la clave natural de `Person`/`Property` (ojo: el asegurado de una AP puede no ser el tomador). Hasta entonces una fila sin patente sigue siendo `Exception` en el import. Ver `docs/v3/05-modelo-insurable-asset.md` §Pendiente |
 
 ---
 
 ## Bitácora
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
+
+- **2026-07-15** — **Modelo `InsurableAsset` — separa identidad del bien de la exposición (Risk), ACORD simplificado ✅.**
+  Deuda anotada en la entrada 2026-06-30 (import de reportes: "modelar ramos no-vehiculares") y
+  agravada por corridas reales de la ingesta local (AP de Galicia, combinado de Bassi en
+  Descargas): el dominio solo modelaba `RiskType::Vehicle` y el `Risk` se llaveaba por
+  `metadata->patente` — sin patente no había con qué deduplicar, así que esos contratos morían
+  como excepción o se creaban mal tipados. **Modelo nuevo (decisión del usuario, cercano a
+  ACORD):** `Customer → InsurableAsset (identidad) → Risk (exposición) → Poliza`. El **Asset**
+  es el bien estable y re-identificable, con `natural_key` derivada por tipo
+  (`AssetType::naturalKey()`: `vehicle` → patente normalizada; `property`/`person`/`business`/
+  `equipment` → `null`, sin clave todavía). El **Risk** queda 1:1 transicional con su asset (no
+  hay datos de exposición con consumidor aún). **Regla de dominio explícita:** dos pólizas de AP
+  del mismo cliente NUNCA comparten `Risk` — sin clave natural, cada contrato crea su propio
+  asset. **Dedup consolidada:** `PolicyChainResolver::resolveRisk(Customer, AssetType, array)`
+  pasa a ser el único punto de creación de `Risk` de todo el sistema — migrados los 5 creadores
+  que antes duplicaban la lógica (`PolicyReferenceService` en la emisión Visred, `PolizaService`
+  en el alta manual del panel, `IngestaConfirmacionService`, `PolicyReportConfirmacionService`,
+  y `MobileRiskSeeder` en datos de desarrollo). Migración `insurable_assets` + `risks.asset_id`
+  (NOT NULL) con **backfill 1:1** desde el modelo viejo (normalización idéntica a
+  `AssetType::naturalKey`); verificado en dev: 135 risks ↔ 135 assets, 0 huérfanos. Las queries
+  de dedup exacto pasaron de `metadata->patente` (JSON path) a `natural_key` (columna indexada);
+  las búsquedas de texto libre (`ilike`) siguen contra `risk.asset->metadata`. **Fuera de
+  alcance, diferido a propósito:** el mapeo producto/ramo → `AssetType` y la materialización de
+  filas no-vehiculares del reporte — `PolicyReportImportService::evaluate` sigue devolviendo
+  `Exception` para filas sin patente, sin cambios de comportamiento (ver deuda técnica). Detalle
+  completo en `docs/v3/05-modelo-insurable-asset.md`. Tests nuevos: `AssetTypeTest` (unit,
+  normalización de clave) + `PolicyChainResolverTest` (dedup/no-dedup, hook `saving`). **Suite
+  completa 576/576** · PHPStan **0** · Pint ✅. _(rama `feat/insurable-asset-model`, base
+  `feature/ingesta-v2-extraccion-llm` — comparte archivos de ingesta con esa rama, se mergean
+  juntas)_
 
 - **2026-07-13** — **Ingesta local v2 — extracción server-side con LLM (rama, pendiente evaluación live) 🚧.**
   Problema medido en datos reales: de 290 PDFs escaneados en Descargas, el cliente subió 161

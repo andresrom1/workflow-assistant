@@ -36,7 +36,7 @@ class PolizaController extends Controller
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($q) use ($search): void {
                     $q->where('numero', 'ilike', "%{$search}%")
-                        ->orWhereHas('risk', fn ($r) => $r->where('metadata->patente', 'ilike', "%{$search}%"))
+                        ->orWhereHas('risk.asset', fn ($a) => $a->where('metadata->patente', 'ilike', "%{$search}%"))
                         ->orWhereHas('risk.customer', fn ($c) => $c->where('name', 'ilike', "%{$search}%"));
                 });
             })
@@ -48,7 +48,7 @@ class PolizaController extends Controller
                 'numero' => $poliza->numero,
                 'company' => $poliza->company,
                 'coverage' => $poliza->coverage,
-                'patente' => $poliza->risk->metadata['patente'] ?? null,
+                'patente' => $poliza->risk->asset->metadata['patente'] ?? null,
                 'cliente' => $poliza->risk->customer?->name,
                 'estado' => $poliza->estado->value,
                 'vigencia' => $poliza->vigencia?->toDateString(),
@@ -82,7 +82,7 @@ class PolizaController extends Controller
                 'id' => $p->id,
                 'numero' => $p->numero,
                 'company' => $p->company,
-                'patente' => $p->risk->metadata['patente'] ?? null,
+                'patente' => $p->risk->asset->metadata['patente'] ?? null,
                 'label' => $p->risk->label,
                 'cliente' => $p->risk->customer?->name,
                 'vigencia' => $p->vigencia?->toDateString(),
@@ -112,7 +112,7 @@ class PolizaController extends Controller
                     'risks' => $found->risks->map(fn ($r): array => [
                         'id' => $r->id,
                         'label' => $r->label,
-                        'patente' => $r->metadata['patente'] ?? null,
+                        'patente' => $r->asset->metadata['patente'] ?? null,
                     ])->all(),
                 ];
             }
@@ -196,7 +196,7 @@ class PolizaController extends Controller
             ],
             'vehicle' => [
                 'label' => $poliza->risk->label,
-                'patente' => $poliza->risk->metadata['patente'] ?? null,
+                'patente' => $poliza->risk->asset->metadata['patente'] ?? null,
                 'cliente' => $poliza->risk->customer?->name,
                 'customer_id' => $poliza->risk->customer_id,
             ],
@@ -243,7 +243,7 @@ class PolizaController extends Controller
             ],
             'vehicle' => [
                 'label' => $poliza->risk->label,
-                'patente' => $poliza->risk->metadata['patente'] ?? null,
+                'patente' => $poliza->risk->asset->metadata['patente'] ?? null,
                 'cliente' => $poliza->risk->customer?->name,
             ],
         ]);

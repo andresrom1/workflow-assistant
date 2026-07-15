@@ -68,7 +68,7 @@ class ConversationController extends Controller
                     'coverage' => $p->coverage,
                     'estado' => $p->estado->value,
                     'vigencia' => $p->vigencia?->toDateString(),
-                    'patente' => $risk->metadata['patente'] ?? null,
+                    'patente' => $risk->asset->metadata['patente'] ?? null,
                     'label' => $risk->label,
                 ];
             }

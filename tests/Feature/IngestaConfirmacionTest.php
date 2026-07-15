@@ -64,7 +64,7 @@ it('materializa la cadena Customer→Risk→Poliza→PolicyDocument al confirmar
     expect($customer)->not->toBeNull();
 
     $risk = Risk::where('customer_id', $customer->id)->first();
-    expect($risk->metadata['patente'])->toBe('AB235OR');
+    expect($risk->asset->metadata['patente'])->toBe('AB235OR');
 
     $poliza = Poliza::where('numero', '000031184413')->where('company', 'Sancor Seguros')->first();
     expect($poliza)->not->toBeNull()

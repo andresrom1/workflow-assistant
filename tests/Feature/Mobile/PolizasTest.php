@@ -1,7 +1,6 @@
 <?php
 
 use App\Enums\PolizaEstado;
-use App\Enums\RiskType;
 use App\Enums\UserRole;
 use App\Models\Customer;
 use App\Models\MobileAccount;
@@ -38,11 +37,9 @@ function makeCustomer(User $pas, string $email = 'tomas@example.com'): Customer
 
 function makeVehicleRiskWithPoliza(Customer $customer, float $suma = 14_200_000): Poliza
 {
-    $risk = Risk::create([
+    $risk = Risk::factory()->create([
         'customer_id' => $customer->id,
-        'type' => RiskType::Vehicle,
         'label' => 'Toyota Corolla 2021',
-        'metadata' => ['patente' => 'AE 428 LM', 'marca' => 'Toyota'],
     ]);
 
     return Poliza::create([

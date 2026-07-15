@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
+use App\Enums\AssetType;
 use App\Enums\PolizaEstado;
-use App\Enums\RiskType;
 use App\Models\Customer;
 use App\Models\Poliza;
 use App\Models\Risk;
@@ -13,12 +13,17 @@ use Illuminate\Validation\ValidationException;
 /**
  * Alta y edición manual de pólizas desde el panel.
  *
- * Resuelve el Risk (reusar uno existente del cliente o crear uno nuevo) y aplica
+ * Resuelve el Risk (reusar uno existente del cliente o crear uno nuevo, vía
+ * {@see PolicyChainResolver} — mismo dedup que ingesta/reporte/emisión) y aplica
  * el constraint de dominio "una sola póliza `vigente` por Risk" (en código, no en
  * DB — ver PolizaEstado). Agnóstico del canal: recibe/retorna modelos de dominio.
  */
 class PolizaService
 {
+    public function __construct(
+        private readonly PolicyChainResolver $chain,
+    ) {}
+
     /**
      * @param  array<string, mixed>|null  $riskData  Datos de un Risk nuevo (vehículo) cuando no se reusa uno existente.
      * @param  array<string, mixed>  $polizaData
@@ -104,24 +109,15 @@ class PolizaService
     }
 
     /**
+     * Delegado en {@see PolicyChainResolver}: el alta manual de una póliza con una
+     * patente ya conocida reusa el Risk existente (regla de dominio "un auto asegurado
+     * N veces = UN Risk", doc 10 §7), en vez de crear siempre uno nuevo.
+     *
      * @param  array<string, mixed>  $riskData
      */
     private function createRisk(Customer $customer, array $riskData): Risk
     {
-        $marca = trim((string) ($riskData['marca'] ?? ''));
-        $modelo = trim((string) ($riskData['modelo'] ?? ''));
-        $patente = trim((string) ($riskData['patente'] ?? ''));
-
-        $label = trim("{$marca} {$modelo}").($patente !== '' ? " ({$patente})" : '');
-
-        return $customer->risks()->create([
-            'type' => RiskType::Vehicle,
-            'label' => $label !== '' ? $label : 'Vehículo',
-            'metadata' => array_filter(
-                $riskData,
-                fn ($value): bool => $value !== null && $value !== '',
-            ),
-        ]);
+        return $this->chain->resolveRisk($customer, AssetType::Vehicle, $riskData);
     }
 
     private function assertNoOtherVigente(int $riskId, PolizaEstado $estado, ?int $exceptPolizaId): void

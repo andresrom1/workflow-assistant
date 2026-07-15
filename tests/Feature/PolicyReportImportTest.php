@@ -96,7 +96,7 @@ it('materializa la cadena Customer→Risk→Poliza al confirmar', function () us
         ->and($customer->name)->toBe('SILVIO ALEJANDRO CEFERIN');
 
     $risk = Risk::where('customer_id', $customer->id)->first();
-    expect($risk->metadata['patente'])->toBe('101AF089');
+    expect($risk->asset->metadata['patente'])->toBe('101AF089');
 
     $poliza = Poliza::where('numero', '01-03-01-32032109')->where('company', 'San Cristobal')->first();
     expect($poliza)->not->toBeNull()

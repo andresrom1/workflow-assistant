@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\AssetType;
 use App\Enums\IngestaStatus;
 use App\Enums\PolizaEstado;
 use App\Enums\ReporteOrigen;
@@ -170,11 +171,18 @@ class PolicyReportImportService
             return false;
         }
 
-        $risk = $customer->risks()->where('metadata->patente', $patente)->first();
-        if ($risk === null) {
+        $key = AssetType::Vehicle->naturalKey(['patente' => $patente]);
+        if ($key === null) {
             return false;
         }
 
-        return $risk->polizas()->where('estado', PolizaEstado::Vigente)->exists();
+        $asset = $customer->assets()->where('type', AssetType::Vehicle)->where('natural_key', $key)->first();
+        if ($asset === null) {
+            return false;
+        }
+
+        return Poliza::whereHas('risk', fn ($r) => $r->where('asset_id', $asset->id))
+            ->where('estado', PolizaEstado::Vigente)
+            ->exists();
     }
 }

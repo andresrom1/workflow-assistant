@@ -2,19 +2,24 @@
 
 namespace App\Services;
 
-use App\Enums\RiskType;
+use App\Enums\AssetType;
 use App\Models\Customer;
+use App\Models\InsurableAsset;
 use App\Models\Risk;
 use App\Repositories\CustomerRepository;
 use App\Support\DocumentoIdentidad;
 
 /**
- * Find-or-create de la cadena de dominio Customer→Risk, agnóstico del canal/fuente.
+ * Find-or-create de la cadena de dominio Customer→InsurableAsset→Risk, agnóstico del
+ * canal/fuente. Único punto de dedup de Risk de todo el sistema (ver docs/v3/05).
  *
  * Extraído de {@see IngestaConfirmacionService} para compartirlo con el import de reportes
- * de cartera ({@see PolicyReportConfirmacionService}) sin duplicar la regla de dedup. Depende
- * sólo del dominio: el alta de cliente pasa SIEMPRE por {@see CustomerMergeService} (nunca
- * crea `customers` directo); el Risk se llavea por `patente` dentro del cliente.
+ * de cartera ({@see PolicyReportConfirmacionService}), la emisión ({@see PolicyReferenceService})
+ * y el alta manual ({@see PolizaService}) sin duplicar la regla de dedup. Depende sólo del
+ * dominio: el alta de cliente pasa SIEMPRE por {@see CustomerMergeService} (nunca crea
+ * `customers` directo); la identidad vive en el {@see InsurableAsset}, llaveado por
+ * `natural_key` derivada por tipo ({@see AssetType::naturalKey}). El Risk es 1:1 con su
+ * asset (transicional, ver docblock de {@see Risk}).
  */
 class PolicyChainResolver
 {
@@ -62,33 +67,61 @@ class PolicyChainResolver
     }
 
     /**
-     * Risk existente del cliente por patente, o alta nueva. El Risk se llavea por patente:
-     * sin patente no hay clave de dedup, por eso los llamadores la exigen.
+     * Risk del cliente para el bien dado, o alta nueva. La identidad vive en el Asset: si
+     * el tipo tiene clave natural (vehicle → patente normalizada) se deduplica por
+     * (customer, type, natural_key); sin clave, cada contrato crea su propio asset (p. ej.
+     * AP/vida: dos pólizas del mismo cliente NUNCA comparten Risk — decisión de dominio).
      *
-     * @param  array<string, mixed>  $riesgoMeta  atributos type-specific crudos (marca, modelo, year, ...)
+     * @param  array<string, mixed>  $assetMeta  atributos del bien crudos (patente, marca, modelo, ...)
      */
-    public function resolveRisk(Customer $customer, string $patente, array $riesgoMeta): Risk
+    public function resolveRisk(Customer $customer, AssetType $type, array $assetMeta): Risk
     {
-        $patente = trim($patente);
+        $asset = $this->resolveAsset($customer, $type, $assetMeta);
 
-        if ($patente !== '') {
-            $risk = $customer->risks()->where('metadata->patente', $patente)->first();
-            if ($risk instanceof Risk) {
-                return $risk;
+        $risk = $asset->risks()->first();
+        if ($risk instanceof Risk) {
+            return $risk;
+        }
+
+        return $asset->risks()->create([
+            'customer_id' => $customer->id,
+            'type' => $type,
+            'label' => $asset->label,
+            'metadata' => [],
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $assetMeta
+     */
+    private function resolveAsset(Customer $customer, AssetType $type, array $assetMeta): InsurableAsset
+    {
+        $key = $type->naturalKey($assetMeta);
+
+        if ($key !== null) {
+            $asset = $customer->assets()->where('type', $type)->where('natural_key', $key)->first();
+            if ($asset instanceof InsurableAsset) {
+                return $asset;
             }
         }
 
-        $marca = trim((string) ($riesgoMeta['marca'] ?? ''));
-        $modelo = trim((string) ($riesgoMeta['modelo'] ?? ''));
+        return $customer->assets()->create([
+            'type' => $type,
+            'label' => $this->labelFor($type, $assetMeta),
+            'metadata' => array_filter($assetMeta, fn ($v): bool => $v !== null && $v !== ''),
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $assetMeta
+     */
+    private function labelFor(AssetType $type, array $assetMeta): string
+    {
+        $marca = trim((string) ($assetMeta['marca'] ?? ''));
+        $modelo = trim((string) ($assetMeta['modelo'] ?? ''));
+        $patente = trim((string) ($assetMeta['patente'] ?? ''));
         $label = trim("{$marca} {$modelo}").($patente !== '' ? " ({$patente})" : '');
 
-        return $customer->risks()->create([
-            'type' => RiskType::Vehicle,
-            'label' => $label !== '' ? $label : 'Vehículo',
-            'metadata' => array_filter(
-                ['patente' => $patente !== '' ? $patente : null] + $riesgoMeta,
-                fn ($v): bool => $v !== null && $v !== '' && $v !== 'vehicle',
-            ),
-        ]);
+        return $label !== '' ? $label : $type->label();
     }
 }

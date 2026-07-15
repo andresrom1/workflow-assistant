@@ -86,7 +86,7 @@ class MantenimientoCarteraController extends Controller
                 'numero' => $p->numero,
                 'company' => $p->company,
                 'estado' => $p->estado->value,
-                'patente' => $p->risk->metadata['patente'] ?? null,
+                'patente' => $p->risk->asset->metadata['patente'] ?? null,
                 'label' => $p->risk->label,
                 'cliente' => $p->risk->customer?->name,
                 'urgencia' => $urgencia,
