@@ -101,6 +101,8 @@ class PolicyChainResolver
         if ($key !== null) {
             $asset = $customer->assets()->where('type', $type)->where('natural_key', $key)->first();
             if ($asset instanceof InsurableAsset) {
+                $this->backfillMissing($asset, $assetMeta);
+
                 return $asset;
             }
         }
@@ -110,6 +112,37 @@ class PolicyChainResolver
             'label' => $this->labelFor($type, $assetMeta),
             'metadata' => array_filter($assetMeta, fn ($v): bool => $v !== null && $v !== ''),
         ]);
+    }
+
+    /**
+     * Rellena en el asset los atributos que trae la fuente entrante y que hoy faltan
+     * (convergencia multi-fuente: p. ej. el reporte de cartera crea el asset con solo
+     * la patente y la ingesta/emisión aportan marca/modelo después). Monótono: nunca
+     * pisa un valor existente con uno vacío. La corrección de conflictos entre dos
+     * valores no vacíos NO se hace acá — queda para el modelo de consolidación con
+     * provenance/pesos por fuente, igual que en Customer (ver docs/v2/11).
+     *
+     * @param  array<string, mixed>  $assetMeta
+     */
+    private function backfillMissing(InsurableAsset $asset, array $assetMeta): void
+    {
+        $metadata = $asset->metadata ?? [];
+        $changed = false;
+
+        foreach ($assetMeta as $field => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+            if (isset($metadata[$field]) && $metadata[$field] !== '') {
+                continue;
+            }
+            $metadata[$field] = $value;
+            $changed = true;
+        }
+
+        if ($changed) {
+            $asset->update(['metadata' => $metadata]);
+        }
     }
 
     /**

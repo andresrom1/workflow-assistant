@@ -26,10 +26,13 @@ class InsurableAsset extends Model
 
     protected $fillable = ['customer_id', 'type', 'label', 'natural_key', 'metadata'];
 
-    protected $casts = [
-        'type' => AssetType::class,
-        'metadata' => 'array',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'type' => AssetType::class,
+            'metadata' => 'array',
+        ];
+    }
 
     protected static function booted(): void
     {

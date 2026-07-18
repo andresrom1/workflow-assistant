@@ -9,6 +9,7 @@ use App\Enums\PolizaEstado;
 use App\Jobs\CapturePendingPolicyDocuments;
 use App\Models\CheckoutSession;
 use App\Models\Conversation;
+use App\Models\Customer;
 use App\Models\InspectionPhoto;
 use App\Models\InsurableAsset;
 use App\Models\PolicyDocument;
@@ -155,6 +156,16 @@ it('no duplica el Risk al re-materializar el mismo auto (dedup por patente)', fu
 
     expect(Risk::where('customer_id', $snapshot->customer_id)->count())->toBe(1);
     expect(Poliza::where('quote_id', $quote->id)->firstOrFail()->risk_id)->toBe($existing->id);
+});
+
+it('emite aunque el cliente haya quedado soft-borrado (materializa la referencia igual)', function () {
+    [$quote, $session, $snapshot] = emittableQuote();
+    Customer::findOrFail($snapshot->customer_id)->delete(); // soft-delete a mitad de flujo
+
+    app(PolizaEmisionService::class)->emitir($quote, $session);
+
+    $poliza = Poliza::where('quote_id', $quote->id)->firstOrFail();
+    expect($poliza->risk->customer_id)->toBe($snapshot->customer_id);
 });
 
 it('arma el request neutro desde checkout + snapshot + la ref elegida', function () {

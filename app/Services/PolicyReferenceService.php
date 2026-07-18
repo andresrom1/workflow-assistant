@@ -84,7 +84,9 @@ class PolicyReferenceService
     private function findOrCreateRisk(Quote $quote): Risk
     {
         $snapshot = $quote->riskSnapshot;
-        $customer = Customer::query()->findOrFail($snapshot->customer_id);
+        // withTrashed: la emisión no debe romperse si el cliente quedó soft-borrado
+        // (el borrado solo se bloquea si hay póliza vigente, no durante la cotización).
+        $customer = Customer::withTrashed()->findOrFail($snapshot->customer_id);
 
         return $this->chain->resolveRisk($customer, AssetType::Vehicle, [
             'patente' => $snapshot->vehicle->patente, // vehicle() usa withDefault() → nunca null

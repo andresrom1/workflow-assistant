@@ -173,11 +173,19 @@ class MobileRiskSeeder extends Seeder
      * manual): idempotente por patente normalizada, no por `label` (el label ahora lo
      * deriva el resolver de marca+modelo+patente).
      *
+     * El seeder es autoritativo sobre sus fixtures: refresca la metadata del asset aunque
+     * ya exista (resolveRisk solo rellena faltantes; re-sembrar con datos editados debe
+     * reflejarse).
+     *
      * @param  array<string, mixed>  $vehicle
      */
     private function seedVehicleRisk(PolicyChainResolver $chain, Customer $customer, array $vehicle): Risk
     {
-        return $chain->resolveRisk($customer, AssetType::Vehicle, collect($vehicle)->except('label')->toArray());
+        $metadata = collect($vehicle)->except('label')->toArray();
+        $risk = $chain->resolveRisk($customer, AssetType::Vehicle, $metadata);
+        $risk->asset->update(['metadata' => $metadata]);
+
+        return $risk;
     }
 
     /** @param  array<string, mixed>  $data */
