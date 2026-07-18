@@ -80,6 +80,23 @@
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
 
+- **2026-07-15** — **Review + fixes: backfill de atributos + robustez (rama feat/insurable-asset-model) ✅.**
+  Tras la review independiente con 8 ángulos (línea por línea, comportamiento removido, trazado de
+  callers, reuso, simplificación, eficiencia, altitud, convenciones): (1) `PolicyChainResolver::backfillMissing` —
+  rellena monótonamente (nunca pisa) los atributos del asset que traiga la fuente entrante (resuelve
+  la pérdida silenciosa cuando fuentes esparsas crean el asset y después fuentes ricas enriquecen
+  metadatos); la resolución de conflictos entre dos valores no vacíos quedó como deuda apuntando a
+  `docs/v2/11` (modelo de consolidación con provenance/pesos por fuente, ya existe para Customer).
+  (2) `PolicyReferenceService` — `Customer::withTrashed()->findOrFail` en el camino de emisión (el
+  cliente puede quedar soft-borrado a mitad de flujo; el borrado solo se bloquea si hay vigente).
+  (3) `MobileRiskSeeder::seedVehicleRisk` — autoritativo sobre fixtures (refresca metadata si se
+  re-siembra con datos editados; resolveRisk solo rellena faltantes). (4) `InsurableAsset` — método
+  `casts()` en vez de propiedad (convención del repo). Verificación: 3 runs completas de suite
+  (579/579 verde cada una; los 6 fallos de la 1a fueron pollution transitoria del fatal de memoria
+  previo, no regresión de los fixes). Documentación en `docs/v3/05-modelo-insurable-asset.md`
+  (nota: backfill mono-tónico y deuda de resolución de conflictos). ROADMAP: fila nueva en deuda
+  técnica. **Commits:** `19d4563` (feature) + `3f90668` (fixes). _(rama `feat/insurable-asset-model`)_
+
 - **2026-07-15** — **Modelo `InsurableAsset` — separa identidad del bien de la exposición (Risk), ACORD simplificado ✅.**
   Deuda anotada en la entrada 2026-06-30 (import de reportes: "modelar ramos no-vehiculares") y
   agravada por corridas reales de la ingesta local (AP de Galicia, combinado de Bassi en
