@@ -17,6 +17,7 @@ use App\AI\Tools\IdentifyVehicleTool;
 use App\AI\Tools\PresentQuoteOptionsTool;
 use App\AI\Tools\ProvideVehicleFactTool;
 use App\AI\Tools\RevertStageTool;
+use App\AI\Tools\SiniestroGuidanceTool;
 use App\Models\AgentExecutionLog;
 use App\Models\AgentPrompt;
 use App\Models\Conversation;
@@ -344,32 +345,39 @@ class InsuranceOrchestrator
         // Disponible desde cobertura en adelante — no en CustomerIdentifier ni
         // VehicleIdentifier, cuyas etapas no tienen una anterior a la que volver.
         $revertTool = new RevertStageTool($this->adapter, $conversation);
+        // Disponible en las 5 etapas: un siniestro puede reportarse en cualquier momento.
+        $siniestroTool = new SiniestroGuidanceTool($conversation);
 
         return match (true) {
             ! $state['customer_identified'] => new CustomerIdentifierAgent(
                 new IdentifyCustomerTool($this->adapter, $conversation),
                 $coverageTool,
+                $siniestroTool,
             ),
             ! $state['vehicle_identified'] => new VehicleIdentifierAgent(
                 new IdentifyVehicleTool($this->adapter, $conversation),
                 $coverageTool,
+                $siniestroTool,
             ),
             ! $state['coverage_set'] => new CoveragePreferenceAgent(
                 new CoveragePreferenceTool($this->adapter, $conversation),
                 $coverageTool,
                 new ProvideVehicleFactTool($this->adapter, $conversation),
                 $revertTool,
+                $siniestroTool,
             ),
             ! $state['quote_ready'] => new QuoteAgent(
                 new GetQuoteTool($this->adapter, $conversation),
                 $coverageTool,
                 $revertTool,
+                $siniestroTool,
             ),
             default => new CheckoutAgent(
                 new CheckoutTool($this->adapter, $conversation),
                 $coverageTool,
                 $revertTool,
                 new PresentQuoteOptionsTool($conversation),
+                $siniestroTool,
             ),
         };
     }

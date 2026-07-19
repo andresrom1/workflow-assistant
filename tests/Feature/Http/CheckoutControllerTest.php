@@ -2,6 +2,7 @@
 
 use App\Enums\InspectionPhotoStatus;
 use App\Jobs\EmitirPoliza;
+use App\Jobs\NotifyClientCheckoutCompleted;
 use App\Models\CheckoutSession;
 use App\Models\Conversation;
 use App\Models\InspectionPhoto;
@@ -108,6 +109,7 @@ it('persiste los campos del titular partidos + GNC y compone nombre/telefono', f
         ->and($session->telefono)->toBe('3511234567');
 
     Bus::assertDispatched(EmitirPoliza::class);
+    Bus::assertDispatched(NotifyClientCheckoutCompleted::class);
 });
 
 it('rechaza el submit si falta un campo del titular (birthdate)', function () {

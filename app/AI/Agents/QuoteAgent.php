@@ -5,6 +5,7 @@ namespace App\AI\Agents;
 use App\AI\Tools\CheckCoverageRuleTool;
 use App\AI\Tools\GetQuoteTool;
 use App\AI\Tools\RevertStageTool;
+use App\AI\Tools\SiniestroGuidanceTool;
 use App\Models\AgentPrompt;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
@@ -20,12 +21,13 @@ class QuoteAgent implements Agent, Conversational, HasTools
     protected string $agentKey = 'quote_reception';
 
     /** @var array<int, string> */
-    protected array $sharedBlocks = ['shared_style', 'shared_grounding'];
+    protected array $sharedBlocks = ['shared_style', 'shared_grounding', 'shared_siniestro'];
 
     public function __construct(
         private readonly GetQuoteTool $tool,
         private readonly CheckCoverageRuleTool $coverageTool,
         private readonly RevertStageTool $revertStageTool,
+        private readonly SiniestroGuidanceTool $siniestroTool,
     ) {}
 
     public function instructions(): Stringable|string
@@ -34,10 +36,10 @@ class QuoteAgent implements Agent, Conversational, HasTools
     }
 
     /**
-     * @return array<GetQuoteTool|CheckCoverageRuleTool|RevertStageTool>
+     * @return array<GetQuoteTool|CheckCoverageRuleTool|RevertStageTool|SiniestroGuidanceTool>
      */
     public function tools(): iterable
     {
-        return [$this->tool, $this->coverageTool, $this->revertStageTool];
+        return [$this->tool, $this->coverageTool, $this->revertStageTool, $this->siniestroTool];
     }
 }

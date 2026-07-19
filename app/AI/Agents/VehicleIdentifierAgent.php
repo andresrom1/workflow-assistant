@@ -4,6 +4,7 @@ namespace App\AI\Agents;
 
 use App\AI\Tools\CheckCoverageRuleTool;
 use App\AI\Tools\IdentifyVehicleTool;
+use App\AI\Tools\SiniestroGuidanceTool;
 use App\Models\AgentPrompt;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
@@ -19,11 +20,12 @@ class VehicleIdentifierAgent implements Agent, Conversational, HasTools
     protected string $agentKey = 'vehicle_identifier';
 
     /** @var array<int, string> */
-    protected array $sharedBlocks = ['shared_style', 'shared_grounding'];
+    protected array $sharedBlocks = ['shared_style', 'shared_grounding', 'shared_siniestro'];
 
     public function __construct(
         private readonly IdentifyVehicleTool $tool,
         private readonly CheckCoverageRuleTool $coverageTool,
+        private readonly SiniestroGuidanceTool $siniestroTool,
     ) {}
 
     public function instructions(): Stringable|string
@@ -32,10 +34,10 @@ class VehicleIdentifierAgent implements Agent, Conversational, HasTools
     }
 
     /**
-     * @return array<IdentifyVehicleTool|CheckCoverageRuleTool>
+     * @return array<IdentifyVehicleTool|CheckCoverageRuleTool|SiniestroGuidanceTool>
      */
     public function tools(): iterable
     {
-        return [$this->tool, $this->coverageTool];
+        return [$this->tool, $this->coverageTool, $this->siniestroTool];
     }
 }

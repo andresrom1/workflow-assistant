@@ -6,6 +6,7 @@ use App\AI\Tools\CheckCoverageRuleTool;
 use App\AI\Tools\CheckoutTool;
 use App\AI\Tools\PresentQuoteOptionsTool;
 use App\AI\Tools\RevertStageTool;
+use App\AI\Tools\SiniestroGuidanceTool;
 use App\Models\AgentPrompt;
 use Laravel\Ai\Attributes\Model;
 use Laravel\Ai\Attributes\Timeout;
@@ -25,13 +26,14 @@ class CheckoutAgent implements Agent, Conversational, HasTools
     protected string $agentKey = 'checkout_closer';
 
     /** @var array<int, string> */
-    protected array $sharedBlocks = ['shared_style', 'shared_grounding'];
+    protected array $sharedBlocks = ['shared_style', 'shared_grounding', 'shared_siniestro'];
 
     public function __construct(
         private readonly CheckoutTool $tool,
         private readonly CheckCoverageRuleTool $coverageTool,
         private readonly RevertStageTool $revertStageTool,
         private readonly PresentQuoteOptionsTool $presentQuoteOptionsTool,
+        private readonly SiniestroGuidanceTool $siniestroTool,
     ) {}
 
     public function instructions(): Stringable|string
@@ -40,10 +42,10 @@ class CheckoutAgent implements Agent, Conversational, HasTools
     }
 
     /**
-     * @return array<CheckoutTool|CheckCoverageRuleTool|RevertStageTool|PresentQuoteOptionsTool>
+     * @return array<CheckoutTool|CheckCoverageRuleTool|RevertStageTool|PresentQuoteOptionsTool|SiniestroGuidanceTool>
      */
     public function tools(): iterable
     {
-        return [$this->tool, $this->coverageTool, $this->revertStageTool, $this->presentQuoteOptionsTool];
+        return [$this->tool, $this->coverageTool, $this->revertStageTool, $this->presentQuoteOptionsTool, $this->siniestroTool];
     }
 }

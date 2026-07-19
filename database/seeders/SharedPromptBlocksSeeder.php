@@ -13,6 +13,7 @@ class SharedPromptBlocksSeeder extends Seeder
         $entries = [
             ['shared_style', 'shared', 'shared/shared_style.md', 'Initial seed from file'],
             ['shared_grounding', 'shared', 'shared/shared_grounding.md', 'Initial seed from file'],
+            ['shared_siniestro', 'shared', 'shared/shared_siniestro.md', 'Initial seed from file'],
             ['quote_reception', 'agent', 'agents/QuoteAgent.md', 'Initial seed from file'],
         ];
 

@@ -6,6 +6,7 @@ use App\AI\Tools\CheckCoverageRuleTool;
 use App\AI\Tools\CoveragePreferenceTool;
 use App\AI\Tools\ProvideVehicleFactTool;
 use App\AI\Tools\RevertStageTool;
+use App\AI\Tools\SiniestroGuidanceTool;
 use App\Models\AgentPrompt;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
@@ -21,13 +22,14 @@ class CoveragePreferenceAgent implements Agent, Conversational, HasTools
     protected string $agentKey = 'coverage_preference';
 
     /** @var array<int, string> */
-    protected array $sharedBlocks = ['shared_style', 'shared_grounding'];
+    protected array $sharedBlocks = ['shared_style', 'shared_grounding', 'shared_siniestro'];
 
     public function __construct(
         private readonly CoveragePreferenceTool $tool,
         private readonly CheckCoverageRuleTool $coverageTool,
         private readonly ProvideVehicleFactTool $vehicleFactTool,
         private readonly RevertStageTool $revertStageTool,
+        private readonly SiniestroGuidanceTool $siniestroTool,
     ) {}
 
     public function instructions(): Stringable|string
@@ -36,10 +38,10 @@ class CoveragePreferenceAgent implements Agent, Conversational, HasTools
     }
 
     /**
-     * @return array<CoveragePreferenceTool|CheckCoverageRuleTool|ProvideVehicleFactTool|RevertStageTool>
+     * @return array<CoveragePreferenceTool|CheckCoverageRuleTool|ProvideVehicleFactTool|RevertStageTool|SiniestroGuidanceTool>
      */
     public function tools(): iterable
     {
-        return [$this->tool, $this->coverageTool, $this->vehicleFactTool, $this->revertStageTool];
+        return [$this->tool, $this->coverageTool, $this->vehicleFactTool, $this->revertStageTool, $this->siniestroTool];
     }
 }

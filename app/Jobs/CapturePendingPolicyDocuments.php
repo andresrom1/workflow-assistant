@@ -60,6 +60,14 @@ class CapturePendingPolicyDocuments implements ShouldQueue
 
         if ($documents !== []) {
             $policyDocuments->storeFromEmission($poliza, $documents);
+
+            // Aviso al cliente por WhatsApp con los documentos recién capturados. La
+            // idempotencia por poliza_id en el job evita un doble aviso si la emisión
+            // ya había alcanzado a enviar algo antes de que esto quedara pendiente.
+            if ($poliza->quote?->conversation_id !== null) {
+                SendPolicyDocumentsToClient::dispatch($poliza->id, $poliza->quote->conversation_id)
+                    ->onQueue('whatsapp-outbound');
+            }
         }
 
         $captured = array_map(static fn (array $document): string => (string) $document['kind'], $documents);

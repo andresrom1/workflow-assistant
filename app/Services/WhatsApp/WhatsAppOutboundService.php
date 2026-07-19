@@ -244,6 +244,50 @@ class WhatsAppOutboundService
     }
 
     /**
+     * Envía un documento (PDF) por link público. Solo válido dentro de la ventana de 24h.
+     *
+     * El link debe ser una URL pública accesible por Meta (ej: storage_url de R2)
+     * — no requiere upload previo vía uploadMedia().
+     *
+     * @param  string|null  $phone  Recipient wa_id (E.164 without "+"), or null
+     * @param  string|null  $bsuid  Business-Scoped User ID, used when there is no phone
+     * @param  string  $link  URL pública del PDF
+     * @param  string  $filename  Nombre de archivo mostrado al destinatario
+     * @param  string  $phoneNumberId  Sender phone number ID
+     * @return array<string, mixed>
+     */
+    public function sendDocumentMessage(?string $phone, ?string $bsuid, string $link, string $filename, string $phoneNumberId, ?string $caption = null, ?int $conversationId = null, ?string $agentName = null, ?string $aiProvider = null): array
+    {
+        $document = ['link' => $link, 'filename' => $filename];
+        if ($caption !== null) {
+            $document['caption'] = $caption;
+        }
+
+        $response = $this->post($phoneNumberId, [
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            ...$this->recipientPayload($phone, $bsuid),
+            'type' => 'document',
+            'document' => $document,
+        ]);
+
+        if ($conversationId && ! empty($response['messages'])) {
+            Message::create([
+                'conversation_id' => $conversationId,
+                'direction' => 'outbound',
+                'type' => MessageType::Document,
+                'agent_name' => $agentName,
+                'ai_provider' => $aiProvider,
+                'content' => $caption ?? $filename,
+                'external_message_id' => data_get($response, 'messages.0.id'),
+                'sender_phone' => $phoneNumberId,
+            ]);
+        }
+
+        return $response;
+    }
+
+    /**
      * Decide el campo de destinatario del payload de Meta: `to` con el teléfono cuando está
      * disponible, o `recipient` con el BSUID cuando no hay teléfono (doc §10). El teléfono tiene
      * prioridad; el BSUID es la alternativa para usuarios sin número visible.

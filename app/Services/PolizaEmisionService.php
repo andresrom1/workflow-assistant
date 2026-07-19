@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Contracts\EmissionProvider;
 use App\Enums\InspectionPhotoStatus;
 use App\Jobs\CapturePendingPolicyDocuments;
+use App\Jobs\SendPolicyDocumentsToClient;
 use App\Models\CheckoutSession;
 use App\Models\InspectionPhoto;
 use App\Models\Poliza;
@@ -78,6 +79,11 @@ class PolizaEmisionService
         // presale vivo y sin que salga de él): se persisten en cartera. Best-effort.
         $this->policyDocuments->storeFromEmission($poliza, $result['documents']);
 
+        // Aviso al cliente por WhatsApp con los documentos ya disponibles. Si todo
+        // quedó pendiente (sin documentos aún), el job es un no-op — el aviso real
+        // ocurre cuando CapturePendingPolicyDocuments los capture.
+        $this->notifyClientOfDocuments($poliza, $quote);
+
         // Documentos que la compañía todavía estaba generando (descarga async): se
         // persiste la referencia opaca del proveedor y se difiere la captura a un job
         // con reintentos. El token es opaco para el dominio (su valor es el presale_id,
@@ -117,6 +123,20 @@ class PolizaEmisionService
 
         CapturePendingPolicyDocuments::dispatch($poliza->id)
             ->delay(now()->addSeconds((int) config('visred.document_retry_delay', 60)));
+    }
+
+    /**
+     * Despacha el envío de documentos por WhatsApp a la conversación de origen del
+     * quote (`quotes.conversation_id` es NOT NULL — el canal es siempre WhatsApp).
+     */
+    private function notifyClientOfDocuments(Poliza $poliza, Quote $quote): void
+    {
+        if (! $poliza->documents()->where('visible_to_client', true)->exists()) {
+            return;
+        }
+
+        SendPolicyDocumentsToClient::dispatch($poliza->id, $quote->conversation_id)
+            ->onQueue('whatsapp-outbound');
     }
 
     /**

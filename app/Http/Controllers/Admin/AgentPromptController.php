@@ -36,12 +36,31 @@ class AgentPromptController extends Controller
     private const SHARED_FILE_MAP = [
         'shared_style' => 'shared_style.md',
         'shared_grounding' => 'shared_grounding.md',
+        'shared_siniestro' => 'shared_siniestro.md',
     ];
 
     /** @var array<string, string> */
     private const SHARED_LABELS = [
         'shared_style' => 'Estilo compartido',
         'shared_grounding' => 'Grounding compartido',
+        'shared_siniestro' => 'Siniestros (compartido)',
+    ];
+
+    /**
+     * Bloques compartidos que realmente compone cada agente en runtime (ver
+     * `protected array $sharedBlocks` de cada clase en app/AI/Agents, y
+     * CheckCoverageRuleTool para coverage_check). Duplicado a propósito para el
+     * preview del admin — mantenerlo en sync si un agente cambia sus bloques.
+     *
+     * @var array<string, list<string>>
+     */
+    private const AGENT_SHARED_BLOCKS = [
+        'customer_identifier' => ['shared_style', 'shared_grounding', 'shared_siniestro'],
+        'vehicle_identifier' => ['shared_style', 'shared_grounding', 'shared_siniestro'],
+        'coverage_preference' => ['shared_style', 'shared_grounding', 'shared_siniestro'],
+        'quote_reception' => ['shared_style', 'shared_grounding', 'shared_siniestro'],
+        'checkout_closer' => ['shared_style', 'shared_grounding', 'shared_siniestro'],
+        'coverage_check' => ['shared_style', 'shared_grounding'],
     ];
 
     public function index(): Response
@@ -78,11 +97,9 @@ class AgentPromptController extends Controller
         ];
 
         if ($type === 'agent') {
-            $payload['composedPreview'] = AgentPrompt::compose(
-                $agentKey,
-                ['shared_style', 'shared_grounding']
-            );
-            $payload['inheritedBlocks'] = array_keys(self::SHARED_LABELS);
+            $sharedKeys = self::AGENT_SHARED_BLOCKS[$agentKey] ?? array_keys(self::SHARED_LABELS);
+            $payload['composedPreview'] = AgentPrompt::compose($agentKey, $sharedKeys);
+            $payload['inheritedBlocks'] = $sharedKeys;
         }
 
         return Inertia::render('Admin/AgentPrompts/Show', $payload);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\InspectionPhotoStatus;
 use App\Jobs\DeleteOrphanPhoto;
 use App\Jobs\EmitirPoliza;
+use App\Jobs\NotifyClientCheckoutCompleted;
 use App\Mail\CheckoutCompletadoMail;
 use App\Models\CheckoutSession;
 use App\Models\InspectionPhoto;
@@ -318,6 +319,10 @@ class CheckoutController extends Controller
                 // Despachar emisión de póliza (skeleton — cuando API esté lista, solo
                 // hay que implementar PolizaEmisionService::emitir())
                 EmitirPoliza::dispatch($quote->id, $session->id);
+
+                // Agradecimiento inmediato al cliente por WhatsApp. La documentación
+                // llega en un mensaje aparte cuando la emisión la captura.
+                NotifyClientCheckoutCompleted::dispatch($quote->id);
 
                 // Notificación interna por mail
                 Mail::to(

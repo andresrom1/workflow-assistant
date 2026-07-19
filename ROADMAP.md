@@ -18,7 +18,7 @@
 | Área | Estado | Nota |
 |------|--------|------|
 | Flujo de cotización (chat web ChatKit) | ❌ | **Deprecado (2026-07-07)** — OpenAI discontinúa Agent Builder (sunset ≤ 30-nov-2026). El adapter `OpenAI\AgentToolAdapter` sigue en el código pero sin continuidad; **WhatsApp es el único canal activo**. Reverb retirado. Ver Bitácora 2026-07-07. |
-| Flujo de cotización (WhatsApp) | ✅ | Orquestador + sub-agentes, pipeline de inbox de 3 etapas. Adapter `AIProviders\WhatsAppAdapter`. Incluye retroceso de etapa (`revert_to_stage`), takeover humano, botones interactivos en el cierre, seguimiento de estancadas y cierre del gate de desambiguación de versión (`provide_vehicle_fact`) — ver Bitácora 2026-07-06. |
+| Flujo de cotización (WhatsApp) | ✅ | Orquestador + sub-agentes, pipeline de inbox de 3 etapas. Adapter `AIProviders\WhatsAppAdapter`. Incluye retroceso de etapa (`revert_to_stage`), takeover humano, botones interactivos en el cierre, seguimiento de estancadas y cierre del gate de desambiguación de versión (`provide_vehicle_fact`) — ver Bitácora 2026-07-06. Post-checkout (gracias + documentación por WhatsApp) y guía de siniestros (`siniestro_guidance`, sin notificar al PAS) — ver Bitácora 2026-07-19. |
 | Integración WhatsApp Cloud API | ✅ | Webhooks in, `WhatsAppOutboundService`, media STT/TTS, idempotencia por `wamid`. |
 | Motor de cotización | 🚧 | `QuotingEngine` **es mock** (`sleep(30)` + catálogo simulado). Seam para Visred. |
 | RAG coberturas (pgvector) | ✅ | Dos agentes (frontal + experto), `ChunkAndEmbedService`, `SearchCompanyDocumentationTool`. |
@@ -73,12 +73,46 @@
 | **Quotes en `pending` sin estado terminal** (abandono pre-cobertura) | `QuoteService::createPendingQuote`, enum `status` en `Quote` | ⬜ a implementar — tras borrar `CheckQuoteAcceptance` nada expira los `pending` abandonados (cliente que crea la quote pero nunca elige cobertura). **Regla decidida:** un `pending` expira (`status = 'expired'`) **al día siguiente de su creación a las 00:00hs**. Implementación futura: command programado (`schedule`) que barre `pending` con `created_at < hoy 00:00` → `expired`. Se alinea con el rediseño del ciclo de vida de la quote en V2-3 (polling `TaskList` Visred) |
 | **Ramos no-vehiculares (AP, hogar/combinado, vida) sin materializar** | `PolicyReportImportService::evaluate`, `AssetType` | ⬜ el modelo `InsurableAsset`/`Risk` ya soporta el llaveo por tipo (2026-07-15), pero falta (1) mapear producto/ramo del reporte a `AssetType` — el parser ya extrae `ramo` (vive en `policy_report_rows.payload`, sin columna dedicada) — y (2) decidir la clave natural de `Person`/`Property` (ojo: el asegurado de una AP puede no ser el tomador). Hasta entonces una fila sin patente sigue siendo `Exception` en el import. Ver `docs/v3/05-modelo-insurable-asset.md` §Pendiente |
 | **Consolidación de atributos del `InsurableAsset` — solo backfill, sin resolución de conflictos** | `PolicyChainResolver::backfillMissing` | ⬜ cuando dos fuentes matchean el mismo asset (misma patente) y traen valores **no vacíos distintos** para un atributo (p. ej. `modelo`), hoy se conserva el existente y se ignora el nuevo (backfill monótono: solo rellena faltantes). La corrección/ponderación por fuente + provenance + divergencias ya está modelada para `Customer` en `docs/v2/11`; falta extenderla al asset (misma máquina). Sin esto, un dato cargado mal por una fuente pobre no se puede corregir desde una de más confianza vía `resolveRisk` |
+| **Prompts `coverage_preference` (upsell no bloqueante) y bloque nuevo `shared_siniestro`** | `agent_prompts` (DB) | ⬜ código + `.md` de referencia listos (ver Bitácora 2026-07-19); el contenido final se entregó en chat para carga **manual** de Andrés en `agent_prompts` + `Cache::forget`. Hasta cargarlos, `CoveragePreferenceAgent` sigue con el upsell viejo (fricción de dos preguntas) y `siniestro_guidance` no tiene bloque de instrucciones propio (los 5 agentes ya tienen la tool inyectada, pero sin el `.md` activo en DB el LLM no sabe cuándo llamarla) |
+| Plantilla de reapertura (ventana 24h) para documentación de póliza que se emite tarde | `SendPolicyDocumentsToClient` | ⬜ hoy se asume que el envío de PDFs cae dentro de la ventana de 24h post-checkout; si `CapturePendingPolicyDocuments` agota los 10 reintentos (~10min) y la ventana ya cerró, el mensaje con los documentos no se puede enviar hasta que el cliente vuelva a escribir. Falta decidir si se resuelve con un template de Meta aprobado o con carga manual del admin como fallback |
+| Notificación al PAS ante siniestro reportado por WhatsApp | `SiniestroGuidanceTool` | ❌ descartada explícitamente (2026-07-19) — la tool solo devuelve indicaciones + contacto del PAS al cliente; a diferencia de `Mobile/SiniestroController` (que sí notifica al PAS), acá el cliente es quien contacta. Si se reconsidera, el puerto `WhatsAppDispatcher::siniestroNoticeToPas()` ya existe y está probado |
 
 ---
 
 ## Bitácora
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
+
+- **2026-07-19** — **Fricción de cobertura, post-checkout por WhatsApp y guía de siniestros — review de conversación real #2 ✅ (código) / ⬜ (prompts).**
+  Disparado por la revisión de una conversación real del piloto (conversation_id=2): (1) el
+  `CoveragePreferenceAgent` encadenaba dos preguntas entre "robo parcial también" y el upsell a
+  Todo Riesgo planteado como dicotomía — mucha fricción antes de cotizar. (2) al completar el
+  checkout el cliente no recibía nada por WhatsApp (solo se despachaba `EmitirPoliza` + mail
+  interno). (3) un siniestro reportado en plena conversación lo manejó el `CheckoutAgent`
+  improvisando — llegó a dictaminar cobertura por su cuenta y prometió "te paso con el productor"
+  sin mecanismo real detrás.
+  **Cambios de código (activos ya):** `WhatsAppOutboundService::sendDocumentMessage()` (envío de
+  PDF por link, `type: document`). `NotifyClientCheckoutCompleted` — job de agradecimiento fijo
+  despachado en `CheckoutController::submit()` junto a `EmitirPoliza`, sin pasar por el LLM.
+  `SendPolicyDocumentsToClient` — envía los `PolicyDocument` `visible_to_client=true` de la
+  póliza; idempotente por `poliza_id` (`Cache::add` atómico, se libera si falla o si aún no hay
+  documentos); enganchado desde `PolizaEmisionService::emitir()` (tras `storeFromEmission()`) y
+  desde `CapturePendingPolicyDocuments` (cuando el reintento captura lo que faltaba).
+  `SiniestroGuidanceTool` — tool nueva sin efectos secundarios (no notifica a nadie), resuelve el
+  PAS por prelación de 2 niveles (propio del cliente → default de MANGO, mismo criterio que
+  `Mobile/SiniestroController` sin su 3er tier de vehículo compartido) y devuelve indicaciones +
+  contacto; inyectada en los 5 agentes del embudo vía `InsuranceOrchestrator::resolveAgent()` (un
+  siniestro puede reportarse en cualquier etapa).
+  **Prompts (⬜ pendiente de carga manual, ver deuda técnica):** reescritura completa de
+  `CoveragePreferenceAgent.md` (regla de una sola pregunta + upsell como mención no bloqueante,
+  nunca como pregunta/dicotomía) y bloque nuevo `shared_siniestro.md` (cuándo llamar la tool,
+  prohibido dictaminar cobertura, prohibido prometer acciones que el sistema no ejecuta) —
+  entregados en el chat para que Andrés los cargue en `agent_prompts` + invalide caché.
+  Verificación: 32 tests nuevos + ajustes a 2 tests existentes que hubieran pegado a la API real
+  de Meta sin `Queue::fake()`/`Http::fake()` de más (el nuevo dispatch de documentos no estaba
+  cubierto). Suite completa **594/594** verde, PHPStan 0 errores nuevos. En el camino, PHPStan
+  detectó un guard muerto (`$quote->conversation_id === null`, imposible por schema NOT NULL) que
+  se sacó en vez de silenciarlo.
 
 - **2026-07-15** — **Review + fixes: backfill de atributos + robustez (rama feat/insurable-asset-model) ✅.**
   Tras la review independiente con 8 ángulos (línea por línea, comportamiento removido, trazado de

@@ -7,6 +7,7 @@ use App\Enums\PolicyDocumentKind;
 use App\Enums\PolicyDocumentSource;
 use App\Enums\PolizaEstado;
 use App\Jobs\CapturePendingPolicyDocuments;
+use App\Jobs\SendPolicyDocumentsToClient;
 use App\Models\CheckoutSession;
 use App\Models\Conversation;
 use App\Models\Customer;
@@ -228,6 +229,7 @@ it('lanza si la alternativa elegida no tiene quotation_result_id', function () {
 
 it('persiste en cartera los documentos capturados al emitir (visibles al cliente)', function () {
     Storage::fake('r2');
+    Queue::fake(); // hay documento visible → dispararía el aviso por WhatsApp; no es lo que testea este caso.
     [$quote, $session] = emittableQuote();
 
     // La inspección post-emisión es ahora interna del adapter (ver
@@ -261,6 +263,53 @@ it('persiste en cartera los documentos capturados al emitir (visibles al cliente
         ->and($doc->source)->toBe(PolicyDocumentSource::VisredEmission)
         ->and($doc->visible_to_client)->toBeTrue()
         ->and(Storage::disk('r2')->get($doc->storage_path))->toBe('PDFBYTES');
+});
+
+it('despacha el aviso de documentos al cliente cuando la emisión trae al menos uno', function () {
+    Storage::fake('r2');
+    Queue::fake();
+    [$quote, $session] = emittableQuote();
+
+    app()->instance(EmissionProvider::class, new class implements EmissionProvider
+    {
+        use StubsPendingDocuments;
+
+        public function emit(array $request): array
+        {
+            return [
+                'task_id' => 't', 'status' => 'SUCCESS',
+                'proposal_number' => 'PR', 'policy_number' => 'P', 'emission_status' => 'emitida',
+                'requires_inspection_after_emission' => false, 'company_id' => 'sancor',
+                'documents' => [
+                    ['kind' => 'poliza', 'filename' => 'poliza.pdf', 'mime' => 'application/pdf', 'contents' => 'PDFBYTES'],
+                ],
+                'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []],
+                'raw' => [],
+            ];
+        }
+    });
+
+    app(PolizaEmisionService::class)->emitir($quote, $session);
+
+    $poliza = Poliza::where('quote_id', $quote->id)->firstOrFail();
+
+    Queue::assertPushed(SendPolicyDocumentsToClient::class, function (SendPolicyDocumentsToClient $job) use ($poliza, $quote): bool {
+        $polizaId = (fn () => $this->polizaId)->call($job);
+        $conversationId = (fn () => $this->conversationId)->call($job);
+
+        return $polizaId === $poliza->id && $conversationId === $quote->conversation_id;
+    });
+});
+
+it('no despacha el aviso de documentos cuando la emisión no trajo ninguno', function () {
+    Storage::fake('r2');
+    Queue::fake();
+    [$quote, $session] = emittableQuote();
+
+    // StubEmissionProvider devuelve documents => [].
+    app(PolizaEmisionService::class)->emitir($quote, $session);
+
+    Queue::assertNotPushed(SendPolicyDocumentsToClient::class);
 });
 
 it('persiste la referencia opaca del proveedor y encola el reintento cuando quedan documentos pendientes', function () {
