@@ -167,9 +167,7 @@ it('manda insured_amount_fuel (default configurable) cuando el equipo es GNC', f
         && ! isset($r['vehicle']['insured_amount_fuel']));
 });
 
-it('manda el DNI placeholder configurable cuando el cliente aún no lo cargó', function () {
-    config()->set('visred.default_holder_dni', '30000000');
-
+it('manda person_holder con el DNI real del snapshot cuando ya lo tiene', function () {
     Http::fake([
         COMPANIES_URL => companiesResponse(),
         DISCOUNT_URL => Http::response([]),
@@ -177,18 +175,13 @@ it('manda el DNI placeholder configurable cuando el cliente aún no lo cargó', 
         'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [coverResult(1, 'rc', 'RC', 1.0)]),
     ]);
 
-    // El DNI real se captura recién en checkout. En cotización mandamos un placeholder
-    // para no perder compañías que exigen person_holder (San Cristóbal/Galicia); se
-    // sobrescribe con el real al emitir. Ver docs/v2/08 §2.2.
-    app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('TOKEN_X', ['dni' => null]));
+    app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('TOKEN_X', ['dni' => '30111222']));
 
     Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL
-        && $r['person_holder']['document_number'] === '30000000');
+        && $r['person_holder']['document_number'] === '30111222');
 });
 
-it('omite person_holder si ni el snapshot ni el config traen DNI (evita el 400)', function () {
-    config()->set('visred.default_holder_dni', '');
-
+it('omite person_holder si el snapshot todavía no tiene DNI (sin placeholder — evita el 400 de emisión)', function () {
     Http::fake([
         COMPANIES_URL => companiesResponse(),
         DISCOUNT_URL => Http::response([]),
@@ -196,6 +189,9 @@ it('omite person_holder si ni el snapshot ni el config traen DNI (evita el 400)'
         'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [coverResult(1, 'rc', 'RC', 1.0)]),
     ]);
 
+    // A propósito: NO se inventa un DNI. Un placeholder cotiza bien pero la emisión
+    // exige que coincida con el de la cotización — coincidir con un valor inventado
+    // no es alcanzable (ver docs/v2/08 §2.2, verificado en prod 2026-07-19).
     app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('TOKEN_X', ['dni' => null]));
 
     Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL && ! isset($r['person_holder']));

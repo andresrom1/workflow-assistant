@@ -3,6 +3,7 @@
 namespace App\AI\Agents;
 
 use App\AI\Tools\CheckCoverageRuleTool;
+use App\AI\Tools\DeclineDniTool;
 use App\AI\Tools\IdentifyCustomerTool;
 use App\AI\Tools\SiniestroGuidanceTool;
 use App\Models\AgentPrompt;
@@ -26,6 +27,7 @@ class CustomerIdentifierAgent implements Agent, Conversational, HasTools
         private readonly IdentifyCustomerTool $tool,
         private readonly CheckCoverageRuleTool $coverageTool,
         private readonly SiniestroGuidanceTool $siniestroTool,
+        private readonly DeclineDniTool $declineDniTool,
     ) {}
 
     public function instructions(): Stringable|string
@@ -34,10 +36,10 @@ class CustomerIdentifierAgent implements Agent, Conversational, HasTools
     }
 
     /**
-     * @return array<IdentifyCustomerTool|CheckCoverageRuleTool|SiniestroGuidanceTool>
+     * @return array<IdentifyCustomerTool|CheckCoverageRuleTool|SiniestroGuidanceTool|DeclineDniTool>
      */
     public function tools(): iterable
     {
-        return [$this->tool, $this->coverageTool, $this->siniestroTool];
+        return [$this->tool, $this->coverageTool, $this->siniestroTool, $this->declineDniTool];
     }
 }

@@ -95,6 +95,40 @@ it('emite, hace polling y parsea el APIBasePreSaleResultDTO', function () {
         ->and($result['task_id'])->toBe('t-emit');
 });
 
+it('declara document_type_id=cuit cuando el documento tiene 11 dígitos (CUIT o CUIL)', function () {
+    Http::fake([
+        EMITIR_URL => Http::response(['task_id' => 't1']),
+        'https://visred.test/v1/tasks/t1/' => taskPresaleSuccess(['presale_id' => 1]),
+    ]);
+
+    // `Customer.dni` puede contener legítimamente un CUIT/CUIL (persona jurídica, o
+    // alguien que dio el CUIL en el chat/checkout) y ese valor viaja tal cual. Visred
+    // rechaza la emisión con `person_holder: [""]` si un número de 11 dígitos se
+    // declara como `dni` — y también si se declara como `cuil`. Verificado live
+    // (2026-07-19) con el mismo quotation_result_id variando sólo este campo.
+    app(VisredEmissionProvider::class)->emit(neutralRequest([
+        'holder' => ['document_number' => '20301237277'],
+    ]));
+
+    Http::assertSent(fn (Request $r) => $r->url() === EMITIR_URL
+        && $r['person_holder']['document_number'] === '20301237277'
+        && $r['person_holder']['document_type_id'] === 'cuit');
+});
+
+it('respeta un document_type_id explícito del dominio en vez de deducirlo', function () {
+    Http::fake([
+        EMITIR_URL => Http::response(['task_id' => 't1']),
+        'https://visred.test/v1/tasks/t1/' => taskPresaleSuccess(['presale_id' => 1]),
+    ]);
+
+    app(VisredEmissionProvider::class)->emit(neutralRequest([
+        'holder' => ['document_number' => '20301237277', 'document_type_id' => 'pasaporte'],
+    ]));
+
+    Http::assertSent(fn (Request $r) => $r->url() === EMITIR_URL
+        && $r['person_holder']['document_type_id'] === 'pasaporte');
+});
+
 it('mapea el request neutro a PreSaleVehicleRequest (defaults física/dni, pago aplanado)', function () {
     Http::fake([
         EMITIR_URL => Http::response(['task_id' => 't1']),

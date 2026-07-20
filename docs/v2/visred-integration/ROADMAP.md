@@ -25,6 +25,8 @@
 | Params holder | `tax-condition`/`sex`/`person-type`/`document-type` en `/v1/params/...` (singular, top-level), shape `{id, description}` | ✅ verificado live (2026-06-08) |
 | `fuel_type_id` | string único (opcional) en `QuotationVehicleDataRequest`. Catálogo: `nafta`/`diesel`/`electrico`/`hibrido`/`gnc`/`con-gnc`/`sin-gnc` | ✅ verificado live (2026-06-08) |
 | Descuento | `discount_id` solo en emisión (`PreSaleVehicleRequest`). Catálogo `/params/discount/` por-compañía `{value, discount%}` lista **sobre** el tope del productor (emitir >tope → 400) | ✅ verificado live; emit con discount OK (presale 32093) |
+| **`document_type_id` de 11 dígitos DEBE ser `cuit`** | Un `document_number` de 11 dígitos (CUIT **o CUIL**) declarado como `dni` → emisión `400 validation_error`, `field_errors: {person_holder: [""]}`. Declarado como `cuil` (que existe en `/v1/params/document-type/`) → **también rechaza**. Como `cuit` → **acepta**. Aislado con el MISMO `quotation_result_id` variando sólo ese campo. En cotización el `QuotationPersonHolderRequest` no lleva tipo, así que 11 dígitos cotiza bien y el problema aparece recién al emitir | ✅ verificado live (2026-07-19) |
+| **Cotizar sin `person_holder` → emitir con DNI real** | Cotización de Triunfo sin `person_holder` (bloque omitido por completo) + emisión sobre ese `quotation_result_id` con `document_number` real → **acepta**, `presale_id 32096`, `policy_number 1822203`. El 400 `"Debes usar el mismo document_number que en la cotización"` solo se dispara cuando la cotización **sí** llevó un `document_number` (§ver Bitácora 2026-07-19) | ✅ verificado live |
 
 ---
 
@@ -116,7 +118,7 @@ Separación de scopes (decisión del usuario 2026-06-07): la Fase 5 toca **solo 
 Consolidado de consultas abiertas al proveedor (las dispersas en docs/v2/08, 10 y D8 se reflejan acá). Actualizar al resolverse.
 
 1. **Galicia / San Cristóbal — `external_service_unavailable` (cotización).** En el sandbox, sus tasks de cotización fallan **intermitentemente** con `code: external_service_unavailable` (San Cristóbal → `"Error desconocido."`, Galicia → `"Field required"`), aunque a veces responden SUCCESS con el mismo request (DNI placeholder `30000000`, mismo usuario `andresrom@gmail.com`, ambas listadas en `/discovery/companies/`). Verificado por aislamiento (combustible/vehículo/zip/permisos descartados, request manual reproducido). **¿Es una limitación/inestabilidad del backend de esas compañías solo en sandbox, o esperable también en producción?** Si pasa en prod, evaluar reintento acotado para `external_service_unavailable`. (docs/v2/08 §2.2)
-2. **DNI placeholder en cotización vs DNI real en emisión.** Cotizamos con un DNI placeholder (`visred.default_holder_dni`) y emitimos con el DNI real del checkout (no re-cotizamos). **¿La prima cotizada depende del DNI** (scoring/perfil del titular)? **¿Aceptan emitir contra un `quotation_result_id` cotizado con un DNI distinto** al de emisión, o exigen que coincidan? **¿Riesgo de re-tarifación silenciosa o rechazo al emitir?** (docs/v2/08 §2.2)
+2. **DNI placeholder en cotización vs DNI real en emisión — la mitad de esta pregunta ya se cayó (ver Bitácora 2026-07-19): el placeholder SÍ produce rechazo al emitir** (`non_field_errors: "Debes usar el mismo document_number que en la cotización"`, confirmado contra prod real). Verificado además que **omitir `person_holder` en la cotización no bloquea la emisión** con un DNI real distinto (sandbox, Triunfo, `presale_id 32096`). Queda pendiente de Visred solo: **¿la prima cotizada depende del DNI** (scoring/perfil del titular)? Si la respuesta es sí, cotizar sin DNI (o con uno placeholder) muestra un precio que no es el que se termina cobrando. (docs/v2/08 §2.2)
 3. **Topes de descuento por compañía (D8).** El catálogo `/params/discount/` lista descuentos **por encima** del máximo permitido al productor (Triunfo cataloga 30%, emitir >20% → 400). El tope no tiene endpoint (se descubre por el 400) y es por-compañía. **¿Hay forma de obtener los topes por compañía?** Y el `[]` que devuelven las demás en sandbox, **¿significa "sin descuentos" o "no cargado en sandbox"?** (ROADMAP D8)
 4. **Usuario de servicio vs personal.** `/discovery/companies/` es origin-aware (filtra por permisos del productor). Hoy autenticamos como `andresrom@gmail.com`. **¿Existe un usuario de servicio dedicado** para la identidad de MANGO, o seguimos con el del productor? (docs/v2/08 §2.4)
 5. **Tarifación por combustible específico (menor, no-bug).** El mapeo colapsa nafta/diésel/eléctrico/híbrido cuando no hay GNC. **¿El precio cambia según el combustible específico** (más allá de gnc/sin-gnc)? Hoy ambos cotizan; no accionar sin confirmación. (ROADMAP D7)
@@ -124,6 +126,47 @@ Consolidado de consultas abiertas al proveedor (las dispersas en docs/v2/08, 10 
 ---
 
 ## Bitácora
+
+- **2026-07-19** — **El DNI placeholder de D8/junio no funciona en emisión: falsificado en prod y en sandbox.**
+  Disparado por un checkout real (piloto, conversation_id=3) donde `EmitirPoliza` falló 5 veces
+  con `VisredApiException: Error de validación.` — mensaje opaco porque `EmitirPoliza::failed()`
+  solo logueaba `$e->getMessage()`. Reproducido a mano contra prod (`PolizaEmisionService::emitir()`
+  vía tinker): el 400 real es `non_field_errors: ["Debes usar el mismo document_number que en la
+  cotización"]`, `code: validation_error`.
+  **Esto invalida la decisión "El placeholder FUNCIONA" del 2026-06-10** — aquella verificación
+  solo confirmó que el placeholder es *aceptado al cotizar* (San Cristóbal SUCCESS con
+  `30000000`), nunca que la emisión posterior con el DNI real fuera a pasar. Nunca se probó el
+  ciclo completo cotizar→emitir. No era una limitación de infra del sandbox (eso sigue siendo
+  cierto para Galicia/San Cristóbal, causa aparte) — es Visred exigiendo que el `document_number`
+  de la emisión coincida con el de la cotización, cuando la cotización llevó uno.
+  **Sonda de reemplazo contra el sandbox (Fase 0 del plan de fix):** cotizar **sin** `person_holder`
+  (bloque omitido, no placeholder) y emitir sobre ese `quotation_result_id` con un
+  `document_number` real → **acepta** (Triunfo, `presale_id 32096`, `policy_number 1822203`,
+  `discount_id "0"`). Confirma que el rechazo depende de que la cotización haya llevado *algún*
+  DNI a comparar — omitirlo del todo no dispara la validación.
+  **Decisión que reemplaza a D8/2026-06-10:** sacar el placeholder; cotizar con el DNI real
+  cuando esté disponible (capturado antes en la conversación) y omitir el bloque cuando no lo
+  esté (pierde San Cristóbal/Galicia, que ya lo exigían). "Cotización en dos fases RECHAZADA"
+  del 2026-06-10 se sostiene — no se re-cotiza en checkout — pero ahora implica que el DNI real
+  tiene que estar *antes* de cotizar, no inventarse y corregir después.
+  **Hallazgo posterior (review del mismo día): `document_type_id` de 11 dígitos debe ser `cuit`.**
+  Al ampliar la validación del chat para aceptar CUIT/CUIL de 11 dígitos apareció una vía nueva
+  de cotización inemitible: `Customer.dni` pasa a poder contener un CUIL, viaja al snapshot y a
+  la cotización (que lo acepta sin problema — el `QuotationPersonHolderRequest` no lleva tipo),
+  pero la emisión lo rechazaba porque `VisredEmissionProvider::buildHolder` hardcodeaba
+  `document_type_id => 'dni'`. Aislado con el MISMO `quotation_result_id` variando sólo ese
+  campo: `dni` → rechazado, `cuil` → rechazado, `cuit` → **aceptado**. Fix en el adapter
+  (`documentTypeIdFor()`: 11 dígitos → `cuit`, si no `dni`; respeta un tipo explícito del
+  dominio). **Esto además arreglaba un bug latente pre-existente:** cualquier cliente cuyo `dni`
+  viniera con un CUIT desde el checkout, la ingesta o el admin (persona jurídica) tampoco podía
+  emitir. Verificado E2E por el adapter real del proyecto: cotizar con CUIL + emitir → SUCCESS.
+  **Nota aparte, no es hallazgo nuevo:** la sonda pegó primero contra `discount_id` requerido de
+  Triunfo (`"El descuento es requerido para Triunfo"`) por construir el request a mano sin pasar
+  por `MaxDiscountPolicy` — eso es D8, ya cerrado 2026-06-08, sin relación con el DNI.
+  **Pendiente:** actualizar `docs/v2/08-visred-quote-adapter.md §2.2` (la nota de "decisión
+  2026-06-10" queda desactualizada) y `config/visred.php` (sacar `default_holder_dni`) — parte de
+  la Fase 3 del plan de fix, no hecho todavía. Ver `workflow-assistant/ROADMAP.md` para el plan
+  completo (Fases 0–4b).
 
 - **2026-06-10** — **Faltaban alternativas en las cotizaciones (análisis Quote #23): 3 causas, 2 accionadas.** Confirmado live replicando la Quote #23 contra el sandbox (script `<?php` temporal, sin secretos, borrado). `VisredQuotationProviderTest` **14**, PHPStan **0**, Pint.
   - **Causa A — filtro `active` tiraba planes vendibles (bug nuestro, arreglado).** `mapCover` descartaba todo cover con `cover.active === false`, pero Visred marca `active=false` en coberturas **con fee y nombre reales** (Mercantil B/B0/B3/M BASICA/M PLUS, Sancor Auto Max 6, RUS…). El filtro ahora es **solo por placeholder** (nombre vacío) — los placeholders reales de Visred vienen con `name`/`id` vacíos, así que se siguen atrapando. **Impacto live: 26 → 38 alternativas** (Mercantil 4→14, Sancor 1→2). La premisa documentada ("active=false = discontinuado") era falsa.

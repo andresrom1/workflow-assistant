@@ -11,6 +11,7 @@ use App\AI\Agents\VehicleIdentifierAgent;
 use App\AI\Tools\CheckCoverageRuleTool;
 use App\AI\Tools\CheckoutTool;
 use App\AI\Tools\CoveragePreferenceTool;
+use App\AI\Tools\DeclineDniTool;
 use App\AI\Tools\GetQuoteTool;
 use App\AI\Tools\IdentifyCustomerTool;
 use App\AI\Tools\IdentifyVehicleTool;
@@ -238,24 +239,34 @@ class InsuranceOrchestrator
             'channel' => 'whatsapp',
         ], $conversation);
 
-        if ($result['success']) {
-            $conversation->updateAiState(['customer_identified' => true]);
-            $conversation->refresh();
+        if (! $result['success']) {
+            return;
+        }
 
-            // El customer recién creado por teléfono no tiene nombre; usar el
-            // profile name del webhook para que el saludo del primer turno sea personal.
-            $customer = $conversation->customer;
-            if ($customer && ! $customer->name) {
-                $senderName = $conversation->messages()
-                    ->where('direction', 'inbound')
-                    ->whereNotNull('sender_name')
-                    ->latest()
-                    ->value('sender_name');
+        $conversation->refresh();
+        $customer = $conversation->customer;
 
-                if ($senderName) {
-                    $customer->update(['name' => $senderName]);
-                }
+        // El customer recién creado por teléfono no tiene nombre; usar el
+        // profile name del webhook para que el saludo del primer turno sea personal.
+        if ($customer && ! $customer->name) {
+            $senderName = $conversation->messages()
+                ->where('direction', 'inbound')
+                ->whereNotNull('sender_name')
+                ->latest()
+                ->value('sender_name');
+
+            if ($senderName) {
+                $customer->update(['name' => $senderName]);
             }
+        }
+
+        // El flag solo se prende si el customer YA tiene DNI (dato aparte del
+        // teléfono/nombre de arriba, que siempre se resuelven). Si no lo tiene, el
+        // paso de identificación queda abierto para que CustomerIdentifierAgent lo
+        // pida — cotizar con un DNI inventado rompe la emisión (ver ROADMAP Bitácora
+        // 2026-07-19). `DeclineDniTool` es la salida para el cliente que no quiere darlo.
+        if ($customer && $customer->dni) {
+            $conversation->updateAiState(['customer_identified' => true]);
         }
     }
 
@@ -353,6 +364,7 @@ class InsuranceOrchestrator
                 new IdentifyCustomerTool($this->adapter, $conversation),
                 $coverageTool,
                 $siniestroTool,
+                new DeclineDniTool($conversation),
             ),
             ! $state['vehicle_identified'] => new VehicleIdentifierAgent(
                 new IdentifyVehicleTool($this->adapter, $conversation),

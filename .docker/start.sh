@@ -78,6 +78,16 @@ php artisan route:cache
 php artisan view:cache
 php artisan event:cache
 
+# 3b. Permisos de runtime
+# Los workers corren como root (supervisord user=root) mientras php-fpm/nginx corren como www.
+# Si un worker es el primero en escribir storage/logs/laravel.log, el archivo nace root:root 644
+# y las peticiones web (www) ya no pueden escribirlo → cualquier Log:: en una request web
+# revienta con un 500 SIN dejar rastro (falla justo al intentar loguear el error).
+# Garantizamos que el árbol de runtime pertenezca a www antes de arrancar los procesos.
+mkdir -p storage/logs
+touch storage/logs/laravel.log
+chown -R www:www storage bootstrap/cache
+
 # 4. Iniciar Supervisor
 # Supervisor leerá el archivo laravel-worker.conf que creamos arriba
 # y arrancará Nginx, PHP-FPM y los Queue Workers.

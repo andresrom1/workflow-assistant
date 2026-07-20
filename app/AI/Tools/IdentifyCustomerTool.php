@@ -60,7 +60,17 @@ class IdentifyCustomerTool implements Mockable, Tool
         );
 
         if ($result['success']) {
-            $this->conversation->updateAiState(['customer_identified' => true]);
+            $this->conversation->refresh();
+
+            // El flag solo se prende si el customer YA tiene DNI. Si este identify()
+            // fue por email/phone (o el DNI que se dio no pasó validación), el paso
+            // de identificación sigue abierto — el agente tiene que pedir el DNI o
+            // el cliente declinarlo explícitamente (DeclineDniTool). Mismo criterio
+            // que InsuranceOrchestrator::tryAutoIdentifyByPhone. Ver ROADMAP Bitácora
+            // 2026-07-19.
+            if ($this->conversation->customer?->dni) {
+                $this->conversation->updateAiState(['customer_identified' => true]);
+            }
         }
 
         return json_encode($result);

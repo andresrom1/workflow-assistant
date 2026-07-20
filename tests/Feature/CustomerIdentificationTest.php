@@ -123,6 +123,49 @@ it('completes anonymous customer with dni', function () {
     $this->assertEquals(1, Customer::count()); // No duplicate
 });
 
+it('normaliza un DNI con puntos antes de guardarlo (mismo dato, otro formato)', function () {
+    $response = $this->postJson('/api/web-chat/v1/tools/identify-customer', [
+        'identifier_type' => 'dni',
+        'identifier_value' => '30.123.727',
+        'thread_id' => 'thread_test_dni_dots',
+        'openai_user_id' => $this->openaiUserId,
+        'sessionUuid' => $this->sessionUuid,
+    ]);
+
+    $response->assertStatus(200)->assertJson(['success' => true]);
+
+    expect(Customer::first()->dni)->toBe('30123727');
+});
+
+it('acepta un CUIL de 11 dígitos como identificador dni válido', function () {
+    $response = $this->postJson('/api/web-chat/v1/tools/identify-customer', [
+        'identifier_type' => 'dni',
+        'identifier_value' => '20301237277',
+        'thread_id' => 'thread_test_cuil',
+        'openai_user_id' => $this->openaiUserId,
+        'sessionUuid' => $this->sessionUuid,
+    ]);
+
+    $response->assertStatus(200)->assertJson(['success' => true]);
+
+    // Se guarda tal cual (solo-dígitos, sin reducir a DNI) — Customer::saving usa
+    // DocumentoIdentidad::normalizar, no clave().
+    expect(Customer::first()->dni)->toBe('20301237277');
+});
+
+it('rechaza un dni con una cantidad de dígitos que no es ni DNI (7-8) ni CUIT/CUIL (11)', function () {
+    $response = $this->postJson('/api/web-chat/v1/tools/identify-customer', [
+        'identifier_type' => 'dni',
+        'identifier_value' => '12345',
+        'thread_id' => 'thread_test_dni_invalido',
+        'openai_user_id' => $this->openaiUserId,
+        'sessionUuid' => $this->sessionUuid,
+    ]);
+
+    $response->assertStatus(422);
+    $this->assertDatabaseCount('customers', 0);
+});
+
 it('allows policy emission with dni and email', function () {
     // Create a customer directly with both DNI and email
     $customer = Customer::create([

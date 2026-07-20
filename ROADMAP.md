@@ -76,12 +76,140 @@
 | **Prompts `coverage_preference` (upsell no bloqueante) y bloque nuevo `shared_siniestro`** | `agent_prompts` (DB) | ⬜ código + `.md` de referencia listos (ver Bitácora 2026-07-19); el contenido final se entregó en chat para carga **manual** de Andrés en `agent_prompts` + `Cache::forget`. Hasta cargarlos, `CoveragePreferenceAgent` sigue con el upsell viejo (fricción de dos preguntas) y `siniestro_guidance` no tiene bloque de instrucciones propio (los 5 agentes ya tienen la tool inyectada, pero sin el `.md` activo en DB el LLM no sabe cuándo llamarla) |
 | Plantilla de reapertura (ventana 24h) para documentación de póliza que se emite tarde | `SendPolicyDocumentsToClient` | ⬜ hoy se asume que el envío de PDFs cae dentro de la ventana de 24h post-checkout; si `CapturePendingPolicyDocuments` agota los 10 reintentos (~10min) y la ventana ya cerró, el mensaje con los documentos no se puede enviar hasta que el cliente vuelva a escribir. Falta decidir si se resuelve con un template de Meta aprobado o con carga manual del admin como fallback |
 | Notificación al PAS ante siniestro reportado por WhatsApp | `SiniestroGuidanceTool` | ❌ descartada explícitamente (2026-07-19) — la tool solo devuelve indicaciones + contacto del PAS al cliente; a diferencia de `Mobile/SiniestroController` (que sí notifica al PAS), acá el cliente es quien contacta. Si se reconsidera, el puerto `WhatsAppDispatcher::siniestroNoticeToPas()` ya existe y está probado |
+| **Emisión de póliza inemitible por el DNI placeholder de cotización** | `VisredQuotationProvider::buildRequest`, `PolizaEmisionService`, `EmitirPoliza`, `CustomerIdentificationService`, `DeclineDniTool` | 🚧 Fases 0-4a ✅ (diagnóstico, sonda, visibilidad del fallo, checkout prudente, placeholder eliminado, gate de DNI en identificación — ver Bitácora 2026-07-19). ⬜ Fase 4b: cargar el prompt de `CustomerIdentifierAgent` en `agent_prompts` + `Cache::forget` — sin esto el agente todavía no pide el DNI |
 
 ---
 
 ## Bitácora
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
+
+- **2026-07-19** — **Diagnóstico: ninguna póliza se puede emitir hoy (DNI placeholder de cotización) — Fase 0 del fix verificada, código pendiente.**
+  Disparado por la revisión de una conversación real del piloto (conversation_id=3): el
+  checkout se completó, el cliente recibió "¡Listo!" y "tu póliza ya está en proceso de
+  emisión" por WhatsApp, pero nunca llegó documentación. Diagnóstico en prod (tinker):
+  `EmitirPoliza` había fallado 5 veces con `VisredApiException` — el log solo mostraba
+  "Error de validación." (mensaje opaco, `field_errors` nunca se logueaba en el camino de
+  emisión). Reproduciendo `PolizaEmisionService::emitir()` a mano, el 400 real es
+  `non_field_errors: ["Debes usar el mismo document_number que en la cotización"]`.
+  **Causa raíz:** la cotización manda un DNI placeholder (`config('visred.default_holder_dni')`,
+  decisión de junio, docs/v2/08 §2.2 y ROADMAP D8) porque el DNI real recién se captura en el
+  checkout, bajo el supuesto de que se podía "sobrescribir con el real al emitir". **Ese
+  supuesto nunca se verificó y es falso** — Visred exige coincidencia. Además, aunque se saque
+  el placeholder, hay un segundo desajuste independiente: la cotización usa `$customer->dni`
+  (normalizado por `DocumentoIdentidad` en `Customer::saving`) y la emisión usa `$session->dni`
+  (crudo del formulario del checkout, sin normalizar) — mismo cliente, dos formatos, mismo 400.
+  **Fase 0 (sonda contra el sandbox) ✅ verificada** — ver detalle en
+  `docs/v2/visred-integration/ROADMAP.md` Bitácora 2026-07-19: cotizar **sin** `person_holder`
+  (omitido, no placeholder) y emitir sobre ese `quotation_result_id` con un DNI real **funciona**
+  (Triunfo, `presale_id 32096`, `policy_number 1822203`). Confirma que la rama "cotizar sin DNI
+  si el cliente se niega" del plan es viable.
+  **Plan de fix acordado** (fases independientes, detalle completo en el plan de esta sesión):
+  Fase 1 — hacer visible el fallo de emisión (loguear `field_errors`, avisar al equipo primero
+  y al cliente después por WhatsApp sin pasar por el LLM, normalizar el DNI de la emisión,
+  fail-fast en 400, `quotes.status = 'emision_fallida'`). Fase 2 — el checkout deja de afirmar
+  que la póliza se emitió (pantalla de éxito + mensaje de WhatsApp), y se corrige que el 500 del
+  submit no se le mostraba al cliente. Fase 3 — sacar el placeholder, omitir `person_holder`
+  cuando no hay DNI real, guard de coincidencia DNI en el checkout (422 auto-corregible en vez
+  de 400 silencioso 10 minutos después), actualizar docs/v2/08. Fase 4 — pedir el DNI en
+  `CustomerIdentifierAgent` (explicando el motivo, avanza igual si se niega con 5 de 7
+  compañías), sin agregar flag nuevo a `ai_state` (tocaría 12 lugares y corre la numeración de
+  `agent_execution_logs.step`). **Código de las Fases 1-4b: aún no implementado**, arranca a
+  continuación de esta entrada.
+
+- **2026-07-19** — **Fases 1-4a del fix de emisión — implementadas y verificadas ✅ (código) / ⬜ (Fase 4b: carga del prompt).**
+  Continuación de la entrada anterior.
+  **Fase 1 — visibilidad del fallo de emisión.** `EmitirPoliza` loguea
+  `status`/`error_code`/`field_errors` de `VisredApiException` en vez de solo el mensaje genérico;
+  fail-fast (`$this->fail()`) en 400 `validation_error` (determinístico, no tiene sentido
+  reintentar 10 minutos). `failed()` avisa primero al equipo (`EmisionFallidaMail`, nuevo, mismo
+  patrón que `CheckoutCompletadoMail`) y después al cliente por WhatsApp sin pasar por el LLM
+  (`NotifyClientEmissionFailed`, nuevo, idempotente por `Cache::add` igual que
+  `SendPolicyDocumentsToClient`); marca `quotes.status = 'emision_fallida'` (antes quedaba en
+  `checkout_submitted`, indistinguible de "en vuelo") — con guard: si el quote ya está
+  `poliza_emitida` (falló algo POSTERIOR a la emisión, p. ej. persistir un PDF), `failed()` no
+  pisa el estado ni le avisa al cliente que falló algo que en realidad tiene emitido.
+  Se unificó el destinatario del mail interno a
+  `SettingsService::get('checkout.notifications_email', ...)` (existía un setting editable en el
+  admin que nadie leía).
+  **Descartado en la review:** se había movido los 3 dispatch + el mail **fuera** de la
+  `DB::transaction` de `CheckoutController::submit`, bajo el supuesto de que
+  `onConnection('database_ai')` era una conexión distinta y un worker podía ver el job antes del
+  commit. **El supuesto es falso:** las 4 conexiones de cola tienen `connection => null`, o sea
+  usan la misma conexión PDO que la transacción, así que los inserts en `jobs` ya eran atómicos.
+  Peor, sacarlos introducía una regresión: un fallo posterior al commit (p. ej. el mail) le
+  devolvía 500 al cliente con los datos ya guardados, y el reintento le daba 409. **Revertido** —
+  quedan adentro, con un comentario explicando por qué.
+  **Fase 2 — el checkout deja de afirmar la emisión.** `Checkout/Success.vue` y
+  `NotifyClientCheckoutCompleted` ya no dicen "tu póliza ya está en proceso de emisión" — dicen
+  que se está gestionando con la compañía. Se sacó el prop `email` de la pantalla de éxito (no
+  hacía nada real: ningún job le manda mail al cliente, WhatsApp es el único canal). Fix aparte:
+  `Checkout/Show.vue` no mostraba nada al cliente ante un 500 del submit (el spinner se apagaba
+  sin explicación) — ahora sí, con el `message` que ya devuelve el backend.
+  **Fase 3 — sin placeholder.** `VisredQuotationProvider::buildRequest` ya no cae a
+  `config('visred.default_holder_dni')` (eliminado de `config/visred.php`): manda
+  `person_holder` solo si el snapshot tiene DNI real, si no lo omite. Guard de coincidencia en
+  `CheckoutController::submit` (422 con `errors.dni`, auto-corregible por el cliente) comparando
+  por `DocumentoIdentidad::clave()` — no `normalizar()` — para no bloquear a alguien que dio el
+  CUIL en el chat y el DNI a secas en el checkout (misma persona, dígitos distintos tras solo
+  normalizar). `docs/v2/08-visred-quote-adapter.md` reescrito con la falsificación fechada.
+  **Corrección importante hallada en el camino:** `PolizaEmisionService` ahora manda en la
+  emisión el MISMO valor de `RiskSnapshot.dni` que ya viajó en la cotización (no una
+  normalización independiente de `CheckoutSession.dni`) — si son dígitos distintos tras
+  normalizar (CUIL vs DNI de la misma persona) mandar el del checkout hubiera roto la
+  coincidencia igual. Solo cae al DNI del checkout cuando la cotización no llevaba ninguno.
+  **Fase 4a — DNI en identificación de cliente (código; SIN flag nuevo en `ai_state`).**
+  `InsuranceOrchestrator::tryAutoIdentifyByPhone()` y `IdentifyCustomerTool` solo marcan
+  `customer_identified => true` si el customer resultante ya tiene DNI (el backfill de
+  nombre/teléfono sigue pasando siempre). Tool nueva `DeclineDniTool` — cierra el paso cuando el
+  cliente se niega explícitamente (nunca por inferencia del LLM); con guard: no cierra el paso
+  si todavía no hay ningún customer vinculado (conversación solo-BSUID, sin teléfono numérico),
+  para no dejar al cliente contra la pared en `identifyVehicle` (`missing_customer`). Registra
+  `conversation.metadata.dni_declined_at` (JSON libre, no toca `ai_state`). Validación del DNI
+  en `CustomerIdentificationService` ampliada: normaliza antes de validar (acepta guiones/puntos)
+  y acepta 11 dígitos (CUIT/CUIL), no solo 7-8.
+  **Bug encontrado en la review y corregido — `document_type_id` de 11 dígitos.** Aceptar CUIT/CUIL
+  en el chat abrió una vía NUEVA de cotización inemitible: el CUIL llega al snapshot, cotiza bien
+  (el request de cotización no lleva tipo de documento) pero la emisión lo rechazaba porque
+  `VisredEmissionProvider::buildHolder` hardcodeaba `document_type_id => 'dni'`. Aislado contra el
+  sandbox con el mismo `quotation_result_id`: `dni` → rechazado, `cuil` → rechazado, `cuit` →
+  aceptado. Fix en el adapter (`documentTypeIdFor()`), que además **arregla un bug latente
+  pre-existente**: un cliente con CUIT en `dni` (persona jurídica, o cargado desde checkout/ingesta/
+  admin) tampoco podía emitir. Verificado E2E por el adapter real. Se agregó también validación de
+  formato al campo `dni` del checkout (7-8 u 11 dígitos), que no tenía ninguna — antes entraba
+  cualquier texto y recién reventaba contra Visred.
+  **Fase 4b (prompt) — ⬜ pendiente.** El código de `DeclineDniTool` está listo y probado, pero
+  el prompt de `CustomerIdentifierAgent` todavía NO pide el DNI (el `.md`/row de `agent_prompts`
+  no se tocó a propósito — dos deploys separados, ver diseño de la Fase 4 arriba). Hasta que se
+  cargue, el agente sigue sin preguntar por el DNI y el gate de arriba simplemente deja el paso
+  abierto sin que nadie lo sepa pedir.
+  **Verificación:** suite completa recorrida por bloques (**676 tests, 0 fallos**; la memoria no
+  alcanza para un solo proceso — problema de infra pre-existente, no de este cambio). PHPStan
+  limpio (baseline regenerado: un entry menos, el `$session->email` que dejó de usarse).
+  `EmisionFallidaMail` se renderizó de verdad (`->render()`, ambas variantes con y sin
+  `field_errors`) porque `Mail::fake()` NO renderiza el blade y un error de plantilla habría
+  pasado los tests. La cadena real de identificación (sin mockear el adapter) se cubrió aparte:
+  dar `30.123.727` en el chat lo persiste como `30123727` y cierra el paso; identificar por
+  email NO lo cierra.
+  Nuevos tests: `EmitirPolizaFailureTest`, `NotifyClientEmissionFailedTest`,
+  `DeclineDniToolTest`, `IdentifyCustomerToolTest`, +casos en `PolizaEmisionServiceTest`,
+  `VisredQuotationProviderTest` (reescritos, ya no codifican el placeholder), `CheckoutControllerTest`
+  (guard de DNI, 4 casos), `CustomerIdentificationTest` (normalización + CUIL 11 dígitos),
+  `AutoIdentifyBackfillsNameTest` (partido en con-DNI/sin-DNI), `NotifyClientCheckoutCompletedTest`.
+  Tripwire `FunnelAnalyticsTest` ("returns all 5 steps") sigue verde — confirma que no se agregó
+  ninguna etapa. **Pendiente además de la Fase 4b:** el Paso 0 no llegó a confirmar si la prima
+  depende del DNI (queda como pregunta a Visred en `docs/v2/visred-integration/ROADMAP.md`).
+
+- **2026-07-19** — **Fix: checkout web daba 500 al enviar por permisos de `laravel.log` ✅ (código) / ⬜ (deploy).**
+  Síntoma: en el piloto, "confirmar y enviar" del checkout devolvía 500 sin nada en `laravel.log`.
+  Causa raíz: los workers de cola corren como **root** (supervisord `user=root`) y php-fpm/nginx como
+  **www**. El primer worker que loguea crea `storage/logs/laravel.log` como `root:root 644`, dejándolo
+  no-escribible para las peticiones web (www). Cualquier `Log::` en una request web reventaba justo al
+  intentar loguear → 500 con el error real ahogado (por eso no había rastro). Confirmado en prod: un
+  `chown www:www laravel.log` en caliente hizo que el submit pasara a 200. Fix permanente en
+  `.docker/start.sh`: pre-crear el log y `chown -R www:www storage bootstrap/cache` antes de arrancar
+  supervisor. **Pendiente: rebuild + `up -d`** (el chown en caliente es efímero; sin redeploy el bug
+  reaparece al recrear el contenedor).
 
 - **2026-07-19** — **Fricción de cobertura, post-checkout por WhatsApp y guía de siniestros — review de conversación real #2 ✅ (código) / ⬜ (prompts).**
   Disparado por la revisión de una conversación real del piloto (conversation_id=2): (1) el

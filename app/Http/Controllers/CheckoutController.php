@@ -14,6 +14,7 @@ use App\Services\CustomerConsolidationService;
 use App\Services\CustomerMergeService;
 use App\Services\SettingsService;
 use App\Services\Visred\VisredCatalogService;
+use App\Support\DocumentoIdentidad;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -21,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -189,7 +191,9 @@ class CheckoutController extends Controller
             // emisión Visred exige (D1); birthdate/sex_id/tax_condition_id idem.
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
-            'dni' => 'required|string|max:20',
+            // 7-8 dígitos (DNI) u 11 (CUIT/CUIL), tolerando puntos/guiones. Sin esto
+            // entraba cualquier texto y recién reventaba en la emisión contra Visred.
+            'dni' => ['required', 'string', 'max:20', 'regex:/^\D*(\d\D*){7,8}$|^\D*(\d\D*){11}$/'],
             'birthdate' => 'required|date',
             'sex_id' => 'required|string|max:20',
             'tax_condition_id' => 'required|string|max:50',
@@ -217,6 +221,22 @@ class CheckoutController extends Controller
             'photo_ids' => 'required|array',
             'photo_ids.*' => 'required|string|max:255',
         ]);
+
+        // Guard de coincidencia de DNI (aviso temprano, no la fuente de verdad — eso
+        // lo garantiza PolizaEmisionService::emissionDocumentNumber() mandando el
+        // mismo valor de la cotización). Comparamos por `clave()`, no `normalizar()`:
+        // el cliente puede haber dado el CUIL en el chat y el DNI a secas acá, y son
+        // la misma persona (`clave()` reduce ambos al DNI); un `normalizar()` a
+        // secas los vería como distintos y bloquearía a alguien honesto. Si la
+        // cotización no llevaba DNI (se omitió person_holder), no hay nada que
+        // comparar. Ver docs/v2/08 §2.2 y ROADMAP Bitácora 2026-07-19.
+        $snapshotDni = DocumentoIdentidad::clave($quote->riskSnapshot?->dni);
+        if ($snapshotDni !== null && $snapshotDni !== DocumentoIdentidad::clave($validated['dni'])) {
+            throw ValidationException::withMessages([
+                'dni' => 'El DNI no coincide con el que usamos para cotizar. Si te equivocaste corregilo; '
+                    .'si el titular es otra persona escribinos por WhatsApp y rehacemos la cotización.',
+            ]);
+        }
 
         // Validar cantidad de fotos en BD — valor configurable desde /admin/settings
         $requiredPhotoCount = (int) app(SettingsService::class)->get('checkout.required_photos', 7);
@@ -316,18 +336,30 @@ class CheckoutController extends Controller
                     $vehicle->update(['codigo_postal' => $validated['domicilio_cp']]);
                 }
 
-                // Despachar emisión de póliza (skeleton — cuando API esté lista, solo
-                // hay que implementar PolizaEmisionService::emitir())
+                // Los 3 side-effects van DENTRO de la transacción a propósito: las 4
+                // conexiones de cola (`database`, `database_ai`, …) tienen
+                // `connection => null`, o sea usan la MISMA conexión PDO que esta
+                // transacción, así que los inserts en `jobs` son atómicos con ella.
+                // Sacarlos afuera haría que un fallo posterior (p. ej. el mail) le
+                // devuelva 500 al cliente con los datos ya committeados — y el
+                // reintento le daría 409.
+
+                // Despachar emisión de póliza.
                 EmitirPoliza::dispatch($quote->id, $session->id);
 
                 // Agradecimiento inmediato al cliente por WhatsApp. La documentación
                 // llega en un mensaje aparte cuando la emisión la captura.
                 NotifyClientCheckoutCompleted::dispatch($quote->id);
 
-                // Notificación interna por mail
-                Mail::to(
-                    config('mail.checkout_notifications_to', config('mail.from.address'))
-                )->queue(new CheckoutCompletadoMail($quote, $session));
+                // Notificación interna por mail. El setting del admin
+                // (`checkout.notifications_email`) tiene prioridad si está cargado; si
+                // no, cae al mismo fallback de siempre.
+                $recipient = app(SettingsService::class)->get('checkout.notifications_email');
+                if (! is_string($recipient) || trim($recipient) === '') {
+                    $recipient = config('mail.checkout_notifications_to', config('mail.from.address'));
+                }
+
+                Mail::to($recipient)->queue(new CheckoutCompletadoMail($quote, $session));
             });
         } catch (\Throwable $e) {
             Log::error('CheckoutController: submit falló dentro de la transacción', [
@@ -360,9 +392,7 @@ class CheckoutController extends Controller
 
         abort_if($session === null, 404);
 
-        return Inertia::render('Checkout/Success', [
-            'email' => $session->email,
-        ]);
+        return Inertia::render('Checkout/Success');
     }
 
     /**

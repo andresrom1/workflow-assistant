@@ -1,6 +1,6 @@
 <?php
 
-use App\Jobs\NotifyClientCheckoutCompleted;
+use App\Jobs\NotifyClientEmissionFailed;
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\Conversation;
 use App\Models\Quote;
@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
-function quoteWithConversation(?Conversation $conversation = null): Quote
+function quoteWithConversationForEmissionFailure(?Conversation $conversation = null): Quote
 {
     $snapshot = RiskSnapshot::factory()->create();
     $conversation ??= Conversation::factory()->create();
@@ -20,7 +20,7 @@ function quoteWithConversation(?Conversation $conversation = null): Quote
         'session_uuid' => (string) Str::uuid(),
         'risk_snapshot_id' => $snapshot->id,
         'conversation_id' => $conversation->id,
-        'status' => 'checkout_submitted',
+        'status' => 'emision_fallida',
         'checkout_token' => (string) Str::uuid(),
     ]);
 }
@@ -35,9 +35,9 @@ it('dispatches SendWhatsAppMessage with the phone when the conversation has one'
         'external_conversation_id' => '5491112345678',
         'ext_user_id' => 'user_abc123',
     ]);
-    $quote = quoteWithConversation($conversation);
+    $quote = quoteWithConversationForEmissionFailure($conversation);
 
-    (new NotifyClientCheckoutCompleted($quote->id))->handle();
+    (new NotifyClientEmissionFailed($quote->id))->handle();
 
     Bus::assertDispatched(SendWhatsAppMessage::class, function (SendWhatsAppMessage $job) {
         $phone = (fn () => $this->phone)->call($job);
@@ -46,26 +46,7 @@ it('dispatches SendWhatsAppMessage with the phone when the conversation has one'
 
         return $phone === '5491112345678'
             && $bsuid === 'user_abc123'
-            && str_contains($text, 'Gracias por confiar en MANGO');
-    });
-});
-
-it('no afirma que la póliza ya se emitió — la emisión todavía puede fallar', function () {
-    $conversation = Conversation::factory()->create([
-        'external_conversation_id' => '5491112345678',
-        'ext_user_id' => 'user_abc123',
-    ]);
-    $quote = quoteWithConversation($conversation);
-
-    (new NotifyClientCheckoutCompleted($quote->id))->handle();
-
-    Bus::assertDispatched(SendWhatsAppMessage::class, function (SendWhatsAppMessage $job) {
-        $text = (fn () => $this->text)->call($job);
-
-        // "ya está en proceso de emisión" / "tu póliza ya" daban por hecho un
-        // resultado que EmitirPoliza todavía puede rechazar (ver EmitirPolizaFailureTest).
-        return ! str_contains($text, 'ya está en proceso de emisión')
-            && ! str_contains($text, 'tu póliza ya');
+            && str_contains($text, 'inconveniente');
     });
 });
 
@@ -74,9 +55,9 @@ it('dispatches SendWhatsAppMessage with only the bsuid when there is no phone', 
         'external_conversation_id' => 'user_abc123',
         'ext_user_id' => 'user_abc123',
     ]);
-    $quote = quoteWithConversation($conversation);
+    $quote = quoteWithConversationForEmissionFailure($conversation);
 
-    (new NotifyClientCheckoutCompleted($quote->id))->handle();
+    (new NotifyClientEmissionFailed($quote->id))->handle();
 
     Bus::assertDispatched(SendWhatsAppMessage::class, function (SendWhatsAppMessage $job) {
         $phone = (fn () => $this->phone)->call($job);
@@ -87,7 +68,16 @@ it('dispatches SendWhatsAppMessage with only the bsuid when there is no phone', 
 });
 
 it('does not dispatch anything when the quote id does not exist', function () {
-    (new NotifyClientCheckoutCompleted(999999))->handle();
+    (new NotifyClientEmissionFailed(999999))->handle();
 
     Bus::assertNotDispatched(SendWhatsAppMessage::class);
+});
+
+it('is idempotent: a second handle() for the same quote does not send a second message', function () {
+    $quote = quoteWithConversationForEmissionFailure();
+
+    (new NotifyClientEmissionFailed($quote->id))->handle();
+    (new NotifyClientEmissionFailed($quote->id))->handle();
+
+    Bus::assertDispatchedTimes(SendWhatsAppMessage::class, 1);
 });

@@ -84,30 +84,52 @@ POST /v1/patrimoniales/vehicles/cotizar/   (body: QuotationVehicleRequest)
 }
 ```
 
-> **`person_holder` en cotización — DNI placeholder (decisión 2026-06-10).** El campo
-> es *nominalmente* nullable, pero **varias compañías lo exigen para cotizar**. Sin
-> `person_holder`, las tasks de **San Cristóbal** y **Galicia** terminan en `FAILURE`
-> (mensaje `"person_holder es requerido (valor recibido: None)"` / `"Field required"`,
-> `code` `validation_error` · `external_service_unavailable`; confirmado live replicando
-> la Quote #23, 2026-06-10). Las otras 5 compañías (Mercantil, Experta, Sancor, Río
-> Uruguay, Triunfo) cotizan sin DNI.
+> **`person_holder` en cotización — sin placeholder (decisión 2026-07-19, reemplaza la
+> del 2026-06-10 más abajo).** El campo es *nominalmente* nullable, pero **varias
+> compañías lo exigen para cotizar**. Sin `person_holder`, las tasks de **San
+> Cristóbal** y **Galicia** terminan en `FAILURE` (mensaje `"person_holder es requerido
+> (valor recibido: None)"` / `"Field required"`, `code` `validation_error` ·
+> `external_service_unavailable`; confirmado live replicando la Quote #23, 2026-06-10).
+> Las otras 5 compañías (Mercantil, Experta, Sancor, Río Uruguay, Triunfo) cotizan sin
+> DNI.
 >
-> **Decisión:** el DNI real recién se captura en checkout, así que en cotización
-> mandamos **siempre un DNI placeholder configurable** —
-> `config('visred.default_holder_dni')` (env `VISRED_DEFAULT_HOLDER_DNI`, default
-> `30000000`)— y se **sobrescribe con el DNI real al EMITIR**
-> (`PreSaleVehicleRequest.person_holder`). Si ni el snapshot ni el config tienen DNI,
-> el bloque se omite (mandar `document_number` vacío → 400). Ancla:
-> `VisredQuotationProvider::buildRequest`.
+> **Decisión vigente:** se manda `person_holder` **solo si el snapshot ya tiene el DNI
+> real** del cliente (capturado en el chat). Si todavía no lo tiene, el bloque se
+> **omite** — se pierden San Cristóbal/Galicia en esa cotización puntual, pero la
+> emisión no se rompe. **NO se usa un placeholder inventado bajo ninguna circunstancia.**
+> Ancla: `VisredQuotationProvider::buildRequest`.
 >
-> **Cotización en dos fases — RECHAZADA (decisión del usuario 2026-06-10).** NO se
-> re-cotiza al capturar el DNI real: **una vez en checkout no se vuelve a la etapa de
-> cotización bajo ninguna circunstancia**. El precio que ve el cliente es el cotizado
-> con el placeholder; la emisión usa el DNI real del checkout.
+> **Por qué se descartó el placeholder (falsificado en prod, 2026-07-19).** La decisión
+> del 2026-06-10 (ver abajo) asumía que se podía cotizar con un DNI placeholder y
+> "sobrescribirlo con el real al emitir". Ese supuesto **nunca se verificó de punta a
+> punta** y es falso: Visred exige que el `document_number` de la emisión coincida
+> byte a byte con el de la cotización — reproducido en prod con
+> `PolizaEmisionService::emitir()`, 400 `validation_error`, `non_field_errors:
+> ["Debes usar el mismo document_number que en la cotización"]`. Con el placeholder,
+> **ninguna póliza se podía emitir**. Verificado en sandbox que omitir `person_holder`
+> por completo (no un placeholder) sí permite emitir después con el DNI real (Triunfo,
+> `presale_id 32096`, `policy_number 1822203`) — ver ROADMAP de la integración,
+> Bitácora 2026-07-19, para el detalle completo del diagnóstico y la sonda.
 >
-> **El placeholder DNI funciona; Galicia/San Cristóbal fallan por infra del sandbox —
-> hallazgo live 2026-06-10 (corrige hipótesis previa).** El placeholder **sí es
-> aceptado**: una cotización manual al sandbox con `document_number: 30000000` devolvió
+> **Cotización en dos fases — sigue RECHAZADA.** Esto no cambió: NO se re-cotiza al
+> capturar el DNI real en checkout — una vez ahí no se vuelve a la etapa de cotización
+> bajo ninguna circunstancia. Lo que cambió es CUÁNDO se captura el DNI real: ahora se
+> pide en el chat (identificación de cliente) antes de cotizar, en vez de inventarse un
+> valor para después corregirlo.
+>
+> ---
+>
+> **Decisión histórica 2026-06-10 (DESCARTADA — ver arriba).** Se mandaba **siempre un
+> DNI placeholder configurable** — `config('visred.default_holder_dni')` (env
+> `VISRED_DEFAULT_HOLDER_DNI`, default `30000000`) — que se decía "sobrescribir con el
+> DNI real al EMITIR". La config y el fallback se eliminaron del código
+> (`config/visred.php`); queda documentado acá solo como registro de la decisión que no
+> funcionó y por qué, para que no se vuelva a tomar.
+>
+> **El placeholder DNI cotiza bien; Galicia/San Cristóbal fallan por infra del sandbox —
+> hallazgo live 2026-06-10 (sigue siendo cierto, es ortogonal al problema de emisión).**
+> El placeholder **sí es aceptado al cotizar**: una cotización manual al sandbox con
+> `document_number: 30000000` devolvió
 > **San Cristóbal SUCCESS** (5 coberturas). Lo que bloquea a Galicia/San Cristóbal en
 > nuestras corridas es **`external_service_unavailable`** (503 en la tabla de errores
 > Visred, §2.5) — el **backend de la compañía no está disponible**, NO una validación
@@ -132,12 +154,16 @@ POST /v1/patrimoniales/vehicles/cotizar/   (body: QuotationVehicleRequest)
 > para tasks con `external_service_unavailable`** (transitorio), no para
 > `validation_error`.
 >
-> **⚠️ CONSULTAS a Visred** (con evidencia 2026-06-10): (1) ¿el
-> `external_service_unavailable` de Galicia/San Cristóbal es una **limitación conocida
-> del sandbox** o esperable también en prod? (2) Consecuencias de **cotizar con DNI
-> placeholder y emitir con el DNI real**: ¿la **prima depende del DNI** (scoring)?
-> ¿aceptan emitir contra un `quotation_result_id` cotizado con un DNI distinto?
-> ¿**re-tarifación silenciosa** o rechazo al emitir?
+> **⚠️ CONSULTA a Visred pendiente** (con evidencia 2026-06-10, la (1) sigue abierta):
+> ¿el `external_service_unavailable` de Galicia/San Cristóbal es una **limitación
+> conocida del sandbox** o esperable también en prod?
+>
+> **La pregunta (2) del 2026-06-10 quedó parcialmente contestada sin necesidad de
+> Visred (2026-07-19):** "¿aceptan emitir contra un `quotation_result_id` cotizado con
+> un DNI distinto?" — **no**, confirmado en prod (ver arriba). Lo que sigue abierto es
+> si la **prima depende del DNI** (scoring/perfil del titular): si la respuesta es sí,
+> cotizar sin DNI (rama del cliente que se niega a darlo) muestra un precio que no es
+> necesariamente el que se termina cobrando en la emisión.
 
 Para construir ese `version_id` hay una cadena de params (todos GET, todos auth):
 `/params/{vehicle_type}/brands/` → `/params/{vehicle_type}/{brand_id}/years/` → `/params/{vehicle_type}/{brand_id}/{year_id}/groups/` (solo auto) → `/params/{vehicle_type}/{brand_id}/{year_id}/versions/?group_id=...`.

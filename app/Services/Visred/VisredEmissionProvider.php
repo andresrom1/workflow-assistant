@@ -215,9 +215,11 @@ class VisredEmissionProvider implements EmissionProvider
      */
     private function buildHolder(array $holder): array
     {
+        $documentNumber = $holder['document_number'] ?? null;
+
         return array_filter([
-            'document_number' => $holder['document_number'] ?? null,
-            'document_type_id' => $holder['document_type_id'] ?? 'dni',
+            'document_number' => $documentNumber,
+            'document_type_id' => $holder['document_type_id'] ?? $this->documentTypeIdFor($documentNumber),
             'person_type_id' => $holder['person_type_id'] ?? 'fisica',
             'first_name' => $holder['first_name'] ?? null,
             'last_name' => $holder['last_name'] ?? null,
@@ -228,6 +230,27 @@ class VisredEmissionProvider implements EmissionProvider
             'phone_prefix' => $holder['phone_prefix'] ?? null,
             'phone_number' => $holder['phone_number'] ?? null,
         ], fn ($value): bool => $value !== null && $value !== '');
+    }
+
+    /**
+     * `document_type_id` del catálogo Visred deducido del número. Un documento de 11
+     * dígitos (CUIT o CUIL) DEBE declararse como `cuit`; mandarlo como `dni` — o
+     * incluso como `cuil`, que existe en el catálogo — hace que la emisión falle con
+     * `400 validation_error` / `field_errors: {person_holder: [""]}`.
+     *
+     * Verificado live contra el sandbox (2026-07-19) con el MISMO `quotation_result_id`
+     * variando sólo este campo: `dni` → rechazado, `cuil` → rechazado, `cuit` → aceptado.
+     * Importa porque `Customer.dni` legítimamente puede contener un CUIT/CUIL (persona
+     * jurídica, o alguien que dio el CUIL en el chat o en el checkout) y ese valor viaja
+     * tal cual al proveedor. Mapeo de catálogo del proveedor → vive en el adapter.
+     */
+    private function documentTypeIdFor(mixed $documentNumber): string
+    {
+        $digits = is_scalar($documentNumber)
+            ? preg_replace('/\D/', '', (string) $documentNumber)
+            : '';
+
+        return strlen((string) $digits) === 11 ? 'cuit' : 'dni';
     }
 
     /**

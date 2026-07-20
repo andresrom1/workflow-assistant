@@ -965,6 +965,16 @@ const submitForm = async () => {
       return
     }
 
+    // Error del servidor sin shape de validación (p. ej. 500): antes esto no
+    // mostraba nada — el spinner se apagaba en el finally sin explicación.
+    if (!res.ok && !data.errors) {
+      notice.value = {
+        title: 'No pudimos procesar el checkout',
+        message: data.message || 'Intentá de nuevo en unos minutos.',
+      }
+      return
+    }
+
     // Errores de validación
     if (data.errors) {
       Object.assign(errors, data.errors)

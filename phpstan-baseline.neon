@@ -91,12 +91,6 @@ parameters:
 			path: app/Http/Controllers/Admin/SettingsController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$email\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CheckoutController.php
-
-		-
 			message: '#^Call to an undefined method App\\Services\\QuoteService\:\:create\(\)\.$#'
 			identifier: method.notFound
 			count: 1

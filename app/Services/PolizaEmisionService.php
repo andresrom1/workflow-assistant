@@ -11,6 +11,8 @@ use App\Models\InspectionPhoto;
 use App\Models\Poliza;
 use App\Models\Quote;
 use App\Models\QuoteAlternative;
+use App\Models\RiskSnapshot;
+use App\Support\DocumentoIdentidad;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -202,7 +204,7 @@ class PolizaEmisionService
         $request = [
             'quotation_result_ref' => (string) $ref->external_quote_id,
             'holder' => [
-                'document_number' => $session->dni,
+                'document_number' => $this->emissionDocumentNumber($snapshot, $session),
                 'first_name' => $session->first_name,
                 'last_name' => $session->last_name,
                 'birthdate' => $session->birthdate?->format('Y-m-d'),
@@ -252,6 +254,25 @@ class PolizaEmisionService
         }
 
         return $request;
+    }
+
+    /**
+     * DNI a mandar en la emisión. Preferimos el MISMO valor que ya viajó en la
+     * cotización (`$snapshot->dni`, copia de `Customer.dni` ya normalizada por
+     * `Customer::saving`) — así "coincida con el de la cotización" (lo que exige
+     * Visred) es una garantía byte a byte, no una esperanza. Si un cliente dio el
+     * CUIL en el chat y el DNI (sin el wrapper) en el checkout, son dígitos
+     * distintos aunque sea la misma persona — mandar el del checkout ahí rompería
+     * igual. Solo cuando la cotización se hizo SIN DNI (`person_holder` omitido,
+     * ver VisredQuotationProvider) no hay nada que igualar, y se manda el del
+     * checkout normalizado (verificado en sandbox que Visred lo acepta: ROADMAP
+     * Bitácora 2026-07-19).
+     */
+    private function emissionDocumentNumber(?RiskSnapshot $snapshot, CheckoutSession $session): ?string
+    {
+        $snapshotDni = DocumentoIdentidad::normalizar($snapshot?->dni);
+
+        return $snapshotDni ?? DocumentoIdentidad::normalizar($session->dni) ?? $session->dni;
     }
 
     /**

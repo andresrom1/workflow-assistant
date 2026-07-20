@@ -143,16 +143,15 @@ class VisredQuotationProvider implements QuotationProvider
         ];
 
         // person_holder: varias compañías (San Cristóbal, Galicia) RECHAZAN la
-        // cotización sin DNI (FAILURE "person_holder es requerido"). El DNI real se
-        // captura recién en checkout, así que en cotización mandamos un placeholder
-        // configurable y se sobrescribe con el real al EMITIR — NO se re-cotiza. Si
-        // ni el snapshot ni el config traen DNI, se omite el bloque (mandar
-        // document_number vacío gatilla un 400). Decisión + consulta a Visred sobre
-        // el impacto en la prima: docs/v2/08 §2.2.
+        // cotización sin DNI (FAILURE "person_holder es requerido"), así que se manda
+        // cuando el snapshot ya tiene el DNI real del cliente. Si todavía no lo tiene,
+        // el bloque se OMITE (mandar document_number vacío gatilla un 400) — perdemos
+        // esas dos compañías en esa cotización puntual, pero la emisión no se rompe.
+        // NO usar un placeholder: Visred exige que el document_number de la emisión
+        // coincida con el de la cotización, y "coincida con un valor inventado" no es
+        // alcanzable — verificado en prod (ver docs/v2/08 §2.2 y ROADMAP Bitácora
+        // 2026-07-19). NO se re-cotiza al capturar el DNI real en checkout.
         $dni = trim((string) $snapshot->dni);
-        if ($dni === '') {
-            $dni = trim((string) config('visred.default_holder_dni'));
-        }
         if ($dni !== '') {
             $request['person_holder'] = ['document_number' => $dni];
         }

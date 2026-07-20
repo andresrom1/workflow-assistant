@@ -16,13 +16,7 @@
 
         <p class="text-sm leading-relaxed" style="color: var(--mg-fg-dim)">
           Recibimos tus datos de contratación.<br>
-          <span v-if="email">
-            Te escribimos a <strong style="color: var(--mg-fg)">{{ email }}</strong>
-            para confirmar la emisión de tu póliza.
-          </span>
-          <span v-else>
-            Tu productor asesor te contacta en breve para confirmar la emisión.
-          </span>
+          Estamos gestionando la emisión con la compañía — te confirmamos por este mismo WhatsApp.
         </p>
 
         <div class="mt-7 pt-5 text-xs"
@@ -36,8 +30,4 @@
 
 <script setup lang="ts">
 import MangoLayout from '@/layouts/MangoLayout.vue'
-
-defineProps<{
-  email: string | null
-}>()
 </script>

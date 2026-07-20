@@ -39,7 +39,11 @@ uses(RefreshDatabase::class);
  */
 function emittableQuote(bool $withRef = true, bool $requiresInspectionBefore = false): array
 {
-    $snapshot = RiskSnapshot::factory()->create();
+    // dni null: la cotización se cotizó sin person_holder (caso más común hoy — el
+    // cliente todavía no dio el DNI en el chat). PolizaEmisionService prefiere el DNI
+    // del snapshot cuando existe (para garantizar el match con Visred); en null cae
+    // al de la sesión, que es lo que la mayoría de estos tests asume.
+    $snapshot = RiskSnapshot::factory()->create(['dni' => null]);
     $conversation = Conversation::factory()->create();
 
     $quote = Quote::create([
@@ -218,6 +222,71 @@ it('arma el request neutro desde checkout + snapshot + la ref elegida', function
         ->and($captured['payment']['card']['number'])->toBe('4111111111111111')
         ->and($captured['payment']['card']['expire_month'])->toBe(12)
         ->and($captured['payment']['card']['expire_year'])->toBe(2027);
+});
+
+it('normaliza el DNI de la sesión antes de mandarlo a emisión (sin guiones/puntos)', function () {
+    [$quote, $session] = emittableQuote();
+    $session->update(['dni' => '36.356.190']);
+
+    $spy = new class implements EmissionProvider
+    {
+        use StubsPendingDocuments;
+
+        /** @var array<string, mixed>|null */
+        public ?array $captured = null;
+
+        public function emit(array $request): array
+        {
+            $this->captured = $request;
+
+            return [
+                'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 1,
+                'proposal_number' => 'PR', 'policy_number' => 'P', 'emission_status' => 'emitida',
+                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'documents' => [], 'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []], 'raw' => [],
+            ];
+        }
+    };
+    app()->instance(EmissionProvider::class, $spy);
+
+    app(PolizaEmisionService::class)->emitir($quote, $session);
+
+    // Debe coincidir byte a byte con lo que la cotización guardó en RiskSnapshot.dni
+    // (Customer::saving normaliza a solo-dígitos) — de lo contrario Visred rechaza
+    // la emisión aunque sea el mismo DNI escrito distinto.
+    expect($spy->captured['holder']['document_number'])->toBe('36356190');
+});
+
+it('prefiere el DNI del snapshot (el que ya viajó en la cotización) sobre el de la sesión si difieren', function () {
+    [$quote, $session] = emittableQuote();
+    // El cliente dio el CUIL en el chat (cotización) y el DNI a secas en el checkout:
+    // misma persona, dígitos distintos tras normalizar. La cotización YA le dijo a
+    // Visred "20717843183"; mandar "71784318" en la emisión rompería el match.
+    $quote->riskSnapshot->update(['dni' => '20717843183']);
+    $session->update(['dni' => '71784318']);
+
+    $spy = new class implements EmissionProvider
+    {
+        use StubsPendingDocuments;
+
+        /** @var array<string, mixed>|null */
+        public ?array $captured = null;
+
+        public function emit(array $request): array
+        {
+            $this->captured = $request;
+
+            return [
+                'task_id' => 't', 'status' => 'SUCCESS', 'presale_id' => 1,
+                'proposal_number' => 'PR', 'policy_number' => 'P', 'emission_status' => 'emitida',
+                'requires_inspection_after_emission' => false, 'company_id' => 'sancor', 'documents' => [], 'pending_documents' => ['token' => '', 'product_id' => 'auto', 'kinds' => []], 'raw' => [],
+            ];
+        }
+    };
+    app()->instance(EmissionProvider::class, $spy);
+
+    app(PolizaEmisionService::class)->emitir($quote, $session);
+
+    expect($spy->captured['holder']['document_number'])->toBe('20717843183');
 });
 
 it('lanza si la alternativa elegida no tiene quotation_result_id', function () {

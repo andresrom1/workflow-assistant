@@ -56,26 +56,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | DNI placeholder del titular (cotización)
-    |--------------------------------------------------------------------------
-    |
-    | El DNI real se captura recién en checkout, así que en cotización mandamos SIEMPRE
-    | este placeholder y se sobrescribe con el DNI real al EMITIR. Decisión: cotizar con
-    | DNI placeholder + emitir con el real. Cotización en dos fases RECHAZADA (una vez en
-    | checkout no se vuelve a cotizar). Ver docs/v2/08 §2.2.
-    |
-    | El placeholder FUNCIONA (San Cristóbal cotizó con 30000000 en test manual al
-    | sandbox). Galicia/San Cristóbal fallan INTERMITENTEMENTE por
-    | `external_service_unavailable` (503: backend de la compañía caído en sandbox), NO
-    | por el DNI ni por nuestro request — verificado live 2026-06-10 reproduciendo el
-    | request exacto. ⚠️ Consulta a Visred: ¿es limitación del sandbox o también en
-    | prod? ¿la prima depende del DNI? Ver docs/v2/08 §2.2.
-    |
-    */
-    'default_holder_dni' => env('VISRED_DEFAULT_HOLDER_DNI', '30123727'),
-
-    /*
-    |--------------------------------------------------------------------------
     | Mapa de fotos de inspección (Fase 5 — Pieza E)
     |--------------------------------------------------------------------------
     |

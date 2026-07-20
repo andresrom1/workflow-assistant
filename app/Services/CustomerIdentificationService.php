@@ -9,6 +9,7 @@ use App\Models\Customer;
 use App\Repositories\ConversationRepository;
 use App\Repositories\CustomerRepository;
 use App\Repositories\VehicleRepository;
+use App\Support\DocumentoIdentidad;
 use App\Traits\ConditionalLogger;
 
 class CustomerIdentificationService
@@ -34,6 +35,7 @@ class CustomerIdentificationService
      */
     public function findOrCreate(string $type, string $value): Customer
     {
+        $value = $this->normalizeIfDni($type, $value);
         $this->logCustomer('Service: Iniciando identificación', ['type' => $type, 'value' => $value]);
 
         $this->validateIdentifier($type, $value);
@@ -110,6 +112,7 @@ class CustomerIdentificationService
      */
     public function resolveForConversation(string $type, string $value, ?Customer $linked): Customer
     {
+        $value = $this->normalizeIfDni($type, $value);
         $this->validateIdentifier($type, $value);
 
         $existing = $this->findCustomer($type, $value);
@@ -182,14 +185,33 @@ class CustomerIdentificationService
     }
 
     /**
+     * Normaliza un identificador de tipo `dni` a solo-dígitos (idéntico a lo que
+     * `Customer::saving` va a dejar en la columna) para que la validación y la
+     * búsqueda por igualdad exacta ({@see findByDni}) funcionen con cualquier
+     * formato de entrada (guiones, puntos). No reduce CUIL/CUIT a DNI — ver
+     * {@see DocumentoIdentidad}; eso es la clave de dedup, no lo que
+     * se guarda en `dni`.
+     */
+    private function normalizeIfDni(string $type, string $value): string
+    {
+        if ($type !== 'dni') {
+            return $value;
+        }
+
+        return DocumentoIdentidad::normalizar($value) ?? $value;
+    }
+
+    /**
      * Validar el identificador según su tipo
      *
      * @throws \InvalidArgumentException Si el identificador es inválido
      */
     private function validateIdentifier(string $type, string $value): void
     {
+        // 7-8 dígitos: DNI. 11: CUIT/CUIL (el cliente puede dar cualquiera de los
+        // dos en el chat; ambos identifican al mismo titular — ver DocumentoIdentidad).
         $ok = match ($type) {
-            'dni' => preg_match('/^\d{7,8}$/', $value) === 1,
+            'dni' => preg_match('/^\d{7,8}$|^\d{11}$/', $value) === 1,
             'email' => filter_var($value, FILTER_VALIDATE_EMAIL) !== false,
             'phone' => $this->validatePhone($value),
             default => throw new \InvalidArgumentException("Tipo de identificador no soportado: {$type}"),
