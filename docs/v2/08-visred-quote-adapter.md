@@ -78,12 +78,26 @@ POST /v1/patrimoniales/vehicles/cotizar/   (body: QuotationVehicleRequest)
     "version_id": "AALCVEeg",      // token opaco de /params/.../versions/
     "year": 2017,
     "zero_kilometers": false,
-    "fuel_type_id": "sin-gnc",     // opcional; relevantes: "sin-gnc" | "gnc"
+    "fuel_type_id": "sin-gnc",     // opcional; DEBE ser "sin-gnc" | "gnc" (ver nota GNC)
     "insured_amount_fuel": 500000  // requerido solo si fuel_type_id="gnc"
   }
 }
 ```
 
+> **`fuel_type_id` es la pregunta binaria de GNC, NO el combustible del vehículo
+> (verificado live 2026-07-20).** En cotización el campo DEBE ser `sin-gnc` | `gnc`. Aunque
+> `GET /params/fuel-type/` lista 7 ids (`nafta`/`diesel`/`electrico`/`hibrido`/`gnc`/`con-gnc`/
+> `sin-gnc`) y `GET /v1/schema/` deja `fuel_type_id` como `string` **sin enum**, la restricción
+> a los dos valores la impone **cada compañía río abajo**: Galicia y Río Uruguay (RUS) rechazan
+> cualquier otro id con `Input should be 'sin-gnc' or 'gnc'` y la task termina en `FAILURE` (no un
+> 400 en `cotizar/`). El par binario es la **intersección** que aceptan las 13 compañías. Que sea
+> un binario lo confirma la emisión: `PreSaleVehicleDataRequest` no tiene campo de combustible —
+> pregunta GNC como booleano `has_gnc` (+ `gas_brand`/`gas_cylinder`/`gas_regulator`); en
+> cotización `fuel_type_id` es el correlato de ese `has_gnc`. Por eso `VisredQuotationProvider::FUEL_MAP`
+> mapea al binario (`gnc`/`con-gnc`→`gnc`; nafta/diesel/eléctrico/híbrido→`sin-gnc`; desconocido→omite).
+> Un mapeo a ids específicos (regresión 2026-06-08→corregida 2026-07-20) tira Galicia y RUS. Ver
+> ROADMAP de la integración, D7 + Bitácora 2026-07-20.
+>
 > **`person_holder` en cotización — sin placeholder (decisión 2026-07-19, reemplaza la
 > del 2026-06-10 más abajo).** El campo es *nominalmente* nullable, pero **varias
 > compañías lo exigen para cotizar**. Sin `person_holder`, las tasks de **San

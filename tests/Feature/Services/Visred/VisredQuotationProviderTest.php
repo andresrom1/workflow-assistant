@@ -160,10 +160,11 @@ it('manda insured_amount_fuel (default configurable) cuando el equipo es GNC', f
         && $r['vehicle']['fuel_type_id'] === 'gnc'
         && $r['vehicle']['insured_amount_fuel'] === 1_500_000);
 
-    // No-GNC: el campo NO se manda (Visred lo exige solo para 'gnc').
+    // No-GNC: el campo NO se manda (Visred lo exige solo para 'gnc'). Nafta mapea al
+    // binario 'sin-gnc' (fuel_type_id es la pregunta de GNC, no el combustible).
     app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('T_NAFTA', ['combustible' => 'nafta']));
     Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL
-        && $r['vehicle']['fuel_type_id'] === 'nafta'
+        && $r['vehicle']['fuel_type_id'] === 'sin-gnc'
         && ! isset($r['vehicle']['insured_amount_fuel']));
 });
 
@@ -197,7 +198,7 @@ it('omite person_holder si el snapshot todavía no tiene DNI (sin placeholder �
     Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL && ! isset($r['person_holder']));
 });
 
-it('mapea el combustible de dominio al fuel_type_id real del catálogo (nafta→nafta, diésel→diesel)', function () {
+it('mapea el combustible de dominio al binario sin-gnc/gnc (no al combustible específico)', function () {
     Http::fake([
         COMPANIES_URL => companiesResponse(),
         DISCOUNT_URL => Http::response([]),
@@ -205,11 +206,23 @@ it('mapea el combustible de dominio al fuel_type_id real del catálogo (nafta→
         'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [coverResult(1, 'rc', 'RC', 1.0)]),
     ]);
 
-    app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('T1', ['combustible' => 'nafta']));
-    Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL && $r['vehicle']['fuel_type_id'] === 'nafta');
+    // fuel_type_id es la pregunta binaria de GNC. Todo lo no-GNC → 'sin-gnc'; GNC → 'gnc'.
+    // Galicia y RUS rechazan cualquier otro valor (ver docs/v2/08 §2.2). Diésel con acento
+    // ejercita también la normalización de fuelTypeId.
+    $expected = [
+        'T_NAFTA' => ['nafta', 'sin-gnc'],
+        'T_DIESEL' => ['Diésel', 'sin-gnc'],
+        'T_ELEC' => ['electrico', 'sin-gnc'],
+        'T_HIB' => ['hibrido', 'sin-gnc'],
+        'T_CONGNC' => ['con-gnc', 'gnc'],
+    ];
 
-    app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken('T2', ['combustible' => 'Diésel']));
-    Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL && $r['vehicle']['fuel_type_id'] === 'diesel');
+    foreach ($expected as $token => [$combustible, $fuelTypeId]) {
+        app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken($token, ['combustible' => $combustible]));
+        Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL
+            && $r['vehicle']['version_id'] === $token
+            && $r['vehicle']['fuel_type_id'] === $fuelTypeId);
+    }
 });
 
 it('omite fuel_type_id cuando el combustible no se reconoce (sin asumir uno)', function () {

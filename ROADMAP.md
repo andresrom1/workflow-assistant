@@ -84,6 +84,23 @@
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
 
+- **2026-07-20** — **Fix cotización: `fuel_type_id` volvió al binario `sin-gnc`/`gnc` — RUS recuperado ✅.**
+  Reporte del usuario: "`Input should be 'sin-gnc' or 'gnc'` sigue ahí, Galicia y RUS fallan". Causa:
+  el mapeo de combustible a ids específicos del catálogo (`nafta`/`diesel`/…), introducido el
+  2026-06-08 como "mejora", es una **regresión** — `cotizar/` los acepta pero **Galicia y RUS
+  validan por su cuenta río abajo** y solo aceptan el binario, terminando la task en `FAILURE`
+  (no un 400). El smoke de junio no lo vio porque midió tasks CREADAS, no estado terminal SUCCESS.
+  Confirmado con **sondeo del schema en vivo** (`fuel_type_id` es `string` sin enum; emisión pregunta
+  GNC como booleano `has_gnc` → en cotización el campo es la pregunta de GNC, no el combustible) y con
+  **verificación live** (control `nafta` vs `sin-gnc`, mismo request): **RUS pasa de FAILURE →
+  SUCCESS**. Galicia sigue fallando pero por **otra causa** (`"Field required"` / infra
+  `external_service_unavailable`, con `nafta` y con `sin-gnc` por igual), ortogonal al combustible.
+  Fix: `VisredQuotationProvider::FUEL_MAP` binario (`gnc`/`con-gnc`→`gnc`; resto→`sin-gnc`;
+  desconocido→omite); `insured_amount_fuel` sigue en 1.500.000 cuando GNC; nuevo `logQuoteSummary`
+  (resumen por-compañía SUCCESS/FAILURE/PENDING) para no volver a quedar ciego. Tests: reescrito el
+  caso que blindaba la regresión. Suite Visred 14/14 + grupo 63/63 · PHPStan 0. Detalle en
+  `docs/v2/visred-integration/ROADMAP.md` (D7 + Bitácora 2026-07-20). _(rama `main`)_
+
 - **2026-07-19** — **CustomerIdentifierAgent: UX sin fricción + identidad del asistente.**
   Disparado por revisión de una conversación real (conversation_id=5): el agente atacaba con
   pedido de nombre y DNI apenas el cliente saludaba, sin saber si quería cotizar, y se

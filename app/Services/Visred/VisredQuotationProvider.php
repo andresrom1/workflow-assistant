@@ -32,24 +32,38 @@ class VisredQuotationProvider implements QuotationProvider
     private const DISCOUNT_PATH = '/v1/patrimoniales/vehicles/params/discount/';
 
     /**
-     * Combustible de dominio (`RiskSnapshot.combustible`) → `fuel_type_id` del
-     * catálogo Visred (verificado live D6). Sin default: lo desconocido se OMITE
-     * (el campo es opcional) para no asumir un combustible erróneo.
+     * Combustible de dominio (`RiskSnapshot.combustible`) → `fuel_type_id` de Visred.
+     *
+     * **Es un binario `sin-gnc` | `gnc`, NO el combustible específico.** En cotización
+     * `fuel_type_id` responde "¿tiene equipo de GNC?" (el correlato de `has_gnc` en
+     * emisión), no "qué combustible quema". Aunque `/params/fuel-type/` lista 7 ids
+     * (`nafta`/`diesel`/`electrico`/`hibrido`/`gnc`/`con-gnc`/`sin-gnc`) y el schema
+     * publicado deja `fuel_type_id` como string SIN enum, **cada compañía valida los
+     * valores por su cuenta río abajo**: Galicia y Río Uruguay (RUS) rechazan todo lo
+     * que no sea `sin-gnc`/`gnc` con `Input should be 'sin-gnc' or 'gnc'` → la task
+     * termina en FAILURE (no un 400 en `cotizar/`). El par binario es la INTERSECCIÓN
+     * que aceptan las 13 compañías, así que un solo request las sirve a todas.
+     *
+     * Verificado live contra `/v1/schema/` (2026-07-20): un único campo de combustible
+     * en `QuotationVehicleDataRequest`, sin enum; la emisión pregunta GNC como booleano
+     * (`has_gnc` en `PreSaleVehicleDataRequest`). Ver docs/v2/08 §2.2.
+     *
+     * Sin default: lo desconocido se OMITE (el campo es opcional) para no asumir GNC.
      */
     private const FUEL_MAP = [
-        'nafta' => 'nafta',
         'gnc' => 'gnc',
-        'con-gnc' => 'con-gnc',
+        'con-gnc' => 'gnc',
         'sin-gnc' => 'sin-gnc',
-        'diesel' => 'diesel',
-        'gasoil' => 'diesel',
-        'gas-oil' => 'diesel',
-        'gasoleo' => 'diesel',
-        'electrico' => 'electrico',
-        'electrica' => 'electrico',
-        'electric' => 'electrico',
-        'hibrido' => 'hibrido',
-        'hybrid' => 'hibrido',
+        'nafta' => 'sin-gnc',
+        'diesel' => 'sin-gnc',
+        'gasoil' => 'sin-gnc',
+        'gas-oil' => 'sin-gnc',
+        'gasoleo' => 'sin-gnc',
+        'electrico' => 'sin-gnc',
+        'electrica' => 'sin-gnc',
+        'electric' => 'sin-gnc',
+        'hibrido' => 'sin-gnc',
+        'hybrid' => 'sin-gnc',
     ];
 
     public function __construct(
@@ -73,7 +87,10 @@ class VisredQuotationProvider implements QuotationProvider
         $taskCompanies = $this->taskCompanies($taskList);
         $taskIds = array_keys($taskCompanies);
 
-        $taskResults = $this->poll($taskIds, $taskCompanies);
+        $outcome = ['succeeded' => [], 'failed' => [], 'pending' => []];
+        $taskResults = $this->poll($taskIds, $taskCompanies, $outcome);
+        $this->logQuoteSummary($taskCompanies, $outcome);
+
         // Solo resolvemos nombres de compañía si hubo resultados (evita la llamada
         // a /discovery/companies/ cuando se agotó el budget o todo falló).
         $companies = $taskResults === [] ? [] : $this->companyNames();
@@ -203,17 +220,24 @@ class VisredQuotationProvider implements QuotationProvider
      * Polling acotado por budget. Tolerante a parcial: devuelve las tasks que
      * resolvieron (SUCCESS) e ignora las que fallan (FAILURE) o no llegan a tiempo.
      *
+     * `$outcome` (out-param) recibe el desglose de task_ids por estado terminal
+     * (`succeeded`/`failed`/`pending`) para el resumen por-compañía que loguea
+     * {@see self::logQuoteSummary()}. Contar tasks resueltas vs fallidas —no tasks
+     * creadas— es lo que detecta una compañía caída de un vistazo.
+     *
      * @param  list<string>  $taskIds
      * @param  array<string, string>  $taskCompanies  task_id → company_id, para atribuir FAILURE en el log.
+     * @param  array{succeeded: list<string>, failed: list<string>, pending: list<string>}  $outcome
      * @return list<array<string, mixed>>
      */
-    private function poll(array $taskIds, array $taskCompanies = []): array
+    private function poll(array $taskIds, array $taskCompanies = [], array &$outcome = ['succeeded' => [], 'failed' => [], 'pending' => []]): array
     {
         $budget = (int) config('visred.poll_budget', 120);
         $interval = max(1, (int) config('visred.poll_interval', 4));
 
         $pending = array_fill_keys($taskIds, true);
         $results = [];
+        $outcome = ['succeeded' => [], 'failed' => [], 'pending' => []];
         $elapsed = 0;
 
         while ($pending !== []) {
@@ -226,6 +250,7 @@ class VisredQuotationProvider implements QuotationProvider
                     if (is_array($result)) {
                         $results[] = $result;
                     }
+                    $outcome['succeeded'][] = $taskId;
                     unset($pending[$taskId]);
                 } elseif ($status === 'FAILURE') {
                     // Capturamos el cuerpo del FAILURE para diagnosticar el motivo por
@@ -238,6 +263,7 @@ class VisredQuotationProvider implements QuotationProvider
                         'reason' => $this->failureReason($task),
                         'body' => $task,
                     ]);
+                    $outcome['failed'][] = $taskId;
                     unset($pending[$taskId]);
                 }
             }
@@ -250,7 +276,38 @@ class VisredQuotationProvider implements QuotationProvider
             $elapsed += $interval;
         }
 
+        $outcome['pending'] = array_keys($pending); // no terminaron dentro del budget.
+
         return $results;
+    }
+
+    /**
+     * Resumen de una cotización, en una línea: cuántas tasks resolvieron vs fallaron
+     * vs no llegaron a tiempo, y con qué compañías. Los FAILURE individuales ya se
+     * loguean en {@see self::poll()}; este resumen los junta para que una cotización
+     * degradada (p. ej. 2 de 13 compañías caídas) se vea de un vistazo sin reconstruir
+     * el conteo a mano — el agujero que dejó pasar la regresión de `fuel_type_id`.
+     *
+     * @param  array<string, string>  $taskCompanies  task_id → company_id
+     * @param  array{succeeded: list<string>, failed: list<string>, pending: list<string>}  $outcome
+     */
+    private function logQuoteSummary(array $taskCompanies, array $outcome): void
+    {
+        $companiesOf = fn (array $taskIds): array => array_values(array_unique(array_filter(
+            array_map(fn (string $id): string => $taskCompanies[$id] ?? '', $taskIds),
+            fn (string $company): bool => $company !== '',
+        )));
+
+        $total = count($outcome['succeeded']) + count($outcome['failed']) + count($outcome['pending']);
+
+        Log::info('[VisredQuote] Resumen de cotización', [
+            'tasks_total' => $total,
+            'succeeded' => count($outcome['succeeded']),
+            'failed' => count($outcome['failed']),
+            'pending' => count($outcome['pending']),
+            'failed_companies' => $companiesOf($outcome['failed']),
+            'pending_companies' => $companiesOf($outcome['pending']),
+        ]);
     }
 
     /**

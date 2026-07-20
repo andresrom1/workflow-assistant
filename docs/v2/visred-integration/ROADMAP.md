@@ -88,10 +88,12 @@ Separación de scopes (decisión del usuario 2026-06-07): la Fase 5 toca **solo 
 - **Inspección GNC verificada:** `tubo-gnc` y `oblea-gnc` existen live (sancor). `velocimetro` **NO** apareció en sancor → confirmar por-compañía (puede ser de otras).
 - **`company_id` (slug) ≠ slug de `coverage_documents`** (`rus` vs `rio-uruguay`) para el RAG — pendiente al tocar coverage-check (sin cambios).
 
-### D7 · ~~`fuel_type_id` inválido~~ — ❌ DESCARTADO como bug de `sin-gnc`, pero ⚠️ INCOMPLETO (ver 2026-06-09)
-- Verificación inicial truncó la lista de `fuel-type` a 6 filas y concluí mal que `sin-gnc` no existía. La lista **completa** es `["con-gnc","diesel","electrico","gnc","hibrido","nafta","sin-gnc"]` → **`sin-gnc` SÍ es válido** ("sin equipo GNC"). Smoke de `cotizar/` con `sin-gnc` y con `nafta` devolvió 13 tasks en ambos.
-- ⚠️ **Lo que el smoke NO probó (2026-06-09):** el path **`gnc`** exige `insured_amount_fuel` (400 si falta). Probar solo `sin-gnc`/`nafta` lo ocultó. Arreglado: ver bitácora 2026-06-09.
-- Pregunta abierta menor (no-bug): el binario colapsa nafta/diesel/eléctrico/híbrido en `sin-gnc`; si en algún momento se quisiera tarifar por combustible específico, habría que confirmar con Visred si cambia el precio (hoy ambos cotizan). No accionar sin esa confirmación.
+### D7 · `fuel_type_id` — ⚠️ REABIERTO y RESUELTO como bug real (2026-07-20)
+- **La conclusión de junio ("D7 descartado, `sin-gnc` es válido") era correcta pero irrelevante, y el "arreglo" del 2026-06-08 introdujo una regresión.** Ese día se cambió el mapeo de `sin-gnc`/`gnc` (binario) a los **ids específicos del catálogo** (`nafta`/`diesel`/`electrico`/`hibrido`), razonando que si `/params/fuel-type/` lista los 7, los 7 son válidos. Lo son **a nivel del request** — `cotizar/` los acepta y crea 13 tasks — pero **cada compañía valida de nuevo río abajo**, y Galicia/RUS solo aceptan el par binario.
+- **Por qué el smoke de junio no lo vio:** midió **tasks CREADAS** (13 con `sin-gnc`, 13 con `nafta` → "equivalente"), no **tasks con estado terminal SUCCESS**. El fan-out a 13 tasks es previo a la validación por compañía. Con la métrica correcta, `nafta` daba 11 SUCCESS + 2 FAILURE. **Contar tasks creadas no prueba nada.**
+- **Verificado live (2026-07-20), control `nafta` vs `sin-gnc`, mismo request:** RUS pasa de `FAILURE "Input should be 'sin-gnc' or 'gnc'"` → **SUCCESS**. **Fix confirmado para RUS.** El schema en vivo (`GET /v1/schema/`) confirma: `QuotationVehicleDataRequest.fuel_type_id` es `string` **sin enum** (la restricción binaria la impone la compañía, no el contrato); emisión pregunta GNC como booleano (`has_gnc`) → en cotización `fuel_type_id` **es la pregunta de GNC, no el combustible**.
+- **Galicia NO se recupera con esto:** falla `"Field required"` con `nafta` **y** con `sin-gnc` por igual (con DNI incluido) → es el bloqueo de infra pre-existente (`external_service_unavailable`, ver Pregunta pendiente #1), ortogonal al combustible. El binario es necesario también para Galicia pero no suficiente.
+- **Fix:** `FUEL_MAP` vuelve al binario (`gnc`/`con-gnc`→`gnc`; resto→`sin-gnc`; desconocido→omite). `insured_amount_fuel` sigue en 1.500.000 cuando GNC. Se agregó log de **resumen por-compañía** en `generateAlternatives` (SUCCESS/FAILURE/PENDING) para no volver a quedar ciego. Ver Bitácora 2026-07-20.
 
 ### D8 · Descuento (`discount_id`) — ✅ CERRADO (2026-06-08)
 - **No es checkout, es nuestro:** el descuento se decide en `workflow-assistant`. `discount_id` está en `PreSaleVehicleRequest` (**emisión**), NO en `QuotationVehicleRequest` → Visred no permite "cotizar con descuento".
@@ -121,11 +123,38 @@ Consolidado de consultas abiertas al proveedor (las dispersas en docs/v2/08, 10 
 2. **DNI placeholder en cotización vs DNI real en emisión — la mitad de esta pregunta ya se cayó (ver Bitácora 2026-07-19): el placeholder SÍ produce rechazo al emitir** (`non_field_errors: "Debes usar el mismo document_number que en la cotización"`, confirmado contra prod real). Verificado además que **omitir `person_holder` en la cotización no bloquea la emisión** con un DNI real distinto (sandbox, Triunfo, `presale_id 32096`). Queda pendiente de Visred solo: **¿la prima cotizada depende del DNI** (scoring/perfil del titular)? Si la respuesta es sí, cotizar sin DNI (o con uno placeholder) muestra un precio que no es el que se termina cobrando. (docs/v2/08 §2.2)
 3. **Topes de descuento por compañía (D8).** El catálogo `/params/discount/` lista descuentos **por encima** del máximo permitido al productor (Triunfo cataloga 30%, emitir >20% → 400). El tope no tiene endpoint (se descubre por el 400) y es por-compañía. **¿Hay forma de obtener los topes por compañía?** Y el `[]` que devuelven las demás en sandbox, **¿significa "sin descuentos" o "no cargado en sandbox"?** (ROADMAP D8)
 4. **Usuario de servicio vs personal.** `/discovery/companies/` es origin-aware (filtra por permisos del productor). Hoy autenticamos como `andresrom@gmail.com`. **¿Existe un usuario de servicio dedicado** para la identidad de MANGO, o seguimos con el del productor? (docs/v2/08 §2.4)
-5. **Tarifación por combustible específico (menor, no-bug).** El mapeo colapsa nafta/diésel/eléctrico/híbrido cuando no hay GNC. **¿El precio cambia según el combustible específico** (más allá de gnc/sin-gnc)? Hoy ambos cotizan; no accionar sin confirmación. (ROADMAP D7)
+5. **Tarifación por combustible específico (informativa, NO accionable de nuestro lado).** El request a cotización solo admite el binario `sin-gnc`/`gnc` (es lo que Visred pide y lo que aceptan las 13 compañías — ver D7). El mapeo colapsa nafta/diésel/eléctrico/híbrido en `sin-gnc`. **¿La prima varía según el combustible específico, más allá de GNC/no-GNC?** Esa pregunta solo la puede contestar Visred; no cambia el mapeo (mandamos lo que el contrato acepta). Si contestaran que sí varía, se evaluaría con ellos cómo expresarlo. (ROADMAP D7)
 
 ---
 
 ## Bitácora
+
+- **2026-07-20** — **`fuel_type_id`: regresión de junio corregida — RUS recuperado, Galicia sigue por otra causa.**
+  Disparado por el reporte del usuario ("`Input should be 'sin-gnc' or 'gnc'` sigue ahí — Galicia y
+  RUS fallan"). **Diagnóstico:** el mapeo de combustible a ids específicos del catálogo
+  (`nafta`/`diesel`/…), introducido el 2026-06-08 como "mejora", es una **regresión**: `cotizar/`
+  los acepta pero **Galicia y RUS validan por su cuenta río abajo** y solo aceptan el binario
+  `sin-gnc`/`gnc`, terminando en `FAILURE` (no en un 400). El default de `combustible` a `'nafta'`
+  en `IdentifyVehicleTool` hace que casi toda cotización dispare el fallo → no es intermitente.
+  **Por qué junio no lo vio:** el smoke midió tasks CREADAS (13 vs 13), no estado terminal SUCCESS.
+  **Sondeo del schema en vivo** (`GET /v1/schema/`, read-only): `QuotationVehicleDataRequest` tiene
+  UN solo campo de combustible (`fuel_type_id`, `string` **sin enum**) + `insured_amount_fuel`;
+  `PreSaleVehicleDataRequest` (emisión) pregunta GNC como booleano `has_gnc` (+ `gas_brand`/
+  `gas_cylinder`/`gas_regulator`). O sea `fuel_type_id` en cotización **es la pregunta de GNC**, no
+  el combustible; el par binario es la intersección que aceptan las 13.
+  **Verificación live (control `nafta` vs `sin-gnc`, mismo request, DNI incluido):**
+  - **RUS:** `nafta` → `FAILURE "Input should be 'sin-gnc' or 'gnc'"` → `sin-gnc` → **SUCCESS**. ✅ **Recuperado.**
+  - **Galicia:** `"Field required"` en AMBOS → es el bloqueo de infra pre-existente (Pregunta pendiente #1,
+    `external_service_unavailable`), **no** el combustible. El binario es necesario pero no suficiente para Galicia.
+  - **San Cristóbal:** `"Error desconocido."` en ambos → mismo bloqueo de infra, sin cambios.
+  **Fix:** `VisredQuotationProvider::FUEL_MAP` vuelve al binario (`gnc`/`con-gnc`→`gnc`; nafta/diesel/
+  electrico/hibrido→`sin-gnc`; desconocido→omite). `insured_amount_fuel` sigue en 1.500.000 cuando GNC
+  (decisión del usuario). Se agregó `logQuoteSummary` en `generateAlternatives` (resumen por-compañía
+  SUCCESS/FAILURE/PENDING) para que una cotización degradada se vea de un vistazo. Tests: se reescribió
+  el caso que blindaba la regresión (`nafta→nafta` → `nafta→sin-gnc`, +electrico/hibrido/con-gnc). Suite
+  Visred 14/14 + grupo 63/63 verde, PHPStan 0.
+  **Archivos:** `VisredQuotationProvider` (`FUEL_MAP`, `poll` con out-param de outcome, `logQuoteSummary`),
+  `VisredQuotationProviderTest`.
 
 - **2026-07-19** — **El DNI placeholder de D8/junio no funciona en emisión: falsificado en prod y en sandbox.**
   Disparado por un checkout real (piloto, conversation_id=3) donde `EmitirPoliza` falló 5 veces
