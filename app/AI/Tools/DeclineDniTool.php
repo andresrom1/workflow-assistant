@@ -12,7 +12,7 @@ use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
 /**
- * El cliente prefirió NO dar su DNI/CUIT tras la explicación del motivo. Cierra
+ * El cliente no dio su DNI/CUIT tras la única pregunta (negativa explícita u omisión). Cierra
  * el paso de identificación igual — sin esto, un cliente que se niega queda
  * repreguntado para siempre (el agente no tiene otra forma de avanzar). NO
  * inventa un DNI: cotizar sin uno omite `person_holder`
@@ -37,9 +37,9 @@ class DeclineDniTool implements Mockable, Tool
 
     public function description(): string
     {
-        return 'Registra que el cliente prefirió NO dar su DNI/CUIT después de que se le explicó '
-            .'el motivo. Usar SOLO tras una negativa explícita del cliente, nunca por inferencia. '
-            .'Avanza igual a la siguiente etapa — nunca inventar ni asumir un DNI.';
+        return 'Registra que el cliente no dio su DNI/CUIT después de la única pregunta con su motivo: '
+            .'sea una negativa explícita o que simplemente lo omitió en su respuesta. '
+            .'Avanza igual a la siguiente etapa — nunca inventar ni asumir un DNI, nunca volver a pedirlo.';
     }
 
     /**

@@ -84,6 +84,27 @@
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
 
+- **2026-07-19** — **CustomerIdentifierAgent: UX sin fricción + identidad del asistente.**
+  Disparado por revisión de una conversación real (conversation_id=5): el agente atacaba con
+  pedido de nombre y DNI apenas el cliente saludaba, sin saber si quería cotizar, y se
+  presentó como "Juan, productor asesor" — nombre inventado, no definido en ningún prompt.
+  **Fix:** `CustomerIdentifierAgent.md` reescrito — saludo abierto sin pedir datos; nombre+DNI
+  se piden **una sola vez**, juntos, y solo cuando el cliente expresó intención de cotizar.
+  `DeclineDniTool` ampliada para cerrar el paso tanto ante negativa explícita como ante
+  omisión silenciosa (antes solo cubría la negativa, lo que podía trabar al agente
+  repreguntando indefinidamente si el cliente ignoraba el DNI sin negarse). El cierre hacia la
+  etapa de vehículo ahora pide **los 7 datos del auto juntos** en vez de "marca y modelo": antes
+  preguntábamos dos, el cliente contestaba dos y `VehicleIdentifierAgent` le pedía el resto —
+  un turno extra de fricción por conversación. Documentada también la salida del caso BSUID
+  (`decline_dni` → `missing_customer`): ahí el agente sí pide email o teléfono, único camino
+  para avanzar cuando el `wa_id` no es numérico y `tryAutoIdentifyByPhone` no vinculó a nadie.
+  Identidad del asistente fijada en `shared_style.md`: "el asistente de MANGO", sin nombre
+  propio, prohibido inventarse uno. Alcance acotado a propósito: `identify_customer` no persiste el nombre dicho
+  en el chat — el contacto (teléfono/WBID) ya está resuelto por `tryAutoIdentifyByPhone`, y el
+  DNI sigue sin ser bloqueante para avanzar. PHPStan 0 nuevos · tests `DeclineDniTool`/
+  `DeclineDniFlow`/`IdentifyCustomerTool` verdes. Prompts sincronizados manualmente vía
+  `/admin/agent-prompts` (no vía tinker).
+
 - **2026-07-19** — **Diagnóstico: ninguna póliza se puede emitir hoy (DNI placeholder de cotización) — Fase 0 del fix verificada, código pendiente.**
   Disparado por la revisión de una conversación real del piloto (conversation_id=3): el
   checkout se completó, el cliente recibió "¡Listo!" y "tu póliza ya está en proceso de
