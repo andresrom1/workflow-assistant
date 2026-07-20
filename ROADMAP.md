@@ -221,6 +221,20 @@
   ninguna etapa. **Pendiente además de la Fase 4b:** el Paso 0 no llegó a confirmar si la prima
   depende del DNI (queda como pregunta a Visred en `docs/v2/visred-integration/ROADMAP.md`).
 
+- **2026-07-20** — **Fix: checkout fallaba con `customers_dni_unique` por índice único total vs SoftDeletes ✅ (código) / ⬜ (deploy).**
+  Síntoma: "No pudimos procesar el checkout" (500 capturado). Causa raíz: los índices únicos de
+  `customers.dni` / `.email` eran **totales**, pero `Customer` usa SoftDeletes — una fila borrada
+  seguía ocupando el slot del DNI, **invisible para Eloquent** (global scope) y visible para
+  Postgres. El guard de clave única de `CustomerConsolidationService` y el `reconcile()` de
+  `CustomerMergeService` consultan con el scope activo, así que no veían el conflicto: escribían
+  el DNI igual y la transacción entera del submit abortaba. Caso real en prod: customer `id=4`
+  soft-deleted a las 03:30 retenía `dni=30123727`; el checkout intentó escribirlo en `id=6` a las
+  03:50. Fix: migración `make_customers_unique_keys_partial_on_soft_delete` — índices únicos
+  **parciales** (`WHERE deleted_at IS NULL`). Ahora la restricción ve exactamente lo mismo que la
+  app y los lookups quedan correctos por construcción; borrar un customer libera su DNI/email.
+  Decisión de dominio del usuario: borrado = fuera del espacio de identidad. 2 tests de regresión
+  en `CustomerConsolidationTest`; PHPStan 0.
+
 - **2026-07-19** — **Fix: checkout web daba 500 al enviar por permisos de `laravel.log` ✅ (código) / ⬜ (deploy).**
   Síntoma: en el piloto, "confirmar y enviar" del checkout devolvía 500 sin nada en `laravel.log`.
   Causa raíz: los workers de cola corren como **root** (supervisord `user=root`) y php-fpm/nginx como

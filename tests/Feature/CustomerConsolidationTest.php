@@ -91,6 +91,32 @@ it('tampoco escribe un email que ya pertenece a otro customer', function (): voi
     expect($placeholder->refresh()->email)->toBeNull();
 });
 
+it('un customer soft-deleted NO bloquea el dni: el índice único es parcial', function (): void {
+    // Regresión del 500 de checkout (prod, 2026-07-20): los índices únicos eran totales,
+    // así que una fila borrada retenía el slot del dni — invisible para Eloquent (global
+    // scope de SoftDeletes) pero no para Postgres. El guard de clave única no veía el
+    // conflicto, escribía el dni igual y la transacción entera del submit se caía.
+    $borrado = Customer::factory()->create(['dni' => '30123727']);
+    $borrado->delete();
+
+    $vivo = Customer::factory()->create(['dni' => null]);
+
+    $this->service->apply($vivo, ['dni' => '30123727'], 'checkout');
+
+    expect($vivo->refresh()->dni)->toBe('30123727');
+});
+
+it('un customer soft-deleted NO bloquea el email: el índice único es parcial', function (): void {
+    $borrado = Customer::factory()->create(['email' => 'dup@bar.com']);
+    $borrado->delete();
+
+    $vivo = Customer::factory()->create(['email' => null]);
+
+    $this->service->apply($vivo, ['email' => 'dup@bar.com'], 'checkout');
+
+    expect($vivo->refresh()->email)->toBe('dup@bar.com');
+});
+
 it('normaliza email a minúsculas y registra provenance por campo', function (): void {
     $customer = Customer::factory()->create(['email' => null]);
 

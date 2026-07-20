@@ -105,8 +105,11 @@ class CustomerMergeService
                 'loser_id' => $loser->id,
             ]);
 
-            // Hard delete: el índice único de dni/email NO es parcial, un soft-delete
-            // retendría el slot e impediría que el survivor tome esas claves.
+            // Hard delete: el perdedor deja de existir como identidad y sus FKs ya se
+            // repuntaron arriba, así que un soft-delete solo dejaría una cáscara huérfana.
+            // (Desde que los índices únicos de dni/email son parciales sobre
+            // `deleted_at IS NULL`, un soft-delete también liberaría el slot — pero acá
+            // no hay nada que archivar.)
             $loser->forceDelete();
 
             // Survivorship por campo: gana la fuente más confiable (admin > checkout > chat),
