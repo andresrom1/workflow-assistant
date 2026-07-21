@@ -84,11 +84,7 @@ TXT;
             return $customer->pas;
         }
 
-        $email = config('mango.default_pas_email');
-        if (! is_string($email) || $email === '') {
-            return null;
-        }
-
-        return User::pas()->where('email', $email)->first();
+        // Fuente única de verdad del PAS por default (config con fallback canónico).
+        return User::defaultPas();
     }
 }

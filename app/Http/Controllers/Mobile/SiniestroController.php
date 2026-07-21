@@ -93,18 +93,7 @@ class SiniestroController extends Controller
         }
 
         // Tier 3: PAS por default de MANGO. Mejor un PAS que un 0800 o nada.
-        return $this->defaultPas();
-    }
-
-    private function defaultPas(): ?User
-    {
-        $email = config('mango.default_pas_email');
-        if (! is_string($email) || $email === '') {
-            return null;
-        }
-
-        return User::pas()
-            ->where('email', $email)
-            ->first();
+        // Fuente única de verdad del default (resuelve por config con fallback canónico).
+        return User::defaultPas();
     }
 }

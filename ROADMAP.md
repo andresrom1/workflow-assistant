@@ -84,6 +84,23 @@
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
 
+- **2026-07-20** — **Red de seguridad: ningún Customer sin PAS (nacimiento + borrado).** Reporte:
+  un customer terminó el checkout con `pas_id = null`; el mobile lo consume (bloque "TU PRODUCTOR" +
+  CTAs Llamar/WhatsApp). Dos causas: (1) la creación real (chat `CustomerIdentificationService::createCustomer`
+  → `CustomerRepository::create` y checkout `consolidation->apply`) **nunca** asignaba `pas_id` — solo lo
+  hacía el backfill de una vez del `CustomerSeeder`; (2) la FK `customers.pas_id` es `nullOnDelete`, así que
+  borrar un PAS ponía en null a todos sus customers (`Admin/UserController::destroy` no reasignaba). Fix en
+  tres capas apoyadas en un resolver unificado **`User::defaultPas()`** (config `mango.default_pas_email` con
+  fallback al canónico `AdminUserSeeder::EMAIL`): (a) `CustomerRepository::create` asigna el default si no
+  viene `pas_id`; (b) evento `deleting` en `User` reasigna los customers del PAS borrado al default antes de
+  que dispare el `nullOnDelete`; (c) guard en `UserController::destroy` (403) que impide borrar al PAS por
+  default + `DB::transaction`. Unificado también `SiniestroController::defaultPas()` y `SiniestroGuidanceTool`
+  para consumir el resolver (elimina la segunda fuente de verdad que devolvía null si faltaba la env).
+  Config hardcodeada marcada con `// opcion-de-configuracion` y registrada en
+  `docs/configuracion-hardcodeada.md` (insumo del refactor de settings, sin tocar `SystemSetting`).
+  Fuera de alcance: vista de perfil por-PAS (teléfono/matrícula) y reasignación manual del customer huérfano
+  existente. Tests: `tests/Feature/PasSafetyNetTest.php` (6) + `SeedPasAssignmentTest`/`SiniestroTest`/
+  `SiniestroGuidanceToolTest` (14) verdes; PHPStan 0. _(rama `main`)_
 - **2026-07-20** — **Fix cotización: `fuel_type_id` volvió al binario `sin-gnc`/`gnc` — RUS recuperado ✅.**
   Reporte del usuario: "`Input should be 'sin-gnc' or 'gnc'` sigue ahí, Galicia y RUS fallan". Causa:
   el mapeo de combustible a ids específicos del catálogo (`nafta`/`diesel`/…), introducido el

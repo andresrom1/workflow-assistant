@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\UserRole;
 use Database\Factories\UserFactory;
+use Database\Seeders\AdminUserSeeder;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -77,6 +78,43 @@ class User extends Authenticatable implements MustVerifyEmail
     public function scopePas(Builder $query): void
     {
         $query->whereIn('role', [UserRole::Pas, UserRole::Admin]);
+    }
+
+    /**
+     * PAS por default de MANGO — fuente única de verdad para todo destino de
+     * "último recurso": asignación de un customer nuevo, reasignación al borrar
+     * un PAS, aviso de siniestro sin PAS propio, etc.
+     *
+     * Se resuelve por `config('mango.default_pas_email')` y, si esa env no está
+     * seteada (típico en prod recién desplegado), cae al email canónico del
+     * operador ({@see AdminUserSeeder::EMAIL}). Así nunca devuelve null por una env
+     * faltante mientras exista el admin sembrado.
+     */
+    public static function defaultPas(): ?self
+    {
+        $email = config('mango.default_pas_email');
+        if (! is_string($email) || trim($email) === '') {
+            $email = AdminUserSeeder::EMAIL; // opcion-de-configuracion: email del operador/PAS por default (fallback)
+        }
+
+        return self::pas()->where('email', $email)->first();
+    }
+
+    /**
+     * Al borrar un PAS, reasignar sus customers al PAS por default ANTES de que la
+     * FK `nullOnDelete` los deje huérfanos (ver migración de `customers.pas_id`).
+     * Es la red profunda: cubre cualquier vía de borrado (controller, tinker, tests).
+     * El caso "se borra el propio default" lo bloquea el guard del controller.
+     */
+    protected static function booted(): void
+    {
+        static::deleting(function (self $user): void {
+            $default = self::defaultPas();
+
+            if ($default !== null && $default->id !== $user->id) {
+                Customer::where('pas_id', $user->id)->update(['pas_id' => $default->id]);
+            }
+        });
     }
 
     public function pasMatricula(): ?string

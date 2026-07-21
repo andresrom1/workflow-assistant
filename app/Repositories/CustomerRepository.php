@@ -5,6 +5,7 @@
 namespace App\Repositories;
 
 use App\Models\Customer;
+use App\Models\User;
 use App\Models\Vehicle;
 use App\Support\DocumentoIdentidad;
 use App\Traits\ConditionalLogger;
@@ -69,6 +70,14 @@ class CustomerRepository
 
         if (! $isAnonymous) {
             $data['completed_at'] = now();
+        }
+
+        // Red de seguridad: todo customer nace con el PAS por default asignado (asesor
+        // dedicado, spec v2 §1). Sin esto, un customer creado por chat/checkout queda sin
+        // PAS y el mobile no puede mostrar el bloque "TU PRODUCTOR". Se respeta un pas_id
+        // explícito si el caller lo pasa.
+        if (! array_key_exists('pas_id', $data)) {
+            $data['pas_id'] = User::defaultPas()?->id;
         }
 
         return Customer::create($data);

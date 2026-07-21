@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreUserRequest;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -62,7 +63,15 @@ class UserController extends Controller
             abort(403, 'No podés eliminar tu propia cuenta.');
         }
 
-        $user->delete();
+        // El PAS por default es el destino de reasignación al borrar otros PAS; si se
+        // borrara a sí mismo, sus customers quedarían sin PAS. Se protege.
+        if (User::defaultPas()?->id === $user->id) {
+            abort(403, 'No podés eliminar al PAS por default de MANGO.');
+        }
+
+        // Atómico: el evento `deleting` reasigna los customers del PAS al default antes
+        // del delete; que ambos vivan/mueran juntos.
+        DB::transaction(fn () => $user->delete());
 
         return redirect()->route('admin.users.create')
             ->with('success', "Usuario {$user->name} eliminado.");

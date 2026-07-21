@@ -16,6 +16,7 @@ return [
     | el PAS por default es siempre el de pruebas (Andrés en dev).
     |
     */
+    // opcion-de-configuracion: email del operador/PAS por default (fallback canónico en User::defaultPas)
     'default_pas_email' => env('MANGO_DEFAULT_PAS_EMAIL', env('MANGO_DEV_PAS_EMAIL')),
 
     /*
@@ -29,5 +30,6 @@ return [
     | vale el `customer_id` linkeado. Único switch del des-mockeo (ROADMAP F10).
     |
     */
+    // opcion-de-configuracion: match laxo de customer por email (fase mock)
     'mock_customer_matching' => env('MANGO_MOCK_CUSTOMER_MATCHING', true),
 ];

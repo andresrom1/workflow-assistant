@@ -26,23 +26,26 @@ use Illuminate\Support\Facades\Hash;
 class AdminUserSeeder extends Seeder
 {
     /** Email canónico del operador (admin + PAS por default). Fuente de verdad para CustomerSeeder. */
+    // opcion-de-configuracion: email del operador/PAS por default
     public const EMAIL = 'andresrom@gmail.com';
 
     public function run(): void
     {
         $admin = User::firstOrNew(['email' => self::EMAIL]);
 
+        // opcion-de-configuracion: nombre del operador
         $admin->name = env('MANGO_DEV_PAS_NAME') ?: ($admin->name ?: 'Andrés Romero');
         $admin->role = UserRole::Admin;
 
         // Solo seteamos password al crear: no pisamos la de un admin ya logueado.
         if (! $admin->exists) {
-            $admin->password = Hash::make('changeme-2026');
+            $admin->password = Hash::make('changeme-2026'); // opcion-de-configuracion: password inicial del admin sembrado
         }
 
         // Perfil de PAS. `?:` (no el default de env()) para que un env vacío
         // igual caiga al default: matrícula y teléfono deben quedar SIEMPRE
-        // presentes, o el mobile crashea al parsear el PAS del siniestro.
+        // presentes, o el mobile no puede ofrecer los CTAs de contacto del PAS.
+        // opcion-de-configuracion: perfil del PAS por default (candidatos a vista de perfil por-PAS)
         $admin->metadata = array_filter([
             'matricula' => env('MANGO_DEV_PAS_MATRICULA') ?: '97072',
             'phone' => env('MANGO_DEV_PAS_PHONE') ?: '+5493516280778',
