@@ -35,12 +35,6 @@ return [
         ],
     ],
 
-    'poliza_api' => [
-        'base_url' => env('POLIZA_API_BASE_URL'),
-        'key' => env('POLIZA_API_KEY'),
-        'timeout' => env('POLIZA_API_TIMEOUT', 30),
-    ],
-
     'whatsapp' => [
         'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
         'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),

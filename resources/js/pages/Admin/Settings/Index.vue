@@ -15,34 +15,6 @@
         <BackLink href="/admin/checkout-sessions" label="Auditoría" />
       </div>
 
-<!-- Dashboard de estado -->
-      <div class="rounded-[14px] p-5"
-        style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-        <h2 class="text-[11px] font-semibold uppercase tracking-wider mb-4" style="color: var(--text-3);">
-          Estado actual del sistema
-        </h2>
-
-        <!-- Stat cards -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard
-            v-for="stat in stats" :key="stat.key"
-            :value="stat.value"
-            :label="stat.label"
-            :ok="stat.ok"
-          />
-        </div>
-
-        <!-- Endpoints -->
-        <div class="mt-4 pt-4 grid grid-cols-1 md:grid-cols-2 gap-3"
-          style="border-top: 1px solid var(--border-sub);">
-          <EndpointRow
-            label="API de Emisión"
-            :url="getSetting('poliza_api.base_url')"
-            :has-secret="!!getSetting('poliza_api.key')"
-          />
-        </div>
-      </div>
-
       <!-- Un card por grupo -->
       <div v-for="group in groups" :key="group.key"
         class="rounded-[14px] overflow-hidden"
@@ -173,50 +145,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, defineComponent, h } from 'vue'
-import { usePage, router } from '@inertiajs/vue3'
+import { reactive } from 'vue'
+import { router } from '@inertiajs/vue3'
 import BackLink from '@/components/UI/BackLink.vue'
-
-// ─── Sub-componentes inline con tokens CSS ────────────────────────────────
-
-const StatCard = defineComponent({
-  props: { value: String, label: String, ok: Boolean },
-  setup(props) {
-    return () => h('div', {
-      style: 'background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-card);'
-    }, [
-      h('p', {
-        style: `font-size: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; color: ${props.ok === false ? '#dc2626' : 'var(--text-1)'};`
-      }, props.value),
-      h('p', {
-        style: 'font-size: 11px; color: var(--text-3); margin-top: 4px;'
-      }, props.label),
-    ])
-  }
-})
-
-const EndpointRow = defineComponent({
-  props: { label: String, url: String, hasSecret: Boolean },
-  setup(props) {
-    return () => h('div', {
-      style: 'display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1px solid var(--border-sub); background:var(--bg-raised);'
-    }, [
-      h('div', {
-        style: `width:8px; height:8px; border-radius:50%; flex-shrink:0; background:${props.url ? '#16a349' : 'var(--border)'};`
-      }),
-      h('div', { style: 'flex:1; min-width:0;' }, [
-        h('p', { style: 'font-size:12px; font-weight:600; color:var(--text-1);' }, props.label),
-        h('p', { style: 'font-size:11px; color:var(--text-3); font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' },
-          props.url || 'Sin configurar'),
-      ]),
-      props.hasSecret
-        ? h('span', {
-            style: 'font-size:10px; padding:2px 6px; border-radius:4px; font-family:monospace; background:#fef3c7; color:#92400e; border:1px solid #fde68a; flex-shrink:0;'
-          }, '🔑')
-        : null,
-    ])
-  }
-})
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -227,36 +158,8 @@ interface SettingItem {
 interface SettingGroup { key: string; label: string; items: SettingItem[] }
 
 const props = defineProps<{ groups: SettingGroup[] }>()
-const $page = usePage()
 
 // ─── Estado ───────────────────────────────────────────────────────────────
-
-const allSettings = Object.fromEntries(
-  props.groups.flatMap(g => g.items.map(i => [i.key, i.value]))
-)
-const getSetting = (key: string): string => allSettings[key] ?? ''
-
-// Stat cards computadas
-const stats = computed(() => [
-  {
-    key: 'photos',
-    value: (getSetting('checkout.required_photos') || '—') + ' fotos',
-    label: 'Fotos requeridas',
-    ok: true,
-  },
-  {
-    key: 'ttl',
-    value: (getSetting('checkout.temp_photo_ttl_hours') || '—') + ' hs',
-    label: 'TTL fotos temp.',
-    ok: true,
-  },
-  {
-    key: 'api',
-    value: getSetting('poliza_api.base_url') ? 'Configurada' : 'Sin configurar',
-    label: 'API Emisión',
-    ok: !!getSetting('poliza_api.base_url'),
-  },
-])
 
 const drafts = reactive<Record<string, Record<string, any>>>(
   Object.fromEntries(
@@ -304,7 +207,7 @@ const saveGroup = (groupKey: string) => {
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 const groupIcon = (key: string) => ({
-  pas: '📱', checkout: '🛒', poliza_api: '📄',
+  checkout: '🛒', facturacion: '🧾', followup: '💬',
 }[key] ?? '⚙️')
 
 const latestUpdate = (items: SettingItem[]) => {

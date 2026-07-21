@@ -84,6 +84,28 @@
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
 
+- **2026-07-20** — **Limpieza del residuo pas-mobile en settings + mapa de configuración hardcodeada.**
+  Disparado por la decisión de auditar la configuración hardcodeada del sistema para extender la vista
+  de Configuración. **Fase 0 (limpieza):** el grupo de settings `poliza_api` (la "API de Emisión" del
+  legacy pas-mobile, reemplazada por Visred) no tenía **ningún consumidor** en `app/` — extirpado:
+  migración `drop_poliza_api_settings`, bloque `poliza_api` de `config/services.php` (vars
+  `POLIZA_API_*` — quedan en el `.env` local, limpieza manual), labels muertos `pas`/`poliza_api` del
+  `SettingsController`, y el dashboard hardcodeado de `Admin/Settings/Index.vue` (stat cards +
+  `EndpointRow` de la API muerta; la vista soporta `string`/`integer`/`boolean`/`secret`). Además,
+  `SystemSettingsSeeder` estaba **huérfano** (nadie lo llamaba) y era la única fuente del grupo
+  `checkout` (vivo, 4 consumidores): eliminado y reemplazado por la migración `seed_checkout_settings`,
+  que unifica la vía "seed por migración de feature" (`facturacion`, `followup`) e inserta **solo si la
+  key no existe** para no pisar valores editados en prod. **Fases 1-2 (inventario):** barrido de 9
+  patrones (constantes de clase, `config()` con default inline, `$tries`/`$timeout` de jobs, atributos
+  `#[Model]`, URLs, montos, scheduler, lectura de `config/*`, front+seeders) y mapa de referencia
+  expandido en `docs/configuracion-hardcodeada.md` — ~80 ítems clasificados por destino (A vista admin /
+  B config+env / C invariante de código / P perfil por-PAS), incluyendo **keys fantasma** (consumidas
+  por `config()` sin existir en ningún config file: `app.allow_fresh_migrations`,
+  `app.tracking_base_url`, `mail.checkout_notifications_to` colgada de `mail.from`) y los gaps de la
+  vista (faltan tipos `float`/`json`, labels/íconos de grupo hardcodeados). **Pendiente (triaje con el
+  usuario):** qué candidatos A pasan a la vista. Verificación: tests settings+checkout+facturación
+  74/74 ✅ · PHPStan 0 · Pint ✅ · build ✅. _(rama `main`, sin commit)_
+
 - **2026-07-20** — **Red de seguridad: ningún Customer sin PAS (nacimiento + borrado).** Reporte:
   un customer terminó el checkout con `pas_id = null`; el mobile lo consume (bloque "TU PRODUCTOR" +
   CTAs Llamar/WhatsApp). Dos causas: (1) la creación real (chat `CustomerIdentificationService::createCustomer`

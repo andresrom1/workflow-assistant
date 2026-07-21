@@ -71,9 +71,9 @@ class SettingsController extends Controller
     private function groupLabel(string $group): string
     {
         return [
-            'pas' => 'Cotización',
             'checkout' => 'Checkout',
-            'poliza_api' => 'API de Emisión',
+            'facturacion' => 'Facturación',
+            'followup' => 'Seguimiento de conversaciones',
         ][$group] ?? ucfirst($group);
     }
 }
