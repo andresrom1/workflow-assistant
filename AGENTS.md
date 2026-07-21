@@ -216,3 +216,13 @@ Vue components must have a single root element.
 - IMPORTANT: Activate `inertia-vue-development` when working with Inertia Vue client-side patterns.
 
 </laravel-boost-guidelines>
+
+# Releases
+
+- Tags anotados con convención `vMAYOR.MENOR` (v1.0, v2.0, v3.0...). Bump **mayor** ante breaking changes o cambios de dominio/arquitectura; bump **menor** para features y fixes.
+- Proceso de release:
+  1. Actualizar `CHANGELOG.md` (formato Keep a Changelog, en español) con la nueva versión y su fecha.
+  2. Commitear el changelog (`docs(changelog): ...`).
+  3. `git tag -a vX.Y -m "Resumen del release"`.
+  4. `git push origin main --follow-tags`.
+  5. `gh release create vX.Y` con las notas del changelog.
