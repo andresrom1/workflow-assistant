@@ -133,6 +133,12 @@ Route::get('/landing-v2-2', function () {
     ]);
 })->name('landing.v2-2');
 
+// Maqueta del comparador de coberturas — datos hardcodeados, solo para evaluar UX.
+// No consume dominio ni expone datos reales. Borrar junto con resources/js/pages/Maqueta.
+Route::get('/maqueta/comparador', function () {
+    return Inertia::render('Maqueta/Comparador');
+})->name('maqueta.comparador');
+
 Route::get('/privacy', function () {
     return view('privacy');
 })->name('privacy');
