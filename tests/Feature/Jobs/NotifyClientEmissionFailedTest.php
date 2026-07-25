@@ -3,6 +3,7 @@
 use App\Jobs\NotifyClientEmissionFailed;
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\Conversation;
+use App\Models\Customer;
 use App\Models\Quote;
 use App\Models\RiskSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,9 +32,10 @@ beforeEach(function () {
 });
 
 it('dispatches SendWhatsAppMessage with the phone when the conversation has one', function () {
+    $customer = Customer::factory()->create(['phone' => '+5491112345678']);
     $conversation = Conversation::factory()->create([
-        'external_conversation_id' => '5491112345678',
         'ext_user_id' => 'user_abc123',
+        'customer_id' => $customer->id,
     ]);
     $quote = quoteWithConversationForEmissionFailure($conversation);
 
@@ -44,6 +46,7 @@ it('dispatches SendWhatsAppMessage with the phone when the conversation has one'
         $bsuid = (fn () => $this->bsuid)->call($job);
         $text = (fn () => $this->text)->call($job);
 
+        // El teléfono va sin '+' (formato `to` de la Cloud API); sale de customers.phone.
         return $phone === '5491112345678'
             && $bsuid === 'user_abc123'
             && str_contains($text, 'inconveniente');
@@ -51,9 +54,10 @@ it('dispatches SendWhatsAppMessage with the phone when the conversation has one'
 });
 
 it('dispatches SendWhatsAppMessage with only the bsuid when there is no phone', function () {
+    $customer = Customer::factory()->create(['phone' => null]);
     $conversation = Conversation::factory()->create([
-        'external_conversation_id' => 'user_abc123',
         'ext_user_id' => 'user_abc123',
+        'customer_id' => $customer->id,
     ]);
     $quote = quoteWithConversationForEmissionFailure($conversation);
 
@@ -63,6 +67,7 @@ it('dispatches SendWhatsAppMessage with only the bsuid when there is no phone', 
         $phone = (fn () => $this->phone)->call($job);
         $bsuid = (fn () => $this->bsuid)->call($job);
 
+        // Sin teléfono en el Customer, el envío va solo por BSUID (recipient).
         return $phone === null && $bsuid === 'user_abc123';
     });
 });

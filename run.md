@@ -46,6 +46,10 @@ git pull origin main
 docker compose --env-file .env.production -f compose.prod.yaml build app
 docker compose --env-file .env.production -f compose.prod.yaml up -d app
 
+# Editar .env
+cd ~/workflow-assistant
+nano ./.env.production
+
 # 1. Log de la app Laravel (el que buscabas)
 docker compose --env-file .env.production -f compose.prod.yaml \exec app tail -f storage/logs/laravel.log
 

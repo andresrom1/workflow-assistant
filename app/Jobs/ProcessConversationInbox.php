@@ -13,6 +13,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ProcessConversationInbox implements ShouldQueue
@@ -76,7 +77,10 @@ class ProcessConversationInbox implements ShouldQueue
             return;
         }
 
-        $combinedBody = $this->prependPauseTranscript($conversation, $messages->pluck('content')->implode("\n"));
+        $combinedBody = $this->prependCustomerContext(
+            $conversation,
+            $this->prependPauseTranscript($conversation, $messages->pluck('content')->implode("\n")),
+        );
 
         $reply = $orchestrator->handle($combinedBody, $conversation);
         $inboundIds = $messages->pluck('id')->all();
@@ -118,6 +122,29 @@ class ProcessConversationInbox implements ShouldQueue
             'conversation_id' => $this->conversationId,
             'error' => $exception->getMessage(),
         ]);
+    }
+
+    /**
+     * En el PRIMER turno (hilo de memoria del agente todavía vacío), antepone el nombre del
+     * cliente para que el saludo sea personal. Es una pista para el saludo, no un dato
+     * confirmado — el nombre del perfil de WhatsApp puede ser fantasía (el prompt ya lo aclara).
+     * Solo el primer turno para no repetir la línea en cada mensaje del hilo.
+     */
+    private function prependCustomerContext(Conversation $conversation, string $body): string
+    {
+        $name = $conversation->customer?->name;
+
+        if (! $name) {
+            return $body;
+        }
+
+        $hasMemory = DB::table('agent_conversations')->where('user_id', $conversation->id)->exists();
+
+        if ($hasMemory) {
+            return $body;
+        }
+
+        return "[Contexto: el cliente figura como \"{$name}\" en WhatsApp — usalo para el saludo, no como dato confirmado.]\n\n{$body}";
     }
 
     /**

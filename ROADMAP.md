@@ -84,6 +84,15 @@
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
 
+- **2026-07-21** — **Fix UX: ancho de burbuja en la recomendación de cotización (WhatsApp).** La
+  presentación de las 2 opciones con botones se renderizaba en una burbuja interactiva angosta (ancho
+  fijo de WhatsApp para `interactive.type: button`, no configurable) porque todo el texto largo iba en
+  `interactive.body.text`. Ahora `SendWhatsAppMessage` parte el texto del agente en su último párrafo:
+  el cuerpo (las 2 opciones) sale como mensaje de **texto** full-width y solo la pregunta de cierre
+  acompaña a los botones en la burbuja compacta (`splitForButtons()`). Sin `\n\n` no parte (mensajes
+  cortos siguen como interactivo único); se conserva el fallback a texto plano si el caption sin partir
+  supera 1024. Sin cambios en prompt/service/tool. Nuevo test del camino de split; suite del job 10/10,
+  PHPStan 0.
 - **2026-07-20** — **Limpieza del residuo pas-mobile en settings + mapa de configuración hardcodeada.**
   Disparado por la decisión de auditar la configuración hardcodeada del sistema para extender la vista
   de Configuración. **Fase 0 (limpieza):** el grupo de settings `poliza_api` (la "API de Emisión" del

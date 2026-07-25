@@ -247,8 +247,11 @@ it('inbox processes audio message once transcription has populated content', fun
         ->with('Hola quiero asegurar un auto', Mockery::type(Conversation::class))
         ->andReturn(['text' => 'Bienvenido', 'agent' => 'CustomerIdentifierAgent', 'execution_log_ids' => []]);
 
+    // Sin nombre → el body de audio transcripto llega tal cual (sin contexto de saludo).
+    $customer = \App\Models\Customer::factory()->create(['name' => null]);
     $conversation = Conversation::factory()->create([
         'external_conversation_id' => $this->waId,
+        'customer_id' => $customer->id,
     ]);
 
     Message::create([

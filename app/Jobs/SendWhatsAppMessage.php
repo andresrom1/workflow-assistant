@@ -50,19 +50,38 @@ class SendWhatsAppMessage implements ShouldQueue
         // Always send typing indicator before any response.
         $waService->sendTypingIndicator($this->phone, $this->bsuid, $this->phoneNumberId);
 
-        // Los botones fuerzan texto: sin modality decider ni TTS. Si el body excede
-        // el límite de un mensaje interactivo, se degrada a texto plano (con log).
+        // Los botones fuerzan texto: sin modality decider ni TTS. WhatsApp renderiza
+        // toda burbuja interactiva con un ancho fijo angosto, así que el cuerpo largo
+        // de la recomendación se manda como texto full-width y solo la pregunta de
+        // cierre (último párrafo) acompaña a los botones en la burbuja compacta.
         if ($this->buttons !== null && $this->buttons !== []) {
-            if (mb_strlen($this->text) > 1024) {
+            [$body, $caption] = $this->splitForButtons($this->text);
+
+            // Sin párrafo separable y demasiado largo para un interactivo: se degrada
+            // a texto plano (con log), como red de seguridad histórica.
+            if ($body === null && mb_strlen($caption) > 1024) {
                 Log::warning('WhatsApp: body > 1024 con botones pendientes — enviando texto plano', [
                     'conversationId' => $this->conversationId,
                     'length' => mb_strlen($this->text),
                 ]);
             } else {
+                if ($body !== null) {
+                    $waService->sendMessage(
+                        $this->phone,
+                        $this->bsuid,
+                        $body,
+                        $this->phoneNumberId,
+                        $this->conversationId,
+                        $this->agentName,
+                        false,
+                        config('ai.default'),
+                    );
+                }
+
                 $waService->sendInteractiveButtons(
                     $this->phone,
                     $this->bsuid,
-                    $this->text,
+                    $caption,
                     $this->buttons,
                     $this->phoneNumberId,
                     $this->conversationId,
@@ -112,6 +131,27 @@ class SendWhatsAppMessage implements ShouldQueue
         }
 
         $this->sendAsText($waService, $decision);
+    }
+
+    /**
+     * Separa el texto del agente en cuerpo (full-width) + caption (burbuja de botones).
+     * El caption es el último párrafo (la pregunta de cierre); el cuerpo es todo lo
+     * anterior. Split de presentación pura: sin `\n\n` o con alguna mitad vacía, no se
+     * separa y el texto entero queda como caption.
+     *
+     * @return array{0: string|null, 1: string} [body|null, caption]
+     */
+    private function splitForButtons(string $text): array
+    {
+        $pos = mb_strrpos($text, "\n\n");
+        if ($pos === false) {
+            return [null, $text];
+        }
+
+        $body = trim(mb_substr($text, 0, $pos));
+        $caption = trim(mb_substr($text, $pos + 2));
+
+        return ($body === '' || $caption === '') ? [null, $text] : [$body, $caption];
     }
 
     /**

@@ -181,4 +181,16 @@ class Conversation extends Model
             $this->update($updates);
         }
     }
+
+    /**
+     * Teléfono del cliente para enviar por la WhatsApp Cloud API (formato `to`: E.164 SIN el
+     * '+'), o null si no lo tenemos — en ese caso el envío usa el BSUID (`recipient`). El
+     * teléfono es un atributo de contacto opcional; el ancla de envío es el BSUID (`ext_user_id`).
+     */
+    public function recipientPhone(): ?string
+    {
+        $phone = $this->customer?->phone;
+
+        return $phone ? ltrim($phone, '+') : null;
+    }
 }

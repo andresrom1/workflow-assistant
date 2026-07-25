@@ -211,6 +211,34 @@ it('sends interactive buttons and bypasses the modality decider entirely', funct
     SendWhatsAppMessage::dispatchSync($this->waId, $this->bsuid, $this->text, $this->phoneNumberId, $conversation->id, 'CheckoutAgent', null, $buttons);
 });
 
+it('splits the recommendation into a full-width text bubble and a compact buttons bubble', function () {
+    $conversation = Conversation::factory()->create();
+    $body = "Opción recomendada — $98K\n• Granizo incluido\n\nTambién tenés Experta — $76K\n• Sin granizo";
+    $caption = 'La diferencia es de $22K/mes. ¿Cuál te va más?';
+    $text = "{$body}\n\n{$caption}";
+    $buttons = [
+        ['id' => 'alt:1', 'title' => 'Mercantil $98K'],
+        ['id' => 'alt:2', 'title' => 'Experta $76K'],
+        ['id' => 'question', 'title' => 'Tengo una pregunta'],
+    ];
+
+    $waService = $this->mock(WhatsAppOutboundService::class);
+    $waService->shouldReceive('sendTypingIndicator')->once();
+    $waService->shouldReceive('sendMessage')
+        ->once()
+        ->with($this->waId, $this->bsuid, $body, $this->phoneNumberId, $conversation->id, 'CheckoutAgent', false, config('ai.default'))
+        ->andReturn(['messages' => [['id' => 'wamid.text001']]]);
+    $waService->shouldReceive('sendInteractiveButtons')
+        ->once()
+        ->with($this->waId, $this->bsuid, $caption, $buttons, $this->phoneNumberId, $conversation->id, 'CheckoutAgent', config('ai.default'))
+        ->andReturn(['messages' => [['id' => 'wamid.interactive001']]]);
+
+    $decider = $this->mock(MessageModalityDecider::class);
+    $decider->shouldNotReceive('decide');
+
+    SendWhatsAppMessage::dispatchSync($this->waId, $this->bsuid, $text, $this->phoneNumberId, $conversation->id, 'CheckoutAgent', null, $buttons);
+});
+
 it('falls back to plain text when the body exceeds 1024 chars with pending buttons', function () {
     $conversation = Conversation::factory()->create();
     $longText = str_repeat('a', 1025);

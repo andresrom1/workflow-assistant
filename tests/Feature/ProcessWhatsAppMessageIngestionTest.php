@@ -122,10 +122,17 @@ it('persists both phone and bsuid when both are present', function () {
         extUserId: 'US.13491208655302741918',
     );
 
+    // La conversación se ancla en el BSUID (identidad estable). external_conversation_id
+    // queda NULL (vestigio en retiro); el teléfono es atributo del Customer, no la clave.
     $this->assertDatabaseHas('conversations', [
-        'external_conversation_id' => $this->waId,
+        'external_conversation_id' => null,
         'ext_user_id' => 'US.13491208655302741918',
         'channel' => 'whatsapp',
+    ]);
+
+    $this->assertDatabaseHas('customers', [
+        'phone' => '+5491112345678',
+        'name' => 'Test User',
     ]);
 
     $this->assertDatabaseHas('messages', [
@@ -146,11 +153,17 @@ it('ingests a bsuid-only message and routes the conversation by bsuid', function
         extUserId: 'US.13491208655302741918',
     );
 
-    // Sin teléfono, el BSUID es la clave de la conversación.
+    // Sin teléfono, la conversación se ancla igual en el BSUID; external_conversation_id NULL.
     $this->assertDatabaseHas('conversations', [
-        'external_conversation_id' => 'US.13491208655302741918',
+        'external_conversation_id' => null,
         'ext_user_id' => 'US.13491208655302741918',
         'channel' => 'whatsapp',
+    ]);
+
+    // El Customer se materializa igual (BSUID-only): solo con el nombre del perfil, sin teléfono.
+    $this->assertDatabaseHas('customers', [
+        'name' => 'Test User',
+        'phone' => null,
     ]);
 
     // El mensaje se persiste con sender_phone nulo.
@@ -161,6 +174,29 @@ it('ingests a bsuid-only message and routes the conversation by bsuid', function
     ]);
 
     Bus::assertDispatched(ProcessConversationInbox::class);
+});
+
+it('reuses the same conversation and customer for a repeat bsuid', function () {
+    Bus::fake([ProcessConversationInbox::class]);
+    $bsuid = 'US.13491208655302741918';
+
+    ProcessWhatsAppMessage::dispatchSync(waId: $this->waId, messageBody: 'Hola', messageId: 'wamid.a', phoneNumberId: $this->phoneNumberId, contactName: 'Test User', extUserId: $bsuid);
+    ProcessWhatsAppMessage::dispatchSync(waId: $this->waId, messageBody: 'Segundo', messageId: 'wamid.b', phoneNumberId: $this->phoneNumberId, contactName: 'Test User', extUserId: $bsuid);
+
+    $this->assertDatabaseCount('conversations', 1);
+    $this->assertDatabaseCount('customers', 1);
+    $this->assertDatabaseCount('messages', 2);
+});
+
+it('does not merge two different bsuids that share a phone', function () {
+    Bus::fake([ProcessConversationInbox::class]);
+
+    ProcessWhatsAppMessage::dispatchSync(waId: $this->waId, messageBody: 'Hola', messageId: 'wamid.a', phoneNumberId: $this->phoneNumberId, contactName: 'A', extUserId: 'US.11111111111111111');
+    ProcessWhatsAppMessage::dispatchSync(waId: $this->waId, messageBody: 'Hola', messageId: 'wamid.b', phoneNumberId: $this->phoneNumberId, contactName: 'B', extUserId: 'US.22222222222222222');
+
+    // Mismo teléfono, distinto BSUID → dos conversaciones y dos customers: no se deduplica por teléfono.
+    $this->assertDatabaseCount('conversations', 2);
+    $this->assertDatabaseCount('customers', 2);
 });
 
 function dispatchIngestion(string $waId, string $messageId, string $phoneNumberId): void

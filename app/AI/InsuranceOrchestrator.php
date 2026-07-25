@@ -19,6 +19,7 @@ use App\AI\Tools\PresentQuoteOptionsTool;
 use App\AI\Tools\ProvideVehicleFactTool;
 use App\AI\Tools\RevertStageTool;
 use App\AI\Tools\SiniestroGuidanceTool;
+use App\Jobs\ProcessWhatsAppMessage;
 use App\Models\AgentExecutionLog;
 use App\Models\AgentPrompt;
 use App\Models\Conversation;
@@ -44,16 +45,18 @@ class InsuranceOrchestrator
      */
     public function handle(string $message, Conversation $conversation): array
     {
-        // Identificar al cliente automáticamente usando el teléfono del canal (si está disponible).
-        // Esto evita pedirle al usuario su número cuando ya lo tenemos del webhook.
-        $this->tryAutoIdentifyByPhone($conversation);
+        // Si el cliente ya vinculado (materializado en la ingesta) tiene DNI, saltear el paso
+        // de identificación. La captura de teléfono/nombre ocurre en la ingesta, no acá.
+        $this->syncCustomerIdentifiedState($conversation);
 
         $stateBefore = $conversation->aiState();
         $step = $this->stepFromState($stateBefore);
 
-        // Todos los agentes comparten el mismo hilo de conversación, identificado
-        // por el wa_id del usuario. Esto permite que el contexto fluya entre agentes.
-        $waUser = (object) ['id' => $conversation->external_conversation_id];
+        // Todos los agentes comparten el mismo hilo de conversación, identificado por
+        // el id interno de la conversación (estable e inmutable — no depende del teléfono
+        // ni del BSUID, que pueden cambiar o faltar). Esto permite que el contexto fluya
+        // entre agentes. Ver docs: la memoria del SDK se keyea acá, no en el canal.
+        $waUser = (object) ['id' => $conversation->id];
         $agent = $this->resolveAgent($stateBefore, $conversation);
 
         $start = hrtime(true);
@@ -207,65 +210,23 @@ class InsuranceOrchestrator
     }
 
     /**
-     * Identifica al cliente automáticamente usando el identificador de conversación
-     * (número de teléfono) si aún no fue identificado y el identificador es numérico.
+     * Gate de estado: si el cliente ya vinculado a la conversación tiene DNI (identidad de
+     * dominio), marca el paso de identificación como resuelto para saltear el
+     * CustomerIdentifierAgent (cliente recurrente ya identificado).
      *
-     * Si el external_conversation_id es un BSUID alfanumérico (usuario con username
-     * sin número de teléfono visible), se omite y el CustomerIdentifierAgent
-     * solicitará los datos al usuario.
-     *
-     * Cadena de delegación:
-     * → WhatsAppAdapter::identifyCustomer()        (normaliza/valida el payload)
-     * → CustomerIdentificationService::findOrCreate() (lógica de negocio)
-     * → CustomerRepository                          (acceso a datos)
+     * La materialización del Customer y la captura de teléfono/nombre ocurren en la ingesta
+     * ({@see ProcessWhatsAppMessage}), no acá. Este método NO crea ni identifica:
+     * solo lee el DNI y prende el flag. Si no hay DNI, el paso queda abierto para que el
+     * agente lo pida — cotizar con un DNI inventado rompe la emisión (ROADMAP 2026-07-19);
+     * `DeclineDniTool` es la salida para el cliente que no lo quiere dar.
      */
-    private function tryAutoIdentifyByPhone(Conversation $conversation): void
+    private function syncCustomerIdentifiedState(Conversation $conversation): void
     {
         if ($conversation->aiState()['customer_identified']) {
             return;
         }
 
-        $waId = $conversation->external_conversation_id;
-
-        // Solo proceder si el identificador es un número de teléfono (no un BSUID alfanumérico).
-        if (! preg_match('/^\d{7,15}$/', $waId)) {
-            return;
-        }
-
-        $result = $this->adapter->identifyCustomer([
-            'identifier_type' => 'phone',
-            'identifier_value' => $waId,
-            'external_conversation_id' => $conversation->external_conversation_id,
-            'channel' => 'whatsapp',
-        ], $conversation);
-
-        if (! $result['success']) {
-            return;
-        }
-
-        $conversation->refresh();
-        $customer = $conversation->customer;
-
-        // El customer recién creado por teléfono no tiene nombre; usar el
-        // profile name del webhook para que el saludo del primer turno sea personal.
-        if ($customer && ! $customer->name) {
-            $senderName = $conversation->messages()
-                ->where('direction', 'inbound')
-                ->whereNotNull('sender_name')
-                ->latest()
-                ->value('sender_name');
-
-            if ($senderName) {
-                $customer->update(['name' => $senderName]);
-            }
-        }
-
-        // El flag solo se prende si el customer YA tiene DNI (dato aparte del
-        // teléfono/nombre de arriba, que siempre se resuelven). Si no lo tiene, el
-        // paso de identificación queda abierto para que CustomerIdentifierAgent lo
-        // pida — cotizar con un DNI inventado rompe la emisión (ver ROADMAP Bitácora
-        // 2026-07-19). `DeclineDniTool` es la salida para el cliente que no quiere darlo.
-        if ($customer && $customer->dni) {
+        if ($conversation->customer?->dni) {
             $conversation->updateAiState(['customer_identified' => true]);
         }
     }

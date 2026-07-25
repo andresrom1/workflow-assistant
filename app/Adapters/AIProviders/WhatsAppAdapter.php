@@ -92,11 +92,12 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
      */
     public function identifyCustomer(array $data, Conversation $conversation): array
     {
+        // El teléfono es atributo de contacto (se captura en la ingesta), no identidad: el
+        // identify del agente resuelve el "quién" por email o DNI/CUIT. La conversación (y su
+        // BSUID) llega inyectada en $conversation, no en el payload.
         $data = $this->validatePayload($data, [
-            'identifier_type' => 'required|string|in:email,phone,dni',
+            'identifier_type' => 'required|string|in:email,dni',
             'identifier_value' => 'required|string',
-            'external_conversation_id' => 'required|string',
-            'ext_user_id' => 'nullable|string',
         ]);
 
         // Árbol create/enrich/merge (docs/v2/12 §5.3): si la conversación ya tiene tomador y el

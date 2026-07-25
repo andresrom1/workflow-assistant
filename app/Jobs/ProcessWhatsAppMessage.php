@@ -4,9 +4,11 @@ namespace App\Jobs;
 
 use App\Enums\MessageType;
 use App\Models\Conversation;
+use App\Models\Customer;
 use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Repositories\ConversationRepository;
+use App\Repositories\CustomerRepository;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -36,7 +38,7 @@ class ProcessWhatsAppMessage implements ShouldQueue
         private readonly ?string $mediaMimeType = null,
     ) {}
 
-    public function handle(ConversationRepository $conversationRepo): void
+    public function handle(ConversationRepository $conversationRepo, CustomerRepository $customerRepo): void
     {
         // 1. Idempotencia — evita procesar el mismo mensaje dos veces si Meta reenvía el webhook.
         $cacheKey = 'processed_wamid_'.$this->messageId;
@@ -63,41 +65,27 @@ class ProcessWhatsAppMessage implements ShouldQueue
             return;
         }
 
-        // 4. Obtener o crear la conversación — algoritmo dual-key:
-        //    Primero por ext_user_id (BSUID, estable aunque el usuario cambie de número),
-        //    luego fallback al wa_id (teléfono).
-        $conversation = $this->extUserId
-            ? $conversationRepo->findByExtUserId($this->extUserId)
-            : null;
+        // 4. Obtener o crear la conversación anclada en el BSUID (identidad estable del canal).
+        //    Fallback defensivo por teléfono si no llegó BSUID (no debería pasar desde abr-2026).
+        $conversation = match (true) {
+            $this->extUserId !== null => $conversationRepo->findOrCreateByExtUserId($this->extUserId, 'whatsapp'),
+            $this->waId !== null => $conversationRepo->findOrCreateByExternalId($this->waId, 'whatsapp'),
+            default => null,
+        };
 
-        if ($conversation instanceof Conversation) {
-            // Si el usuario migró de número, actualizar el teléfono de la conversación (solo si llegó uno).
-            if ($this->waId && $conversation->external_conversation_id !== $this->waId) {
-                $conversation->update(['external_conversation_id' => $this->waId]);
-            }
-        } else {
-            // Clave de creación: el teléfono si llegó; si no, el BSUID (siempre presente desde abril 2026).
-            $externalId = $this->waId ?? $this->extUserId;
+        if (! $conversation instanceof Conversation) {
+            Log::warning('WhatsApp: mensaje sin wa_id ni user_id, se ignora', ['wamid' => $this->messageId]);
 
-            if (! $externalId) {
-                Log::warning('WhatsApp: mensaje sin wa_id ni user_id, se ignora', ['wamid' => $this->messageId]);
-
-                return;
-            }
-
-            $conversation = $conversationRepo->findOrCreateByExternalId($externalId, 'whatsapp');
+            return;
         }
 
         // Guardar ext_user_id y ext_username si aún no están (sin sobreescribir valores existentes).
         $conversation->updateExternalIdentifiers($this->extUserId, $this->extUsername);
 
-        // 4b. Persistir el nombre del contacto en el Customer recurrente (customer_id ya vinculado).
-        if ($this->contactName && $conversation->customer_id) {
-            $conversation->load('customer');
-            if ($conversation->customer && ! $conversation->customer->name) {
-                $conversation->customer->update(['name' => $this->contactName]);
-            }
-        }
+        // 4b. Customer del primer mensaje: capturar teléfono/nombre del webhook como ATRIBUTOS
+        //     (no identidad — el DNI/email es el "quién", y no se deduplica por teléfono). El
+        //     BSUID vive en la conversación. Ver docs del modelo de identidad.
+        $this->captureCustomerAttributes($conversation, $customerRepo);
 
         // 4c. Persistir mensaje entrante (firstOrCreate evita duplicados por retry de Meta).
         //     processed_at queda null — el inbox processor lo marcará al procesarlo.
@@ -151,6 +139,54 @@ class ProcessWhatsAppMessage implements ShouldQueue
                 'conversation_id' => $conversation->id,
             ]);
         }
+    }
+
+    /**
+     * Materializa/enriquece el Customer de la conversación con los atributos del webhook.
+     * En el primer mensaje crea el Customer (aunque sea anónimo — solo BSUID); en los
+     * siguientes completa nombre/teléfono vacíos sin pisar. No deduplica por teléfono: la
+     * unificación de identidad es solo por DNI/email (la resuelve el flujo del agente).
+     */
+    private function captureCustomerAttributes(Conversation $conversation, CustomerRepository $customerRepo): void
+    {
+        $name = $this->realContactName();
+
+        if (! $conversation->customer_id) {
+            $customer = $customerRepo->create(array_filter([
+                'phone' => $this->waId,
+                'name' => $name,
+            ]));
+            $conversation->update(['customer_id' => $customer->id]);
+
+            return;
+        }
+
+        $conversation->loadMissing('customer');
+        $customer = $conversation->customer;
+
+        if (! $customer instanceof Customer) {
+            return;
+        }
+
+        $updates = array_filter([
+            'name' => $name && ! $customer->name ? $name : null,
+            'phone' => $this->waId && ! $customer->phone ? $this->waId : null,
+        ]);
+
+        if ($updates !== []) {
+            $customerRepo->update($customer, $updates);
+        }
+    }
+
+    /**
+     * Nombre real del contacto, o null si es el placeholder 'Usuario' (fallback del webhook
+     * cuando el perfil no expone nombre) o viene vacío.
+     */
+    private function realContactName(): ?string
+    {
+        $name = trim($this->contactName);
+
+        return ($name === '' || $name === 'Usuario') ? null : $name;
     }
 
     public function failed(\Throwable $exception): void

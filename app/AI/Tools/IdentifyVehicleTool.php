@@ -70,7 +70,6 @@ class IdentifyVehicleTool implements Mockable, Tool
         // un identificador de sesión del front-end como en el flujo web/OpenAI.
         $result = $this->adapter->identifyVehicle(
             array_merge($request->all(), [
-                'external_conversation_id' => $this->conversation->external_conversation_id,
                 'channel' => 'whatsapp',
                 'sessionUuid' => (string) Str::uuid(),
             ]),

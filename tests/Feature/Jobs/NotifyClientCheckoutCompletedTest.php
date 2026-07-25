@@ -3,6 +3,7 @@
 use App\Jobs\NotifyClientCheckoutCompleted;
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\Conversation;
+use App\Models\Customer;
 use App\Models\Quote;
 use App\Models\RiskSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,9 +32,10 @@ beforeEach(function () {
 });
 
 it('dispatches SendWhatsAppMessage with the phone when the conversation has one', function () {
+    $customer = Customer::factory()->create(['phone' => '+5491112345678']);
     $conversation = Conversation::factory()->create([
-        'external_conversation_id' => '5491112345678',
         'ext_user_id' => 'user_abc123',
+        'customer_id' => $customer->id,
     ]);
     $quote = quoteWithConversation($conversation);
 
@@ -51,9 +53,10 @@ it('dispatches SendWhatsAppMessage with the phone when the conversation has one'
 });
 
 it('no afirma que la póliza ya se emitió — la emisión todavía puede fallar', function () {
+    $customer = Customer::factory()->create(['phone' => '+5491112345678']);
     $conversation = Conversation::factory()->create([
-        'external_conversation_id' => '5491112345678',
         'ext_user_id' => 'user_abc123',
+        'customer_id' => $customer->id,
     ]);
     $quote = quoteWithConversation($conversation);
 
@@ -70,9 +73,10 @@ it('no afirma que la póliza ya se emitió — la emisión todavía puede fallar
 });
 
 it('dispatches SendWhatsAppMessage with only the bsuid when there is no phone', function () {
+    $customer = Customer::factory()->create(['phone' => null]);
     $conversation = Conversation::factory()->create([
-        'external_conversation_id' => 'user_abc123',
         'ext_user_id' => 'user_abc123',
+        'customer_id' => $customer->id,
     ]);
     $quote = quoteWithConversation($conversation);
 

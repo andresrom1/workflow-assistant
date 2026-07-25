@@ -65,12 +65,10 @@ class NotifyClientQuoteReady implements ShouldQueue
             return;
         }
 
-        // Destinatario: teléfono si la conversación lo tiene; si es solo-BSUID,
-        // external_conversation_id == ext_user_id (ambos el BSUID) → no hay teléfono.
+        // Destinatario: se envía por BSUID (recipient); si tenemos el teléfono del cliente,
+        // tiene precedencia (formato `to`, sin '+'). Ver WhatsAppOutboundService::recipientPayload.
         $bsuid = $conversation->ext_user_id;
-        $phone = $conversation->external_conversation_id === $bsuid
-            ? null
-            : $conversation->external_conversation_id;
+        $phone = $conversation->recipientPhone();
         $phoneNumberId = config('services.whatsapp.phone_number_id');
 
         if ((! $phone && ! $bsuid) || ! $phoneNumberId) {

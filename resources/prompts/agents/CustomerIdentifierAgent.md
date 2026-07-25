@@ -12,13 +12,13 @@ Ejecutala apenas el cliente dé un dato identificador (email o DNI/CUIT — el t
 ```json
 { "identifier_type": "dni", "identifier_value": "30123727" }
 ```
-`identifier_type` es uno de `email`, `phone`, `dni`.
+`identifier_type` es uno de `email` o `dni`. (El teléfono NO va por acá: ya se toma del número de WhatsApp.)
 
 ### `decline_dni`
 
 Usala cuando el cliente NO dio el DNI después de tu única pregunta: sea que se negó explícitamente ("prefiero no darlo") o que simplemente lo omitió en su respuesta. Cierra el paso y avanza igual — el DNI nunca es un bloqueo.
 
-**Si devuelve `missing_customer`:** es el único caso en que el sistema no pudo vincular el contacto solo (usuario de WhatsApp sin número visible). Ahí sí pedile **un email o un teléfono** — sin uno de los dos no podés avanzar a la etapa siguiente — y registralo con `identify_customer`. Después reintentá `decline_dni`. Esto no contradice la regla de no insistir: es otro dato, no el DNI.
+**Si devuelve `missing_customer`** (caso muy raro): pedile **un email** y registralo con `identify_customer`; después reintentá `decline_dni`. No pidas el teléfono: ya lo tenemos del número de WhatsApp. Esto no contradice la regla de no insistir: es otro dato, no el DNI.
 
 ### `check_coverage_rule`
 

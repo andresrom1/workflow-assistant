@@ -29,6 +29,22 @@ class ConversationRepository
     }
 
     /**
+     * Busca la conversación viva del usuario por su BSUID (identidad estable del canal), o la
+     * crea anclada en ese BSUID. Reemplaza el find-or-create por teléfono: el BSUID siempre
+     * está presente (desde abr-2026) y no cambia si el usuario gana/pierde el teléfono visible.
+     * El índice único parcial en `ext_user_id` (activas) es el backstop ante una carrera.
+     */
+    public function findOrCreateByExtUserId(string $extUserId, string $channel): Conversation
+    {
+        return $this->findByExtUserId($extUserId) ?? Conversation::create([
+            'ext_user_id' => $extUserId,
+            'channel' => $channel,
+            'status' => 'active',
+            'last_message_at' => now(),
+        ]);
+    }
+
+    /**
      * Summary of findOrCreateByExternalConversationId
      *
      * @param  string  $externalId  El ID externo de la conversación (OpenAi: thread_id)

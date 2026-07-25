@@ -23,8 +23,8 @@ class IdentifyCustomerTool implements Mockable, Tool
 
     public function description(): string
     {
-        return 'Identifica o crea un cliente en el sistema y lo vincula a la conversación activa. '
-            .'Usar cuando el usuario proporcione su email, número de teléfono o DNI/CUIT.';
+        return 'Registra la identidad del cliente cuando proporciona su DNI/CUIT o su email. '
+            .'El teléfono NO va acá: ya se toma automáticamente del número de WhatsApp.';
     }
 
     /**
@@ -33,11 +33,11 @@ class IdentifyCustomerTool implements Mockable, Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'identifier_type' => $schema->string()->enum(['email', 'phone', 'dni'])
-                ->description('Tipo de identificador provisto por el usuario: email, phone (teléfono) o dni (DNI/CUIT).')
+            'identifier_type' => $schema->string()->enum(['email', 'dni'])
+                ->description('Tipo de identificador provisto por el usuario: email o dni (DNI/CUIT).')
                 ->required(),
             'identifier_value' => $schema->string()
-                ->description('El valor del identificador (ej: usuario@ejemplo.com, 1150001234, 30304050).')
+                ->description('El valor del identificador (ej: usuario@ejemplo.com, 30304050).')
                 ->required(),
         ];
     }
@@ -50,14 +50,9 @@ class IdentifyCustomerTool implements Mockable, Tool
 
         $this->logToolCall($request->all());
 
-        $result = $this->adapter->identifyCustomer(
-            array_merge($request->all(), [
-                'external_conversation_id' => $this->conversation->external_conversation_id,
-                'ext_user_id' => $this->conversation->external_conversation_id,
-                'channel' => 'whatsapp',
-            ]),
-            $this->conversation
-        );
+        // La conversación (y su BSUID/customer) van inyectados en $this->conversation; el
+        // payload solo lleva el identificador que dio el usuario (email o DNI).
+        $result = $this->adapter->identifyCustomer($request->all(), $this->conversation);
 
         if ($result['success']) {
             $this->conversation->refresh();

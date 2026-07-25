@@ -93,8 +93,9 @@ class FollowUpStalledConversations extends Command
         $firstFalseStage = collect(self::NUDGES)->keys()->first(fn (string $flag): bool => ! $state[$flag]);
         $text = self::NUDGES[$firstFalseStage] ?? self::NUDGES['checkout_done'];
 
+        // Envío por BSUID (recipient); el teléfono del cliente, si lo tenemos, tiene precedencia.
         $bsuid = $conversation->ext_user_id;
-        $phone = $conversation->external_conversation_id === $bsuid ? null : $conversation->external_conversation_id;
+        $phone = $conversation->recipientPhone();
 
         SendWhatsAppMessage::dispatch(
             $phone,

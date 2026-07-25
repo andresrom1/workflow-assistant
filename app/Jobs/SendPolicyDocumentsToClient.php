@@ -68,12 +68,10 @@ class SendPolicyDocumentsToClient implements ShouldQueue
                 return;
             }
 
-            // Destinatario: teléfono si la conversación lo tiene; si es solo-BSUID,
-            // external_conversation_id == ext_user_id (ambos el BSUID) → no hay teléfono.
+            // Destinatario: se envía por BSUID (recipient); el teléfono del cliente, si lo
+            // tenemos, tiene precedencia (formato `to`, sin '+'). Ver recipientPayload.
             $bsuid = $conversation->ext_user_id;
-            $phone = $conversation->external_conversation_id === $bsuid
-                ? null
-                : $conversation->external_conversation_id;
+            $phone = $conversation->recipientPhone();
             $phoneNumberId = config('services.whatsapp.phone_number_id');
 
             if ((! $phone && ! $bsuid) || ! $phoneNumberId) {

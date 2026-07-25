@@ -2,162 +2,95 @@
 
 use App\Adapters\AIProviders\WhatsAppAdapter;
 use App\AI\InsuranceOrchestrator;
+use App\Jobs\ProcessConversationInbox;
+use App\Jobs\ProcessWhatsAppMessage;
 use App\Models\Conversation;
 use App\Models\Customer;
-use App\Models\Message;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 
 uses(RefreshDatabase::class);
 
 /**
- * Invoca el método privado tryAutoIdentifyByPhone vía reflexión (documentado
- * en el CLAUDE.md como patrón aceptado para smoke-tests de métodos privados).
+ * La captura de nombre/teléfono se hace en la INGESTA (ProcessWhatsAppMessage), como atributos
+ * del Customer; el gate de `customer_identified` (solo si hay DNI) vive en el orquestador. Este
+ * archivo cubre ambos loci tras el desacople del viejo `tryAutoIdentifyByPhone`.
  */
-function invokeTryAutoIdentifyByPhone(InsuranceOrchestrator $orchestrator, Conversation $conversation): void
+function dispatchIngestForCapture(?string $waId, string $bsuid, string $contactName): void
 {
-    $method = (new ReflectionClass($orchestrator))->getMethod('tryAutoIdentifyByPhone');
+    Bus::fake([ProcessConversationInbox::class]);
+
+    ProcessWhatsAppMessage::dispatchSync(
+        waId: $waId,
+        messageBody: 'Hola',
+        messageId: 'wamid.'.uniqid(),
+        phoneNumberId: '123456789',
+        contactName: $contactName,
+        extUserId: $bsuid,
+    );
+}
+
+/** Invoca el gate privado del orquestador vía reflexión (patrón aceptado en CLAUDE.md). */
+function invokeSyncIdentifiedState(Conversation $conversation): void
+{
+    $orchestrator = new InsuranceOrchestrator(Mockery::mock(WhatsAppAdapter::class));
+    $method = (new ReflectionClass($orchestrator))->getMethod('syncCustomerIdentifiedState');
     $method->setAccessible(true);
     $method->invoke($orchestrator, $conversation);
 }
 
-it('backfills customer name and marks customer_identified when the customer already has a DNI', function () {
-    $waId = '5491112345678';
+it('ingest captures name and phone into a new customer', function () {
+    dispatchIngestForCapture('5491112345678', 'US.13491208655302741918', 'Juan Perez');
 
-    $conversation = Conversation::factory()->create([
-        'external_conversation_id' => $waId,
-        'customer_id' => null,
-        'metadata' => ['ai_state' => ['customer_identified' => false]],
+    $this->assertDatabaseHas('customers', [
+        'name' => 'Juan Perez',
+        'phone' => '+5491112345678',
     ]);
-
-    Message::create([
-        'conversation_id' => $conversation->id,
-        'direction' => 'inbound',
-        'content' => 'Hola',
-        'external_message_id' => 'wamid.backfill001',
-        'sender_name' => 'Juan Perez',
-        'sender_phone' => $waId,
-    ]);
-
-    // Customer factory trae un dni por default — replica al cliente que vuelve
-    // y ya está identificado de punta a punta.
-    $customer = Customer::factory()->create(['name' => null, 'phone' => $waId]);
-
-    $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('identifyCustomer')
-        ->once()
-        ->andReturnUsing(function () use ($conversation, $customer) {
-            $conversation->update(['customer_id' => $customer->id]);
-
-            return ['success' => true];
-        });
-
-    $orchestrator = new InsuranceOrchestrator($adapter);
-
-    invokeTryAutoIdentifyByPhone($orchestrator, $conversation);
-
-    expect($customer->fresh()->name)->toBe('Juan Perez')
-        ->and($conversation->fresh()->aiState()['customer_identified'])->toBeTrue();
 });
 
-it('backfills el nombre pero NO marca customer_identified cuando el customer todavía no tiene DNI', function () {
-    $waId = '5491112345681';
-
-    $conversation = Conversation::factory()->create([
-        'external_conversation_id' => $waId,
-        'customer_id' => null,
-        'metadata' => ['ai_state' => ['customer_identified' => false]],
+it('ingest does not overwrite an existing customer name', function () {
+    $bsuid = 'US.13491208655302741918';
+    $customer = Customer::factory()->create(['name' => 'Nombre Real', 'phone' => null]);
+    Conversation::factory()->create([
+        'ext_user_id' => $bsuid,
+        'external_conversation_id' => null,
+        'status' => 'active',
+        'customer_id' => $customer->id,
     ]);
 
-    Message::create([
-        'conversation_id' => $conversation->id,
-        'direction' => 'inbound',
-        'content' => 'Hola',
-        'external_message_id' => 'wamid.backfill004',
-        'sender_name' => 'Juan Perez',
-        'sender_phone' => $waId,
-    ]);
-
-    // Caso más común hoy: identificado solo por teléfono, sin DNI capturado todavía.
-    $customer = Customer::factory()->create(['name' => null, 'phone' => $waId, 'dni' => null]);
-
-    $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('identifyCustomer')
-        ->once()
-        ->andReturnUsing(function () use ($conversation, $customer) {
-            $conversation->update(['customer_id' => $customer->id]);
-
-            return ['success' => true];
-        });
-
-    $orchestrator = new InsuranceOrchestrator($adapter);
-
-    invokeTryAutoIdentifyByPhone($orchestrator, $conversation);
-
-    // El nombre se completa igual (no depende del DNI); el paso de identificación
-    // queda abierto para que CustomerIdentifierAgent pida el DNI.
-    expect($customer->fresh()->name)->toBe('Juan Perez')
-        ->and($conversation->fresh()->aiState()['customer_identified'])->toBeFalse();
-});
-
-it('does not overwrite an existing customer name', function () {
-    $waId = '5491112345679';
-
-    $conversation = Conversation::factory()->create([
-        'external_conversation_id' => $waId,
-        'customer_id' => null,
-        'metadata' => ['ai_state' => ['customer_identified' => false]],
-    ]);
-
-    Message::create([
-        'conversation_id' => $conversation->id,
-        'direction' => 'inbound',
-        'content' => 'Hola',
-        'external_message_id' => 'wamid.backfill002',
-        'sender_name' => 'Nombre Del Webhook',
-        'sender_phone' => $waId,
-    ]);
-
-    $customer = Customer::factory()->create(['name' => 'Nombre Real', 'phone' => $waId]);
-
-    $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('identifyCustomer')
-        ->once()
-        ->andReturnUsing(function () use ($conversation, $customer) {
-            $conversation->update(['customer_id' => $customer->id]);
-
-            return ['success' => true];
-        });
-
-    $orchestrator = new InsuranceOrchestrator($adapter);
-
-    invokeTryAutoIdentifyByPhone($orchestrator, $conversation);
+    dispatchIngestForCapture('5491112345678', $bsuid, 'Nombre Del Webhook');
 
     expect($customer->fresh()->name)->toBe('Nombre Real');
 });
 
-it('skips backfill when there is no inbound message with sender_name yet', function () {
-    $waId = '5491112345680';
+it('ingest treats the Usuario placeholder as no name', function () {
+    dispatchIngestForCapture(null, 'US.13491208655302741918', 'Usuario');
 
+    // BSUID-only sin nombre real: el Customer nace sin name (no se guarda el placeholder).
+    $this->assertDatabaseHas('customers', ['name' => null]);
+});
+
+it('marks customer_identified when the linked customer already has a DNI', function () {
+    // Customer factory trae DNI por default — replica al cliente que vuelve ya identificado.
+    $customer = Customer::factory()->create();
     $conversation = Conversation::factory()->create([
-        'external_conversation_id' => $waId,
-        'customer_id' => null,
+        'customer_id' => $customer->id,
         'metadata' => ['ai_state' => ['customer_identified' => false]],
     ]);
 
-    $customer = Customer::factory()->create(['name' => null, 'phone' => $waId]);
+    invokeSyncIdentifiedState($conversation);
 
-    $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('identifyCustomer')
-        ->once()
-        ->andReturnUsing(function () use ($conversation, $customer) {
-            $conversation->update(['customer_id' => $customer->id]);
+    expect($conversation->fresh()->aiState()['customer_identified'])->toBeTrue();
+});
 
-            return ['success' => true];
-        });
+it('does NOT mark customer_identified when the customer has no DNI', function () {
+    $customer = Customer::factory()->create(['dni' => null]);
+    $conversation = Conversation::factory()->create([
+        'customer_id' => $customer->id,
+        'metadata' => ['ai_state' => ['customer_identified' => false]],
+    ]);
 
-    $orchestrator = new InsuranceOrchestrator($adapter);
+    invokeSyncIdentifiedState($conversation);
 
-    invokeTryAutoIdentifyByPhone($orchestrator, $conversation);
-
-    expect($customer->fresh()->name)->toBeNull();
+    expect($conversation->fresh()->aiState()['customer_identified'])->toBeFalse();
 });

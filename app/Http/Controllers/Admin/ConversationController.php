@@ -246,15 +246,16 @@ class ConversationController extends Controller
      */
     public function reset(Conversation $conversation): RedirectResponse
     {
-        // external_conversation_id es el wa_id — clave usada por el AI SDK en agent_conversations.user_id
+        // El AI SDK keyea la memoria por conversations.id (id interno estable). El
+        // identificador externo se usa solo para el mensaje al admin.
         $waId = $conversation->external_conversation_id;
 
-        DB::transaction(function () use ($conversation, $waId): void {
+        DB::transaction(function () use ($conversation): void {
             // Desvincular la memoria del AI SDK: user_id es nullable en agent_conversations.
-            // Ponerlo a null hace que latestConversationId() no los encuentre en el próximo flujo.
+            // Ponerlo a null hace que latestConversationId() no la encuentre en el próximo flujo.
             // Los registros se conservan íntegros para auditoría de prompts/tools.
             DB::table('agent_conversations')
-                ->where('user_id', $waId)
+                ->where('user_id', $conversation->id)
                 ->update(['user_id' => null]);
 
             // Archivar la conversación desvinculando su external_id.
