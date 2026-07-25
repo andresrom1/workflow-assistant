@@ -96,13 +96,14 @@ grep -rn "opcion-de-configuracion" workflow-assistant/
 
 | Valor | Ubicación | Valor actual / fuente | Destino |
 |---|---|---|---|
-| Modelo por agente (3 con atributo) | `#[Model('deepseek-chat')]` en `IngestaExtractorAgent`; `#[Model('deepseek-reasoner')]` en `ConversationAnalyzerAgent`, `CheckoutAgent` | hardcodeado en atributo PHP | **B** — mover a `config/ai.php` (`ai.agent_models.*`); cambiar de modelo = decisión de costo/calidad con tests |
+| Modelo de texto por default | `config/ai.php` (`providers.deepseek.models.text.default`) | env `DEEPSEEK_MODEL`; default `deepseek-v4-flash` | **B ✓** — lo lee `DeepSeekProvider::defaultTextModel()`; aplica a los 4 agentes anónimos (`CheckCoverageRuleTool`, `PromptReevaluationService`, `ExtractCoverageDocumentText`, `ContentClassifier`) y a cualquier agente sin atributo de tier |
+| Modelo del tier barato | `config/ai.php` (`providers.deepseek.models.text.cheapest`) | env `DEEPSEEK_MODEL_CHEAP`; default `deepseek-v4-flash` | **B ✓** — lo eligen con `#[UseCheapestModel]` 6 agentes: `CustomerIdentifier`, `VehicleIdentifier`, `CoveragePreference`, `Quote`, `Disambiguation`, `IngestaExtractor` |
+| Modelo del tier smart | `config/ai.php` (`providers.deepseek.models.text.smartest`) | env `DEEPSEEK_MODEL_SMART`; default `deepseek-v4-pro` | **B ✓** — lo eligen con `#[UseSmartestModel]` 2 agentes: `CheckoutAgent`, `ConversationAnalyzerAgent` |
+| Modelo por agente | atributo de **tier** (`#[UseCheapestModel]` / `#[UseSmartestModel]`) en las 8 clases de `app/AI/Agents/` | ningún nombre de modelo vive en `app/` | **C** — el tier es la decisión de dominio (¿necesita razonar?); el modelo concreto de cada tier es **B**, arriba. Migrado 2026-07-25 desde `#[Model('deepseek-chat'\|'deepseek-reasoner')]` |
 | Feature flag análisis semántico | `config/ai.php` (`semantic_analysis.enabled`) | env `AI_SEMANTIC_ANALYSIS_ENABLED`; default `false` | **A?** — hoy apagado por decisión (ver deuda ROADMAP); el encendido exige revisar arquitectura primero |
 | Params análisis semántico (window 6, throttle 5m, trigger cada 3) | `config/ai.php` (`semantic_analysis.*`); 3 consumidores con default inline | env `AI_SEMANTIC_ANALYSIS_*` | **B** |
-| Modelo/provider del análisis semántico | `config/ai.php` | env | **B** |
 | Chunking RAG (600/50/40 palabras) | `ChunkAndEmbedService:14-24` | hardcodeado | **C** — recalibrar exige re-embed del corpus |
 | Dimensiones de embedding (1536) | `ChunkAndEmbedService:62` | hardcodeado | **C** — amarrado al schema de la columna pgvector |
-| Modelo de extracción de ingesta | `config/ingesta.php` (`extraction_model`) | env `INGESTA_EXTRACTION_MODEL`; default `deepseek-chat` | **B** ✓ (ya env-able) |
 | Cap de texto al LLM (16.000 chars) | `config/ingesta.php` (`max_text_chars`) | **hardcodeado, sin env** (techo de costo; <16k rompe extracción en pólizas empaquetadas — hallazgo 2026-07-13) | **B** — exponer env `INGESTA_MAX_TEXT_CHARS` |
 | CUITs de aseguradoras (5) y otros emisores (1) | `config/ingesta.php` (`company_cuits`, `other_issuer_cuits`) | hardcodeados (portados del parser v5, verificados contra corpus real) | **C** — registro canónico; si crece, tabla `companies` |
 | Alias de compañía → nombre canónico (7) | `config/ingesta.php` (`company_aliases`) | hardcodeado | **C** |

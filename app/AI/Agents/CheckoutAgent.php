@@ -8,8 +8,8 @@ use App\AI\Tools\PresentQuoteOptionsTool;
 use App\AI\Tools\RevertStageTool;
 use App\AI\Tools\SiniestroGuidanceTool;
 use App\Models\AgentPrompt;
-use Laravel\Ai\Attributes\Model;
 use Laravel\Ai\Attributes\Timeout;
+use Laravel\Ai\Attributes\UseSmartestModel;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
@@ -17,7 +17,7 @@ use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Promptable;
 use Stringable;
 
-#[Model('deepseek-reasoner')]
+#[UseSmartestModel]
 #[Timeout(360)]
 class CheckoutAgent implements Agent, Conversational, HasTools
 {

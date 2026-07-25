@@ -282,7 +282,7 @@ Mapa de la implementación (Fases 1–3). Sin DTOs: el controller arma `array<st
 > llegaban clasificados como `poliza` (el parser nunca emitía `endoso`).
 >
 > **Decisión:** el cliente deja de extraer campos. El servidor clasifica y extrae con un
-> LLM (`deepseek-chat`), texto-first (nunca el PDF como archivo — ver nota de costo abajo),
+> LLM del tier barato, texto-first (nunca el PDF como archivo — ver nota de costo abajo),
 > validando cada campo determinísticamente ("validar-o-null", la misma filosofía de v1
 > corriendo del otro lado). **Validado con un smoke test real** contra el corpus de
 > `ingestor/docs/` (15 PDFs, 7 compañías) antes de implementar: extracción igual o mejor que
@@ -330,7 +330,7 @@ POST /api/ingesta/documentos (contrato v2)
   ├─ crea IngestedDocument status=en_extraccion (payload = {schema_version, archivo, texto})
   └─ dispatch ExtractIngestedDocument (cola `documents`, conexión `database_long`, igual
      carril que ExtractCoverageDocumentText)
-        ├─ IngestaExtractorAgent (deepseek-chat) clasifica + extrae
+        ├─ IngestaExtractorAgent (tier barato) clasifica + extrae
         ├─ valida CADA campo determinísticamente (patente/DNI/fechas/número/compañía) —
         │  el LLM nunca es la última palabra
         ├─ clase del corpus (poliza/certificado/endoso/cupon/tarjeta_circulacion)
@@ -360,8 +360,9 @@ clasificador).
 `pas-web` (histórico) mandaba el PDF **entero como archivo** a un modelo frontier
 (`gpt-5.2`), lo que factura texto + una imagen renderizada por página + output grande →
 $0.04–0.10 por documento, más caro todavía si se cuela un PDF largo. Acá: **texto plano
-capado, nunca el PDF como archivo**, modelo `deepseek-chat` (no razonador — extraer 12
-campos planos no lo necesita), output ~300 tokens. El job loguea tokens in/out por
+capado, nunca el PDF como archivo**, modelo del tier barato (`#[UseCheapestModel]`, no
+razonador — extraer 12 campos planos no lo necesita; el nombre concreto sale de
+`ai.providers.deepseek.models.text.cheapest`), output ~300 tokens. El job loguea tokens in/out por
 documento para que el costo sea un dato observado. **Regla dura: nunca mandar el PDF como
 archivo/attachment al LLM de ingesta sin re-evaluar costos.**
 

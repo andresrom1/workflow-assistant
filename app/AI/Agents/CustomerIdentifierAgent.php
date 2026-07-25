@@ -7,6 +7,7 @@ use App\AI\Tools\DeclineDniTool;
 use App\AI\Tools\IdentifyCustomerTool;
 use App\AI\Tools\SiniestroGuidanceTool;
 use App\Models\AgentPrompt;
+use Laravel\Ai\Attributes\UseCheapestModel;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
@@ -14,6 +15,7 @@ use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Promptable;
 use Stringable;
 
+#[UseCheapestModel]
 class CustomerIdentifierAgent implements Agent, Conversational, HasTools
 {
     use Promptable, RemembersConversations;

@@ -84,6 +84,23 @@
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
 
+- **2026-07-25** — **Migración a DeepSeek v4 + normalización del modelo por agente.** DeepSeek
+  deprecó `deepseek-chat` y `deepseek-reasoner` (2026-07-24) en favor de `deepseek-v4-flash` y
+  `deepseek-v4-pro`. Se aprovechó para arreglar la inconsistencia de fondo: solo 3 de los 8 agentes
+  declaraban modelo (con un string hardcodeado en `#[Model]`), y los otros 5 más los 4 call-sites de
+  agente anónimo caían al default del driver, que estaba **hardcodeado en vendor**
+  (`DeepSeekProvider::defaultTextModel()` → `'deepseek-chat'`) — no había ningún lugar del repo donde
+  leer o cambiar el modelo de la mayoría de la flota. Ahora: `config/ai.php` gana
+  `providers.deepseek.models.text.{default,cheapest,smartest}` (env-able, la clave que ya leía el SDK)
+  y **los 8 agentes declaran un atributo de tier** — `#[UseSmartestModel]` en `CheckoutAgent` y
+  `ConversationAnalyzerAgent`, `#[UseCheapestModel]` en los otros 6. Cero nombres de modelo en `app/`;
+  los agentes anónimos absorben el `default` sin tocarlos. Ojo: `#[Model]` **gana** sobre los
+  atributos de tier, por eso hubo que borrarlo, no complementarlo. Se preservó el tiering previo
+  (flash = ex-chat, pro = ex-reasoner) y el `#[Timeout(360)]` de checkout. Se eliminaron 3 claves de
+  config muertas que apuntaban a los modelos deprecados y no tenían consumidor:
+  `ai.semantic_analysis.{model,provider}` e `ingesta.extraction_model`. Registrado en
+  `docs/configuracion-hardcodeada.md` §5 (resuelve la fila "Modelo por agente", que proponía
+  `ai.agent_models.*`; el destino real fue la clave nativa del provider).
 - **2026-07-21** — **Fix UX: ancho de burbuja en la recomendación de cotización (WhatsApp).** La
   presentación de las 2 opciones con botones se renderizaba en una burbuja interactiva angosta (ancho
   fijo de WhatsApp para `interactive.type: button`, no configurable) porque todo el texto largo iba en
@@ -401,7 +418,8 @@
   **Validado con smoke test real** contra el corpus (`ingestor/docs/`, 15 PDFs/7 compañías)
   antes de implementar: extracción igual o mejor que el parser v5 en las 7 (mejor en 4),
   clasificación de basura 3/3, costo medido **$0.0002/doc** (98% cache-hit).
-  - **Servidor:** `IngestaExtractorAgent` (agente nombrado, `#[Model('deepseek-chat')]`,
+  - **Servidor:** `IngestaExtractorAgent` (agente nombrado, `#[Model('deepseek-chat')]` —
+    hoy `#[UseCheapestModel]`, ver bitácora 2026-07-25,
     prompt probado en el smoke) + job `ExtractIngestedDocument` (cola `documents`/
     `database_long`, mismo carril que `ExtractCoverageDocumentText`) con validadores
     portados de `parser.py` (patente/DNI-CUIT/fechas/número/alias de compañía). Estados

@@ -8,20 +8,19 @@ return [
     |--------------------------------------------------------------------------
     |
     | El cliente local (ingestor/) sube texto plano (pdfplumber) + el PDF; el server
-    | clasifica y extrae los campos del contrato con este modelo. `deepseek-chat`
-    | (no `deepseek-reasoner`): extraer 12 campos planos no necesita razonamiento y
-    | el chat es más barato/rápido. Ver ExtractIngestedDocument + IngestaExtractorAgent.
+    | clasifica y extrae los campos del contrato. El modelo NO se configura acá: lo
+    | decide `IngestaExtractorAgent` vía `#[UseCheapestModel]` (extraer 12 campos planos
+    | no necesita razonamiento). Ver `ai.providers.deepseek.models.text.cheapest` y
+    | ExtractIngestedDocument + IngestaExtractorAgent.
     |
     */
-
-    'extraction_model' => env('INGESTA_EXTRACTION_MODEL', 'deepseek-chat'),
 
     // Cap duro del texto que se manda al LLM (le pone techo al costo por documento,
     // independiente de lo que mande el cliente). 16000 y no menos: las pólizas
     // empaquetadas (Galicia, 22-29 páginas) traen carátulas administrativas adelante y
     // el frente con los datos (DNI en pág. 6) suma ~10k chars desde el inicio — con un
     // cap menor el LLM clasifica bien pero extrae vacío (hallazgo 2026-07-13).
-    // ~4k tokens ≈ $0.001/doc con deepseek-chat: sigue siendo despreciable.
+    // ~4k tokens ≈ $0.001/doc en el tier barato: sigue siendo despreciable.
     'max_text_chars' => 16000,
 
     /*

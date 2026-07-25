@@ -48,12 +48,13 @@ return [
     | y respuestas incorrectas. Gateado por feature flag para evitar costos
     | inesperados mientras se calibra.
     |
+    | El modelo y el provider NO se configuran acá: los decide `ConversationAnalyzerAgent`
+    | vía `#[UseSmartestModel]` + `ai.default` (ver `providers.deepseek.models.text`).
+    |
     */
 
     'semantic_analysis' => [
         'enabled' => env('AI_SEMANTIC_ANALYSIS_ENABLED', false),
-        'model' => env('AI_SEMANTIC_ANALYSIS_MODEL', 'deepseek-reasoner'),
-        'provider' => env('AI_SEMANTIC_ANALYSIS_PROVIDER', 'deepseek'),
         'window_turns' => (int) env('AI_SEMANTIC_ANALYSIS_WINDOW_TURNS', 6),
         'throttle_minutes' => (int) env('AI_SEMANTIC_ANALYSIS_THROTTLE_MIN', 5),
         'trigger_every_n_turns' => (int) env('AI_SEMANTIC_ANALYSIS_TRIGGER_EVERY', 3),
@@ -93,6 +94,19 @@ return [
         'deepseek' => [
             'driver' => 'deepseek',
             'key' => env('DEEPSEEK_API_KEY'),
+
+            // opcion-de-configuracion: modelo por tier del provider deepseek.
+            // Lo consume Laravel\Ai\Providers\DeepSeekProvider. `default` aplica a los
+            // agentes anonimos y a cualquier agente sin atributo de tier; `cheapest` y
+            // `smartest` los eligen los atributos #[UseCheapestModel] / #[UseSmartestModel]
+            // de cada agente. Unico lugar del repo con nombres de modelo.
+            'models' => [
+                'text' => [
+                    'default' => env('DEEPSEEK_MODEL', 'deepseek-v4-flash'),
+                    'cheapest' => env('DEEPSEEK_MODEL_CHEAP', 'deepseek-v4-flash'),
+                    'smartest' => env('DEEPSEEK_MODEL_SMART', 'deepseek-v4-pro'),
+                ],
+            ],
         ],
 
         'eleven' => [

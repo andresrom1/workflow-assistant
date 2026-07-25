@@ -3,12 +3,12 @@
 namespace App\AI\Agents;
 
 use App\Models\AgentPrompt;
-use Laravel\Ai\Attributes\Model;
+use Laravel\Ai\Attributes\UseSmartestModel;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Promptable;
 use Stringable;
 
-#[Model('deepseek-reasoner')]
+#[UseSmartestModel]
 class ConversationAnalyzerAgent implements Agent
 {
     use Promptable;

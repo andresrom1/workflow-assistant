@@ -140,7 +140,7 @@ orquestador no lee estas banderas.
 
 | | Tier 1 — `AnalyzeConversationHealthJob` | Tier 2 — `AnalyzeConversationSemanticsJob` |
 |---|---|---|
-| Costo | Heurísticas PHP, **sin IA** | Llamada a LLM (`deepseek-reasoner`) |
+| Costo | Heurísticas PHP, **sin IA** | Llamada a LLM (tier smart, `#[UseSmartestModel]`) |
 | Disparo | Siempre, tras cada respuesta | Gated por flag + cada N turnos |
 | Banderas | `loops` (hash de outbound), `stuck` (≥5 turns), `tool_errors`, `abandoned` (24h), `long` (≥20 msgs) | `user_frustrated`, `agent_confused`, `semantic_loop`, `context_loss`, `hallucination`, `incorrect_answer` |
 | Estado | ✅ corre (cola `default`, consumida) | ⏸️ apagado, cola sin worker (ver deuda) |

@@ -8,6 +8,7 @@ use App\AI\Tools\ProvideVehicleFactTool;
 use App\AI\Tools\RevertStageTool;
 use App\AI\Tools\SiniestroGuidanceTool;
 use App\Models\AgentPrompt;
+use Laravel\Ai\Attributes\UseCheapestModel;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
@@ -15,6 +16,7 @@ use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Promptable;
 use Stringable;
 
+#[UseCheapestModel]
 class CoveragePreferenceAgent implements Agent, Conversational, HasTools
 {
     use Promptable, RemembersConversations;

@@ -5,6 +5,17 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el versionado sigue la convención `vMAYOR.MENOR` (ver sección Releases en `AGENTS.md`).
 
+## [Unreleased]
+
+### Cambiado
+
+- Migración a DeepSeek v4 (`deepseek-v4-flash` / `deepseek-v4-pro`): los modelos `deepseek-chat` y `deepseek-reasoner` quedaron deprecados el 2026-07-24.
+- Los 8 agentes de `app/AI/Agents/` declaran el modelo con un atributo de tier uniforme (`#[UseCheapestModel]` / `#[UseSmartestModel]`) en vez de `#[Model('...')]`; el nombre del modelo vive solo en `config/ai.php` (`providers.deepseek.models.text.*`, env-able con `DEEPSEEK_MODEL`, `DEEPSEEK_MODEL_CHEAP`, `DEEPSEEK_MODEL_SMART`).
+
+### Eliminado
+
+- Claves de config sin consumidor que apuntaban a modelos deprecados: `ai.semantic_analysis.model`, `ai.semantic_analysis.provider` e `ingesta.extraction_model`.
+
 ## [v3.0] - 2026-07-20
 
 ### Cambios que rompen compatibilidad

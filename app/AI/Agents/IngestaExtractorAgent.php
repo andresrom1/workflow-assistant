@@ -2,7 +2,7 @@
 
 namespace App\AI\Agents;
 
-use Laravel\Ai\Attributes\Model;
+use Laravel\Ai\Attributes\UseCheapestModel;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Promptable;
 use Stringable;
@@ -14,9 +14,10 @@ use Stringable;
  * aseguradora, un LLM lee el texto plano (pdfplumber, primeras páginas) y devuelve el
  * contrato estructurado.
  *
- * `deepseek-chat` (NO `deepseek-reasoner`): extraer 12 campos planos no necesita
- * razonamiento — el chat es más barato y más rápido. Costo medido en smoke test contra
- * el corpus real: ~$0.0002/doc (prompt fijo cacheado por DeepSeek desde la 2ª llamada).
+ * Tier barato (`#[UseCheapestModel]`, NO el razonador): extraer 12 campos planos no
+ * necesita razonamiento — el modelo barato es más rápido y cuesta menos. Costo medido en
+ * smoke test contra el corpus real: ~$0.0002/doc (prompt fijo cacheado por DeepSeek desde
+ * la 2ª llamada). El modelo concreto sale de `ai.providers.deepseek.models.text.cheapest`.
  *
  * Principio "validar-o-null" (heredado del parser v5): el prompt le exige al modelo NO
  * inventar nada. El job llamador (`ExtractIngestedDocument`) igual revalida cada campo
@@ -24,7 +25,7 @@ use Stringable;
  *
  * Es un Agent NOMBRADO para poder fakearse en tests: IngestaExtractorAgent::fake([...]).
  */
-#[Model('deepseek-chat')]
+#[UseCheapestModel]
 class IngestaExtractorAgent implements Agent
 {
     use Promptable;

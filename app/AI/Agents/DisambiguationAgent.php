@@ -2,6 +2,7 @@
 
 namespace App\AI\Agents;
 
+use Laravel\Ai\Attributes\UseCheapestModel;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Promptable;
 use Stringable;
@@ -22,6 +23,7 @@ use Stringable;
  *
  * Es un Agent NOMBRADO para poder fakearse en tests: DisambiguationAgent::fake([...]).
  */
+#[UseCheapestModel]
 class DisambiguationAgent implements Agent
 {
     use Promptable;
