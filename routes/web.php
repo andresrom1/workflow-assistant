@@ -21,6 +21,7 @@ use App\Http\Controllers\PolicyDocumentController;
 use App\Http\Controllers\PolicyReportImportController;
 use App\Http\Controllers\PolizaController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PublicQuoteController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\TrackingController;
 use Illuminate\Support\Facades\Route;
@@ -138,6 +139,14 @@ Route::get('/landing-v2-2', function () {
 Route::get('/maqueta/comparador', function () {
     return Inertia::render('Maqueta/Comparador');
 })->name('maqueta.comparador');
+
+// ─── Vista pública de cotizaciones: URL limpia via token opaco de 16 chars ────
+// Accesible sin autenticación — el token es la credencial. `noindex` es obligatorio: la URL
+// viaja por WhatsApp y no debe entrar a ningún índice de búsqueda.
+Route::get('/cotizaciones/{token}', [PublicQuoteController::class, 'show'])
+    ->middleware('noindex')
+    ->where('token', '[A-Za-z0-9]{16}')
+    ->name('cotizaciones.show');
 
 Route::get('/privacy', function () {
     return view('privacy');

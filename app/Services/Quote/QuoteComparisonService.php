@@ -5,6 +5,7 @@ namespace App\Services\Quote;
 use App\Models\Quote;
 use App\Models\QuoteAlternative;
 use App\Support\Franquicia;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -66,12 +67,19 @@ final class QuoteComparisonService
                 $glosario,
             );
 
+        // `claveVariante` es de uso interno (dedupe y reenganche de la recomendación): no tiene
+        // por qué viajar al frontend.
+        $publicos = array_map(
+            fn (array $plan): array => Arr::except($plan, 'claveVariante'),
+            $planes,
+        );
+
         return [
             'grade' => $grade,
             'gradeLabel' => $this->gradeLabel($grade),
-            'totalOpciones' => count($planes),
+            'totalOpciones' => count($publicos),
             'glosario' => $glosario,
-            'companias' => $this->groupByCompany($planes),
+            'companias' => $this->groupByCompany($publicos),
             'recomendadas' => $recomendadas,
             'comparacion' => $comparacion,
         ];
@@ -196,7 +204,8 @@ final class QuoteComparisonService
             array_map(fn (string $tag): array => $this->item($tag, $glossary), array_values($tags))
         );
 
-        $diferencia = abs($planA['precio'] - $planB['precio']);
+        // Redondeado para no mandar residuo de punto flotante al frontend.
+        $diferencia = round(abs($planA['precio'] - $planB['precio']), 2);
 
         return [
             'comunes' => $items(array_intersect($a, $b)),
@@ -205,7 +214,7 @@ final class QuoteComparisonService
             'diferenciaPrecio' => $diferencia,
             // Proyección a 12 cuotas. La vista la presenta como aproximada: la cuota se reajusta
             // cuando la compañía actualiza la suma asegurada.
-            'ahorroAnual' => $diferencia * 12,
+            'ahorroAnual' => round($diferencia * 12, 2),
         ];
     }
 

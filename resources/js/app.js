@@ -9,8 +9,9 @@ import AppLayout from './layouts/AppLayout.vue';
  * - Auth/:     login/register (cuando se implemente)
  * - Landing/:  landing pública de marca
  * - Maqueta/:  maquetas de vistas customer-facing (sin dominio, solo UX)
+ * - Cotizaciones/: vista pública del comparador de coberturas
  */
-const LAYOUT_EXCLUDED = ['Checkout/', 'Auth/', 'Landing/', 'Maqueta/'];
+const LAYOUT_EXCLUDED = ['Checkout/', 'Auth/', 'Landing/', 'Maqueta/', 'Cotizaciones/'];
 
 createInertiaApp({
     resolve: name => {
