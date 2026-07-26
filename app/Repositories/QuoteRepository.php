@@ -48,7 +48,9 @@ class QuoteRepository
             $quote->update([
                 'status' => 'processed',
                 'external_ref_id' => $engineResult['task_id'] ?? null,
-                'expires_at' => now()->addDays(7),
+                // Los precios de las compañías valen por día calendario argentino: pasado el
+                // cierre hay que recotizar. Ver Quote::endOfBusinessDay().
+                'expires_at' => Quote::endOfBusinessDay(),
             ]);
 
             // 3. Insertar alternativas de dominio (sin campos de proveedor)
