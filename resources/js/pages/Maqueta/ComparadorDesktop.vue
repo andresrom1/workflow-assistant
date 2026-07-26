@@ -11,11 +11,11 @@
         <div class="flex-1 min-w-0 text-center">
           <p class="mg-heading text-[14px] truncate">
             {{ contexto.vehiculo }} {{ contexto.anio }}
-            <span style="color: var(--mg-fg-faint)">· {{ contexto.patente }}</span>
+            <span style="color: var(--mg-fg-faint)">· {{ contexto.combustible }}</span>
           </p>
         </div>
         <a
-          :href="waLink('Volvamos con lo del seguro del Pulse.')"
+          :href="waLink('Volvamos con lo del seguro del 2008.')"
           class="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-[11.5px] font-semibold uppercase tracking-wider"
           :style="{ border: '1px solid var(--mg-hairline-strong)', color: 'var(--mg-fg)' }"
         >
@@ -28,13 +28,14 @@
     <!-- ══════ Encabezado editorial ══════ -->
     <section class="px-8 pt-10 pb-7">
       <div class="max-w-[1180px] mx-auto">
-        <p class="mg-overline mb-3">{{ contexto.cobertura }} · {{ contexto.totalOpciones }} opciones</p>
+        <p class="mg-overline mb-3">{{ contexto.cobertura }} · {{ totalOpciones }} opciones</p>
         <h1 class="mg-display text-[38px] leading-[1.1] max-w-2xl">
-          Estas son todas las opciones que conseguí para tu Pulse.
+          Estas son todas las opciones que conseguí para tu 2008.
         </h1>
         <p class="text-[14px] mt-3.5 max-w-xl leading-relaxed" style="color: var(--mg-fg-dim)">
-          Todas con suma asegurada de {{ contexto.sumaAsegurada }}. Cotizado el
-          {{ contexto.cotizadoEl }}; los precios valen hasta el {{ contexto.validoHasta }}.
+          Todas son Todo Riesgo y cubren prácticamente lo mismo. Lo que cambia entre ellas es la
+          franquicia, la suma asegurada y el precio. Cotizado el {{ contexto.cotizadoEl }}; los
+          precios valen hasta el {{ contexto.validoHasta }}.
         </p>
       </div>
     </section>
@@ -48,7 +49,7 @@
           <p class="mg-overline mb-2.5">Lo que te recomendé</p>
 
           <button
-            v-for="(item, i) in [recomendadas.principal, recomendadas.segunda]"
+            v-for="(item, i) in destacadas"
             :key="item.plan.id"
             type="button"
             class="w-full mg-card p-3.5 mb-2.5 text-left transition-all"
@@ -69,8 +70,9 @@
                     :style="{ background: 'var(--mg-mango)', color: '#fff' }"
                   >Recomendada</span>
                 </p>
-                <p class="text-[12.5px] leading-tight" style="color: var(--mg-fg-dim)">{{ item.plan.titulo }}</p>
-                <p class="text-[11.5px] mt-1" :style="{ color: 'var(--mg-leaf)' }">{{ item.plan.variante }}</p>
+                <p class="text-[11.5px] mt-1" :style="{ color: 'var(--mg-leaf)' }">
+                  Franquicia {{ item.plan.franquicia }}
+                </p>
               </div>
               <div class="flex-shrink-0 text-right leading-none">
                 <span class="mg-display text-[21px]">${{ formatPrecio(item.plan.precio) }}</span>
@@ -95,7 +97,7 @@
 
           <p class="mg-overline mb-1">Todas las opciones</p>
           <p class="text-[11.5px] mb-3" style="color: var(--mg-fg-dim)">
-            Agrupadas por compañía. Lo que cambia dentro de cada una está anotado.
+            Agrupadas por compañía. Dentro de cada una, lo que cambia es la franquicia.
           </p>
 
           <div v-for="c in companias" :key="c.slug" class="mb-5">
@@ -105,7 +107,9 @@
                 :style="{ background: c.color }"
               >{{ c.nombre.charAt(0) }}</span>
               <span class="text-[12.5px] font-semibold">{{ c.nombre }}</span>
-              <span class="text-[11px]" style="color: var(--mg-fg-faint)">{{ c.planes.length }} planes</span>
+              <span class="text-[11px]" style="color: var(--mg-fg-faint)">
+                {{ formatSuma(c.planes[0].sumaAsegurada) }}
+              </span>
             </div>
 
             <button
@@ -118,14 +122,13 @@
             >
               <div class="min-w-0 flex-1">
                 <p class="text-[13px] font-semibold leading-tight">
-                  {{ p.titulo }}
+                  Franquicia {{ p.franquicia }}
                   <span
                     v-if="esRecomendada(p.id)"
                     class="ml-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full align-middle"
                     :style="{ background: 'var(--mg-mango-tint)', color: 'var(--mg-mango)' }"
                   >Te la recomendé</span>
                 </p>
-                <p class="text-[11.5px] leading-snug mt-0.5" :style="{ color: 'var(--mg-leaf)' }">{{ p.variante }}</p>
                 <p
                   v-if="p.notaVariante"
                   class="text-[11px] leading-snug mt-0.5"
@@ -141,7 +144,7 @@
         <div class="sticky top-[88px]">
 
           <!-- Detalle de un plan -->
-          <article v-if="vista === 'plan' && planActivo" class="mg-card p-6">
+          <article v-if="vista === 'plan'" class="mg-card p-6">
             <div class="flex items-start gap-4">
               <span
                 class="flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center text-[19px] font-bold text-white"
@@ -149,9 +152,7 @@
               >{{ planActivo.aseguradora.charAt(0) }}</span>
               <div class="min-w-0 flex-1">
                 <p class="mg-display text-[26px] leading-tight">{{ planActivo.aseguradora }}</p>
-                <p class="text-[14px]" style="color: var(--mg-fg-dim)">
-                  {{ planActivo.titulo }} · {{ planActivo.variante }}
-                </p>
+                <p class="text-[14px]" style="color: var(--mg-fg-dim)">{{ planActivo.titulo }}</p>
               </div>
               <div class="flex-shrink-0 text-right leading-none">
                 <span class="mg-display text-[34px]">${{ formatPrecio(planActivo.precio) }}</span>
@@ -167,16 +168,16 @@
               :style="{ borderTop: '1px solid var(--mg-hairline)', borderBottom: '1px solid var(--mg-hairline)' }"
             >
               <div>
+                <p class="mg-overline mb-1">Franquicia</p>
+                <p class="mg-heading text-[15px]">{{ planActivo.franquicia }}</p>
+              </div>
+              <div>
                 <p class="mg-overline mb-1">Suma asegurada</p>
-                <p class="mg-heading text-[15px]">{{ contexto.sumaAsegurada }}</p>
+                <p class="mg-heading text-[15px]">{{ formatSuma(planActivo.sumaAsegurada) }}</p>
               </div>
               <div>
-                <p class="mg-overline mb-1">Cobertura</p>
-                <p class="mg-heading text-[15px]">{{ contexto.cobertura }}</p>
-              </div>
-              <div>
-                <p class="mg-overline mb-1">Coberturas incluidas</p>
-                <p class="mg-heading text-[15px]">{{ Object.keys(planActivo.detalle).length }}</p>
+                <p class="mg-overline mb-1">Coberturas</p>
+                <p class="mg-heading text-[15px]">{{ coberturasPlan.length }}</p>
               </div>
             </div>
 
@@ -198,15 +199,15 @@
 
             <p class="mg-overline mt-6 mb-1">Qué cubre</p>
             <p class="text-[12px] mb-3" style="color: var(--mg-fg-faint)">
-              Cualquiera de estas coberturas te la puedo explicar por WhatsApp con lo que dice la póliza.
+              Cualquiera de estas te la puedo explicar por WhatsApp con lo que dice la póliza.
             </p>
 
             <div class="grid grid-cols-2 gap-x-6">
               <a
-                v-for="(nota, label) in planActivo.detalle"
-                :key="label"
+                v-for="item in coberturasPlan"
+                :key="item.label"
                 :href="waLink(
-                  `Sobre ${planActivo.aseguradora} ${planActivo.titulo}: ¿qué cubre exactamente “${label}”? ¿Tiene tope o franquicia?`,
+                  `Sobre ${planActivo.aseguradora} ${planActivo.titulo}: ¿qué cubre exactamente “${item.label}”? ¿Tiene tope o límite de eventos?`,
                 )"
                 class="group flex items-start gap-2.5 py-2.5"
                 :style="{ borderBottom: '1px solid var(--mg-hairline)' }"
@@ -219,17 +220,33 @@
                   <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
                 <span class="min-w-0 flex-1">
-                  <span class="block text-[13px] font-semibold leading-tight">{{ label }}</span>
-                  <span class="block text-[11.5px] mt-0.5 leading-snug" style="color: var(--mg-fg-dim)">{{ nota }}</span>
+                  <span class="block text-[13px] font-semibold leading-tight">{{ item.label }}</span>
+                  <span class="block text-[11.5px] mt-0.5 leading-snug" style="color: var(--mg-fg-dim)">{{ item.nota }}</span>
                 </span>
                 <span
-                  class="flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                  class="flex-shrink-0 mt-0.5 flex items-center gap-1"
                   :style="{ color: 'var(--mg-mango)' }"
                 >
-                  <ChatIcon :size="14" />
+                  <ChatIcon :size="13" />
+                  <span class="text-[10.5px] font-semibold">Preguntar</span>
                 </span>
               </a>
             </div>
+
+            <template v-if="extrasPlan.length">
+              <p class="mg-overline mt-6 mb-2">Además</p>
+              <div class="grid grid-cols-2 gap-x-6">
+                <div
+                  v-for="item in extrasPlan"
+                  :key="item.label"
+                  class="py-2.5"
+                  :style="{ borderBottom: '1px solid var(--mg-hairline)' }"
+                >
+                  <p class="text-[13px] font-semibold leading-tight">{{ item.label }}</p>
+                  <p class="text-[11.5px] mt-0.5 leading-snug" style="color: var(--mg-fg-dim)">{{ item.nota }}</p>
+                </div>
+              </div>
+            </template>
 
             <div class="flex gap-3 mt-7">
               <a
@@ -241,7 +258,7 @@
                 class="mg-btn-ghost"
               >
                 <ChatIcon :size="16" />
-                Preguntar al asistente
+                Preguntar por WhatsApp
               </a>
             </div>
           </article>
@@ -255,7 +272,7 @@
 
             <div class="grid grid-cols-2 gap-4 mt-6">
               <div
-                v-for="(item, i) in [recomendadas.principal, recomendadas.segunda]"
+                v-for="(item, i) in destacadas"
                 :key="item.plan.id"
                 class="p-4 rounded-2xl"
                 :style="{
@@ -278,8 +295,15 @@
 
                 <div class="mt-4 pt-3.5" :style="{ borderTop: '1px solid var(--mg-hairline)' }">
                   <p class="mg-overline mb-2">Solo acá</p>
+                  <p
+                    v-if="!(i === 0 ? comparacion.soloA : comparacion.soloB).length"
+                    class="text-[11.5px] leading-snug"
+                    style="color: var(--mg-fg-dim)"
+                  >
+                    Nada que la otra no tenga.
+                  </p>
                   <div
-                    v-for="f in (i === 0 ? comparacion.soloPrincipal : comparacion.soloSegunda)"
+                    v-for="f in (i === 0 ? comparacion.soloA : comparacion.soloB)"
                     :key="f.label"
                     class="flex items-start gap-2 py-1.5"
                   >
@@ -304,21 +328,37 @@
               </div>
             </div>
 
+            <!-- Lo que de verdad las separa -->
+            <p class="mg-overline mt-6 mb-2">Lo que más cambia</p>
+            <div
+              v-for="fila in filasClave"
+              :key="fila.label"
+              class="grid grid-cols-[130px_1fr_1fr] gap-4 py-2.5 items-baseline"
+              :style="{ borderBottom: '1px solid var(--mg-hairline)' }"
+            >
+              <span class="mg-overline">{{ fila.label }}</span>
+              <span class="text-[13px] font-semibold" :style="{ color: 'var(--mg-mango)' }">{{ fila.a }}</span>
+              <span class="text-[13px] font-semibold">{{ fila.b }}</span>
+            </div>
+
             <p
               class="mt-5 p-4 rounded-2xl text-[13.5px] leading-relaxed"
               :style="{ background: 'var(--mg-ok-tint)' }"
             >
               <strong>{{ recomendadas.segunda.plan.aseguradora }} sale
-                ${{ formatPrecio(comparacion.diferenciaPrecio) }} menos por mes</strong>
-              — ${{ formatPrecio(comparacion.diferenciaPrecio * 12) }} en el año. La cobertura no es
-              peor ni mejor: cambia qué cubre.
+                ${{ formatPrecio(diferenciaPrecio) }} menos por mes</strong>, un
+              {{ diferenciaPorcentaje }}% menos. Tené en cuenta que la cuota se actualiza cuando la
+              compañía reajusta la suma asegurada.
             </p>
 
             <div class="mt-6">
-              <p class="mg-overline mb-2.5">Igual en las dos</p>
+              <p class="mg-overline mb-1.5">Incluidas en las dos ({{ comparacion.comunes.length }})</p>
+              <p class="text-[12px] mb-2.5" style="color: var(--mg-fg-faint)">
+                Las dos las incluyen. Los topes y límites de cada una te los confirmo por chat.
+              </p>
               <div class="grid grid-cols-2 gap-x-6">
                 <div
-                  v-for="f in comparacion.iguales"
+                  v-for="f in comparacion.comunes"
                   :key="f.label"
                   class="flex items-start gap-2.5 py-2"
                   :style="{ borderBottom: '1px solid var(--mg-hairline)' }"
@@ -339,7 +379,9 @@
             </div>
 
             <a
-              :href="waLink('Vi la comparación de Sancor Auto Max 6 y Triunfo C2 Full. ¿Cuál me conviene?')"
+              :href="waLink(
+                `Vi la comparación de ${recomendadas.principal.plan.aseguradora} y ${recomendadas.segunda.plan.aseguradora}. ¿Cuál me conviene?`,
+              )"
               class="mg-btn-ghost mt-7"
             >
               <ChatIcon :size="16" />
@@ -357,19 +399,40 @@ import { computed, ref } from 'vue'
 import MangoLogo from '@/components/Mango/MangoLogo.vue'
 import ChatIcon from './ChatIcon.vue'
 import {
+  coberturasDe,
   companias,
   comparacion,
   contexto,
+  diferenciaPorcentaje,
+  diferenciaPrecio,
   formatPrecio,
+  formatSuma,
   planPorId,
   recomendadas,
+  totalOpciones,
   waLink,
 } from './comparadorData'
 
 const vista = ref<'plan' | 'compare'>('plan')
 const planActivoId = ref<number>(recomendadas.principal.plan.id)
 
+const destacadas = [recomendadas.principal, recomendadas.segunda]
+
 const planActivo = computed(() => planPorId(planActivoId.value))
+const coberturasPlan = computed(() => coberturasDe(planActivo.value).filter((i) => i.esCobertura))
+const extrasPlan = computed(() => coberturasDe(planActivo.value).filter((i) => !i.esCobertura))
+
+/** Las filas que de verdad separan a las dos recomendadas. */
+const filasClave = computed(() => {
+  const a = recomendadas.principal.plan
+  const b = recomendadas.segunda.plan
+
+  return [
+    { label: 'Franquicia', a: a.franquicia, b: b.franquicia },
+    { label: 'Suma asegurada', a: formatSuma(a.sumaAsegurada), b: formatSuma(b.sumaAsegurada) },
+    { label: 'Coberturas', a: `${a.features.length} ítems`, b: `${b.features.length} ítems` },
+  ]
+})
 
 function seleccionar(id: number): void {
   planActivoId.value = id
