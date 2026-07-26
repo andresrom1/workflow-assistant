@@ -82,7 +82,6 @@ export const contexto = {
   combustible: 'GNC',
   cobertura: 'Todo Riesgo',
   cotizadoEl: '26 de julio',
-  validoHasta: '2 de agosto',
 }
 
 /** Número de placeholder — en producción sale de config('whatsapp.public_number'). */
@@ -504,9 +503,12 @@ export const diferenciaPrecio = Math.abs(
   recomendadas.principal.plan.precio - recomendadas.segunda.plan.precio,
 )
 
-export const diferenciaPorcentaje = Math.round(
-  (diferenciaPrecio / recomendadas.principal.plan.precio) * 100,
-)
+/**
+ * Proyección a 12 cuotas. Se presenta como aproximada a propósito: la cuota se
+ * reajusta cuando la compañía actualiza la suma asegurada, así que el número
+ * exacto no se va a cumplir.
+ */
+export const ahorroAnual = diferenciaPrecio * 12
 
 // ── Formato ──────────────────────────────────────────────────────────────────
 

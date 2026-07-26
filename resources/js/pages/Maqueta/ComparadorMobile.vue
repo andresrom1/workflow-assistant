@@ -170,8 +170,8 @@
     <!-- ══════ Pie: vigencia y vuelta al chat ══════ -->
     <footer class="px-4 pt-7">
       <p class="text-[11.5px] leading-relaxed" style="color: var(--mg-fg-faint)">
-        Cotizado el {{ contexto.cotizadoEl }}. Los precios valen hasta el
-        {{ contexto.validoHasta }}; después te los recotizo.
+        Cotizado el {{ contexto.cotizadoEl }}. Los precios valen hasta el final del día; después te
+        los recotizo.
       </p>
       <a
         :href="waLink('Volvamos con lo del seguro del 2008.')"
@@ -239,17 +239,11 @@
           </p>
         </div>
 
-        <p class="mg-overline mt-5 mb-1">Qué cubre</p>
-        <p class="text-[11.5px] mb-2.5" style="color: var(--mg-fg-faint)">
-          Tocá cualquier ítem y te explico qué dice la póliza.
-        </p>
+        <p class="mg-overline mt-5 mb-2.5">Qué cubre</p>
 
-        <a
+        <div
           v-for="item in coberturasPlan"
           :key="item.label"
-          :href="waLink(
-            `Sobre ${planActivo.aseguradora} ${planActivo.titulo}: ¿qué cubre exactamente “${item.label}”? ¿Tiene tope o límite de eventos?`,
-          )"
           class="flex items-start gap-2.5 py-3"
           :style="{ borderBottom: '1px solid var(--mg-hairline)' }"
         >
@@ -260,15 +254,11 @@
           >
             <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          <span class="min-w-0 flex-1">
-            <span class="block text-[13.5px] font-semibold leading-tight">{{ item.label }}</span>
-            <span class="block text-[12px] mt-0.5 leading-snug" style="color: var(--mg-fg-dim)">{{ item.nota }}</span>
-          </span>
-          <span class="flex-shrink-0 mt-0.5 flex items-center gap-1" :style="{ color: 'var(--mg-mango)' }">
-            <ChatIcon :size="13" />
-            <span class="text-[11px] font-semibold">Preguntar</span>
-          </span>
-        </a>
+          <div class="min-w-0 flex-1">
+            <p class="text-[13.5px] font-semibold leading-tight">{{ item.label }}</p>
+            <p class="text-[12px] mt-0.5 leading-snug" style="color: var(--mg-fg-dim)">{{ item.nota }}</p>
+          </div>
+        </div>
 
         <template v-if="extrasPlan.length">
           <p class="mg-overline mt-5 mb-2">Además</p>
@@ -394,8 +384,8 @@
           :style="{ background: 'var(--mg-ok-tint)', color: 'var(--mg-fg)' }"
         >
           <strong>{{ recomendadas.segunda.plan.aseguradora }} sale
-            ${{ formatPrecio(diferenciaPrecio) }} menos por mes</strong>, un {{ diferenciaPorcentaje }}% menos.
-          Tené en cuenta que la cuota se actualiza cuando la compañía reajusta la suma asegurada.
+            ${{ formatPrecio(diferenciaPrecio) }} menos por mes.</strong>
+          Vas a ahorrar aproximadamente ${{ formatPrecio(ahorroAnual) }} al año.
         </p>
 
         <div class="mt-5">
@@ -474,11 +464,11 @@ import BottomSheet from './BottomSheet.vue'
 import ChatIcon from './ChatIcon.vue'
 import {
   coberturasDe,
+  ahorroAnual,
   companias,
   comparacion,
   contexto,
   desdePrecio,
-  diferenciaPorcentaje,
   diferenciaPrecio,
   formatPrecio,
   formatSuma,

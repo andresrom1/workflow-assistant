@@ -35,7 +35,7 @@
         <p class="text-[14px] mt-3.5 max-w-xl leading-relaxed" style="color: var(--mg-fg-dim)">
           Todas son Todo Riesgo y cubren prácticamente lo mismo. Lo que cambia entre ellas es la
           franquicia, la suma asegurada y el precio. Cotizado el {{ contexto.cotizadoEl }}; los
-          precios valen hasta el {{ contexto.validoHasta }}.
+          precios valen hasta el final del día.
         </p>
       </div>
     </section>
@@ -184,19 +184,13 @@
               {{ razonDe(planActivo.id) }}
             </blockquote>
 
-            <p class="mg-overline mt-6 mb-1">Qué cubre</p>
-            <p class="text-[12px] mb-3" style="color: var(--mg-fg-faint)">
-              Cualquiera de estas te la puedo explicar por WhatsApp con lo que dice la póliza.
-            </p>
+            <p class="mg-overline mt-6 mb-2.5">Qué cubre</p>
 
             <div class="grid grid-cols-2 gap-x-6">
-              <a
+              <div
                 v-for="item in coberturasPlan"
                 :key="item.label"
-                :href="waLink(
-                  `Sobre ${planActivo.aseguradora} ${planActivo.titulo}: ¿qué cubre exactamente “${item.label}”? ¿Tiene tope o límite de eventos?`,
-                )"
-                class="group flex items-start gap-2.5 py-2.5"
+                class="flex items-start gap-2.5 py-2.5"
                 :style="{ borderBottom: '1px solid var(--mg-hairline)' }"
               >
                 <svg
@@ -206,18 +200,11 @@
                 >
                   <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-                <span class="min-w-0 flex-1">
-                  <span class="block text-[13px] font-semibold leading-tight">{{ item.label }}</span>
-                  <span class="block text-[11.5px] mt-0.5 leading-snug" style="color: var(--mg-fg-dim)">{{ item.nota }}</span>
-                </span>
-                <span
-                  class="flex-shrink-0 mt-0.5 flex items-center gap-1"
-                  :style="{ color: 'var(--mg-mango)' }"
-                >
-                  <ChatIcon :size="13" />
-                  <span class="text-[10.5px] font-semibold">Preguntar</span>
-                </span>
-              </a>
+                <div class="min-w-0 flex-1">
+                  <p class="text-[13px] font-semibold leading-tight">{{ item.label }}</p>
+                  <p class="text-[11.5px] mt-0.5 leading-snug" style="color: var(--mg-fg-dim)">{{ item.nota }}</p>
+                </div>
+              </div>
             </div>
 
             <template v-if="extrasPlan.length">
@@ -333,9 +320,8 @@
               :style="{ background: 'var(--mg-ok-tint)' }"
             >
               <strong>{{ recomendadas.segunda.plan.aseguradora }} sale
-                ${{ formatPrecio(diferenciaPrecio) }} menos por mes</strong>, un
-              {{ diferenciaPorcentaje }}% menos. Tené en cuenta que la cuota se actualiza cuando la
-              compañía reajusta la suma asegurada.
+                ${{ formatPrecio(diferenciaPrecio) }} menos por mes.</strong>
+              Vas a ahorrar aproximadamente ${{ formatPrecio(ahorroAnual) }} al año.
             </p>
 
             <div class="mt-6">
@@ -386,11 +372,11 @@ import { computed, ref } from 'vue'
 import MangoLogo from '@/components/Mango/MangoLogo.vue'
 import ChatIcon from './ChatIcon.vue'
 import {
+  ahorroAnual,
   coberturasDe,
   companias,
   comparacion,
   contexto,
-  diferenciaPorcentaje,
   diferenciaPrecio,
   formatPrecio,
   formatSuma,
