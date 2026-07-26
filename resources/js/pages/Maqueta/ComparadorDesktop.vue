@@ -129,11 +129,6 @@
                     :style="{ background: 'var(--mg-mango-tint)', color: 'var(--mg-mango)' }"
                   >Te la recomendé</span>
                 </p>
-                <p
-                  v-if="p.notaVariante"
-                  class="text-[11px] leading-snug mt-0.5"
-                  style="color: var(--mg-warn)"
-                >{{ p.notaVariante }}</p>
               </div>
               <span class="flex-shrink-0 mg-display text-[16px]">${{ formatPrecio(p.precio) }}</span>
             </button>
@@ -188,14 +183,6 @@
             >
               {{ razonDe(planActivo.id) }}
             </blockquote>
-
-            <div
-              v-if="planActivo.notaVariante"
-              class="mt-4 p-3.5 rounded-xl text-[13px] leading-relaxed"
-              :style="{ background: 'var(--mg-mango-tint)' }"
-            >
-              {{ planActivo.notaVariante }}
-            </div>
 
             <p class="mg-overline mt-6 mb-1">Qué cubre</p>
             <p class="text-[12px] mb-3" style="color: var(--mg-fg-faint)">

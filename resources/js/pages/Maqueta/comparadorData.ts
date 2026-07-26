@@ -66,8 +66,6 @@ export type Plan = {
   precio: number
   sumaAsegurada: number
   features: string[]
-  /** Cuando dos variantes no se distinguen con los datos que tenemos. */
-  notaVariante?: string
 }
 
 export type Compania = {
@@ -125,9 +123,8 @@ const TAGS_SANCOR = [...TAGS_SAN_CRISTOBAL, 'Reposición 0KM']
 const TAGS_GALICIA = [...TAGS_SANCOR, 'Caída de árboles']
 
 // ── Planes ───────────────────────────────────────────────────────────────────
-// Duplicados exactos removidos: la cotización trae Galicia 4% y 2%, y San
-// Cristóbal 7,5% y 5%, dos veces cada uno con precio idéntico. Cuando todo lo
-// que el dominio conoce coincide, es una sola opción.
+// Las 24 alternativas tal cual vienen de la cotización, con repetidos incluidos.
+// La regla que se queda con la más barata está abajo, en `soloLaMasBarata`.
 
 const GALICIA: Compania = {
   slug: 'galicia',
@@ -136,6 +133,15 @@ const GALICIA: Compania = {
   planes: [
     {
       id: 273,
+      aseguradora: 'Galicia',
+      titulo: 'Todo Riesgo Franquicia 4%',
+      franquicia: '4% de la suma asegurada',
+      precio: 90317.04,
+      sumaAsegurada: 16512000,
+      features: TAGS_GALICIA,
+    },
+    {
+      id: 309,
       aseguradora: 'Galicia',
       titulo: 'Todo Riesgo Franquicia 4%',
       franquicia: '4% de la suma asegurada',
@@ -153,6 +159,15 @@ const GALICIA: Compania = {
       features: TAGS_GALICIA,
     },
     {
+      id: 308,
+      aseguradora: 'Galicia',
+      titulo: 'Todo Riesgo Franquicia 2%',
+      franquicia: '2% de la suma asegurada',
+      precio: 111473.27,
+      sumaAsegurada: 16512000,
+      features: TAGS_GALICIA,
+    },
+    {
       id: 266,
       aseguradora: 'Galicia',
       titulo: 'Todo Riesgo Franquicia 4%',
@@ -160,8 +175,6 @@ const GALICIA: Compania = {
       precio: 116461.65,
       sumaAsegurada: 16512000,
       features: TAGS_GALICIA,
-      notaVariante:
-        'Misma franquicia y misma cobertura que la de $90.317 según los datos de la compañía. Preguntame y lo confirmo.',
     },
     {
       id: 265,
@@ -171,8 +184,6 @@ const GALICIA: Compania = {
       precio: 144830.9,
       sumaAsegurada: 16512000,
       features: TAGS_GALICIA,
-      notaVariante:
-        'Misma franquicia y misma cobertura que la de $111.473 según los datos de la compañía. Preguntame y lo confirmo.',
     },
   ],
 }
@@ -269,8 +280,6 @@ const EXPERTA: Compania = {
       precio: 115474,
       sumaAsegurada: 16373000,
       features: TAGS_EXPERTA,
-      notaVariante:
-        'Misma franquicia y misma cobertura que la de $103.927 según los datos de la compañía. Preguntame y lo confirmo.',
     },
     {
       id: 344,
@@ -289,8 +298,6 @@ const EXPERTA: Compania = {
       precio: 129214,
       sumaAsegurada: 16373000,
       features: TAGS_EXPERTA,
-      notaVariante:
-        'Misma franquicia y misma cobertura que la de $116.294 según los datos de la compañía. Preguntame y lo confirmo.',
     },
   ],
 }
@@ -310,7 +317,25 @@ const SAN_CRISTOBAL: Compania = {
       features: TAGS_SAN_CRISTOBAL,
     },
     {
+      id: 367,
+      aseguradora: 'San Cristóbal',
+      titulo: 'Todo Riesgo Franquicia 7,5%',
+      franquicia: '7,5% de la suma asegurada',
+      precio: 149984,
+      sumaAsegurada: 16095000,
+      features: TAGS_SAN_CRISTOBAL,
+    },
+    {
       id: 366,
+      aseguradora: 'San Cristóbal',
+      titulo: 'Todo Riesgo Franquicia 5%',
+      franquicia: '5% de la suma asegurada',
+      precio: 161824,
+      sumaAsegurada: 16095000,
+      features: TAGS_SAN_CRISTOBAL,
+    },
+    {
+      id: 318,
       aseguradora: 'San Cristóbal',
       titulo: 'Todo Riesgo Franquicia 5%',
       franquicia: '5% de la suma asegurada',
@@ -326,8 +351,6 @@ const SAN_CRISTOBAL: Compania = {
       precio: 181823.67,
       sumaAsegurada: 16095000,
       features: TAGS_SAN_CRISTOBAL,
-      notaVariante:
-        'Misma franquicia y misma cobertura que la de $149.984 según los datos de la compañía. Preguntame y lo confirmo.',
     },
     {
       id: 376,
@@ -337,8 +360,6 @@ const SAN_CRISTOBAL: Compania = {
       precio: 196626.33,
       sumaAsegurada: 16095000,
       features: TAGS_SAN_CRISTOBAL,
-      notaVariante:
-        'Misma franquicia y misma cobertura que la de $161.824 según los datos de la compañía. Preguntame y lo confirmo.',
     },
   ],
 }
@@ -365,8 +386,6 @@ const TRIUNFO: Compania = {
       precio: 71799.2,
       sumaAsegurada: 15400000,
       features: TAGS_TRIUNFO,
-      notaVariante:
-        'Misma franquicia y misma cobertura que la de $70.447 según los datos de la compañía. Preguntame y lo confirmo.',
     },
   ],
 }
@@ -383,9 +402,33 @@ function tieneCoberturas(p: Plan): boolean {
   return p.features.length > 0
 }
 
+/**
+ * Cuando dos alternativas de la misma compañía comparten franquicia y
+ * coberturas, y lo único que las separa es el precio, se muestra la más barata.
+ *
+ * Pasa seguido: Galicia devuelve Franquicia 4% a $90.317 y a $116.462, y San
+ * Cristóbal la de 7,5% a $149.984 y a $181.824. En el dominio son
+ * indistinguibles — cambia el `external_quote_id` del proveedor y nada más —,
+ * así que ofrecer la cara no tiene sentido para el cliente.
+ */
+function soloLaMasBarata(planes: Plan[]): Plan[] {
+  const porVariante = new Map<string, Plan>()
+
+  for (const plan of planes) {
+    const clave = `${plan.franquicia}|${[...plan.features].sort().join(',')}`
+    const elegido = porVariante.get(clave)
+
+    if (!elegido || plan.precio < elegido.precio) {
+      porVariante.set(clave, plan)
+    }
+  }
+
+  return [...porVariante.values()].sort((a, b) => a.precio - b.precio)
+}
+
 export const companias: Compania[] = TODAS.map((c) => ({
   ...c,
-  planes: c.planes.filter(tieneCoberturas),
+  planes: soloLaMasBarata(c.planes.filter(tieneCoberturas)),
 })).filter((c) => c.planes.length > 0)
 
 export const todosLosPlanes: Plan[] = companias.flatMap((c) => c.planes)

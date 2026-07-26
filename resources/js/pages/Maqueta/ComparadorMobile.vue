@@ -239,14 +239,6 @@
           </p>
         </div>
 
-        <div
-          v-if="planActivo.notaVariante"
-          class="mt-3.5 p-3 rounded-xl text-[12.5px] leading-relaxed"
-          :style="{ background: 'var(--mg-mango-tint)', color: 'var(--mg-fg)' }"
-        >
-          {{ planActivo.notaVariante }}
-        </div>
-
         <p class="mg-overline mt-5 mb-1">Qué cubre</p>
         <p class="text-[11.5px] mb-2.5" style="color: var(--mg-fg-faint)">
           Tocá cualquier ítem y te explico qué dice la póliza.
@@ -352,13 +344,6 @@
               >Te la recomendé</span>
             </p>
             <p class="text-[11.5px] mt-0.5 leading-snug" style="color: var(--mg-fg-faint)">{{ p.titulo }}</p>
-            <p
-              v-if="p.notaVariante"
-              class="text-[11.5px] mt-1 leading-snug"
-              style="color: var(--mg-warn)"
-            >
-              {{ p.notaVariante }}
-            </p>
           </div>
           <div class="flex-shrink-0 text-right leading-none">
             <span class="mg-display text-[19px]">${{ formatPrecio(p.precio) }}</span>
