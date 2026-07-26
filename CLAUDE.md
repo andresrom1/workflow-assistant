@@ -115,6 +115,27 @@ class MyTool implements Tool
 }
 ```
 
+### Las tools SIEMPRE entran por `handleToolCall()` — nunca al handler directo
+
+```php
+// ✅
+$result = $this->adapter->handleToolCall($request->all(), 'identify_customer', $this->conversation);
+
+// ❌ saltea el try/catch y deja el error invisible
+$result = $this->adapter->identifyCustomer($request->all(), $this->conversation);
+```
+
+`WhatsAppAdapter::handleToolCall()` es el único lugar con `try/catch` + logging. Si una tool llama al
+handler directo, la excepción escapa al SDK: Prism traduce cualquier `TypeError` o
+`InvalidArgumentException` a `"Invalid parameters for tool : X"`, lo captura en
+`CallsTools::executeToolCall()` y lo devuelve como resultado de tool **sin loguear nada**, tirando el
+mensaje original. Resultado: el modelo recibe un texto opaco, contesta "tuve un inconveniente técnico"
+y en `laravel.log` no queda ni una línea del turno. Pasó en producción — ver ROADMAP, bitácora
+2026-07-25.
+
+El catch es sobre `\Throwable`, no `\Exception`: un `TypeError` (argumento con el tipo equivocado desde
+el modelo) es `Error` y con `\Exception` se escapaba.
+
 ### Directory conventions
 - `app/AI/Agents/` — sub-agents (one per workflow step)
 - `app/AI/Tools/` — tool classes (one per adapter operation)

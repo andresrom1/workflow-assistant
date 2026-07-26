@@ -38,12 +38,12 @@ class AgentToolAdapter implements AIProviderAdapterInterface
      * Recibe el payload del proveedor de IA, lo normaliza y delega
      * la ejecución al handler correspondiente.
      */
-    public function handleToolCall(array $payload, string $toolName): array
+    public function handleToolCall(array $payload, string $toolName, ?Conversation $conversation = null): array
     {
         $this->validateCommonFields($payload);
 
         $data = $this->normalizePayload($payload);
-        $conversation = $this->conversationRepo->findOrCreateByExternalId(
+        $conversation ??= $this->conversationRepo->findOrCreateByExternalId(
             $data['external_conversation_id'],
             $data['channel']
         );

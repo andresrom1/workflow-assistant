@@ -84,6 +84,32 @@
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
 
+- **2026-07-25** — **Las tools vuelven a entrar por `handleToolCall()`: los errores dejan de ser
+  invisibles.** Reporte: el cliente dio el DNI por WhatsApp (conversación 10) y el agente contestó
+  "Tuve un inconveniente técnico"; `laravel.log` no tenía **ni una línea** de ese turno. El resultado
+  real de la tool quedó en `agent_conversation_messages.tool_results`:
+  `"Invalid parameters for tool : IdentifyCustomerTool"`, dos veces. Causa de la ceguera: las 7 tools
+  llamaban al handler del adapter **directo** (`$adapter->identifyCustomer(...)`), salteándose
+  `handleToolCall()`, que es donde vive el `try/catch` con los `Log::warning`/`Log::error`. Sin ese
+  catch, la excepción escapa al SDK; Prism mapea cualquier `TypeError`/`InvalidArgumentException` a
+  ese texto genérico (`PrismException::invalidParameterInTool()`), lo captura en
+  `CallsTools::executeToolCall()` y lo devuelve como resultado de tool **sin loguear**, descartando el
+  mensaje original (`getPrevious()` se pierde). O sea: el motivo real nunca se escribió en ningún
+  lado. Fix: `handleToolCall(array $payload, string $toolName, ?Conversation $conversation = null)`
+  —la conversación ahora llega inyectada desde la tool en vez de re-resolverse por
+  `external_conversation_id` (vestigio del camino web), con fallback al lookup viejo para
+  `ToolsController`—, se agregaron los arms faltantes (`provide_vehicle_fact`, `revert_stage`), el
+  catch pasó de `\Exception` a **`\Throwable`** (un `TypeError` es `Error`, no `Exception`: se escapaba)
+  y ambos logs incluyen ahora `tool`, `conversation_id`, `payload`, clase de excepción, archivo:línea
+  y trace. Las 7 tools pasan por ahí. Verificado con `ToolErrorVisibilityTest` (7 casos) y sonda
+  manual: cada payload malformado devuelve su motivo real
+  (`DNI inválido`, `The identifier value field must be a string.`,
+  `The selected identifier type is invalid.`, `... field is required.`) en vez de un texto opaco.
+  **Nota sobre el incidente:** ninguna de esas cinco validaciones explica el fallo si el payload que
+  llegó a la tool fue el que quedó guardado (`{"identifier_type":"dni","identifier_value":"30123727"}`
+  → ese caso pasa y persiste el DNI, probado en prod contra la conversación 10). Queda pendiente de
+  diagnóstico; con esta instrumentación la próxima vez el motivo sale en una línea de log.
+  **Regla:** ninguna tool debe llamar a los handlers del adapter directamente.
 - **2026-07-25** — **Migración a DeepSeek v4 + normalización del modelo por agente.** DeepSeek
   deprecó `deepseek-chat` y `deepseek-reasoner` (2026-07-24) en favor de `deepseek-v4-flash` y
   `deepseek-v4-pro`. Se aprovechó para arreglar la inconsistencia de fondo: solo 3 de los 8 agentes

@@ -14,9 +14,9 @@ it('delegates to the adapter with the given patente and fact', function () {
     $conversation = Mockery::mock(Conversation::class)->makePartial();
 
     $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('provideVehicleFact')
+    $adapter->shouldReceive('handleToolCall')
         ->once()
-        ->with(['patente' => 'AD123CC', 'fact' => 'automática'], $conversation)
+        ->with(['patente' => 'AD123CC', 'fact' => 'automática'], 'provide_vehicle_fact', $conversation)
         ->andReturn(['success' => true, 'tool_output' => 'ok']);
 
     $tool = new ProvideVehicleFactTool($adapter, $conversation);
@@ -31,7 +31,7 @@ it('does not touch conversation state directly (vehicle_identified stays managed
     $conversation->shouldNotReceive('updateAiState');
 
     $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('provideVehicleFact')->andReturn(['success' => true, 'tool_output' => 'ok']);
+    $adapter->shouldReceive('handleToolCall')->andReturn(['success' => true, 'tool_output' => 'ok']);
 
     $tool = new ProvideVehicleFactTool($adapter, $conversation);
     $tool->handle(new Request(['patente' => 'AD123CC', 'fact' => 'manual']));

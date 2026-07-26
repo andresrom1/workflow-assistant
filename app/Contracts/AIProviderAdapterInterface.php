@@ -7,10 +7,19 @@ use App\Models\Conversation;
 interface AIProviderAdapterInterface
 {
     /**
-     * Entry point: recibe el payload crudo del proveedor, lo normaliza
-     * y delega al tool handler correspondiente.
+     * Entry point ÚNICO de las tools: recibe el payload crudo del proveedor, lo normaliza,
+     * delega al tool handler correspondiente y **atrapa cualquier excepción**, dejándola
+     * logueada y traducida a un error estructurado para el modelo.
+     *
+     * Las tools NO deben llamar a los handlers (`identifyCustomer()`, etc.) directamente:
+     * saltearse este método deja las excepciones sin loguear y el SDK las convierte en un
+     * texto genérico que descarta el motivo real. Ver ROADMAP, bitácora 2026-07-25.
+     *
+     * @param  Conversation|null  $conversation  Conversación ya resuelta por el canal. Si es null
+     *                                           se cae al lookup por `external_conversation_id`
+     *                                           del payload (camino web/OpenAI legacy).
      */
-    public function handleToolCall(array $payload, string $toolName): array;
+    public function handleToolCall(array $payload, string $toolName, ?Conversation $conversation = null): array;
 
     /**
      * Identifica (o crea) un cliente y lo vincula a la conversación activa.

@@ -22,9 +22,9 @@ it('cascades vehicle revert to vehicle, coverage, quote and checkout flags', fun
         ]);
 
     $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('revertStage')
+    $adapter->shouldReceive('handleToolCall')
         ->once()
-        ->with(['stage' => 'vehicle'], $conversation)
+        ->with(['stage' => 'vehicle'], 'revert_stage', $conversation)
         ->andReturn(['success' => true, 'tool_output' => 'ok']);
 
     $tool = new RevertStageTool($adapter, $conversation);
@@ -42,7 +42,7 @@ it('cascades coverage revert without touching customer or vehicle flags', functi
         ]);
 
     $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('revertStage')->andReturn(['success' => true, 'tool_output' => 'ok']);
+    $adapter->shouldReceive('handleToolCall')->andReturn(['success' => true, 'tool_output' => 'ok']);
 
     $tool = new RevertStageTool($adapter, $conversation);
     $tool->handle(new Request(['stage' => 'coverage']));
@@ -61,7 +61,7 @@ it('cascades customer revert to all five flags', function () {
         ]);
 
     $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('revertStage')->andReturn(['success' => true, 'tool_output' => 'ok']);
+    $adapter->shouldReceive('handleToolCall')->andReturn(['success' => true, 'tool_output' => 'ok']);
 
     $tool = new RevertStageTool($adapter, $conversation);
     $tool->handle(new Request(['stage' => 'customer']));
@@ -72,7 +72,7 @@ it('does not touch ai_state when the adapter reports failure', function () {
     $conversation->shouldNotReceive('updateAiState');
 
     $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('revertStage')
+    $adapter->shouldReceive('handleToolCall')
         ->once()
         ->andReturn(['success' => false, 'error' => 'stage inválido', 'error_code' => 'validation_error']);
 

@@ -14,7 +14,7 @@ it('marca customer_identified cuando el customer resultante ya tiene DNI', funct
     $customer = Customer::factory()->create(); // dni por default (factory)
 
     $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('identifyCustomer')
+    $adapter->shouldReceive('handleToolCall')
         ->once()
         ->andReturnUsing(function () use ($conversation, $customer) {
             $conversation->update(['customer_id' => $customer->id]);
@@ -33,7 +33,7 @@ it('NO marca customer_identified cuando el customer resultante todavía no tiene
     $customer = Customer::factory()->create(['dni' => null]);
 
     $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('identifyCustomer')
+    $adapter->shouldReceive('handleToolCall')
         ->once()
         ->andReturnUsing(function () use ($conversation, $customer) {
             $conversation->update(['customer_id' => $customer->id]);
@@ -95,7 +95,7 @@ it('no toca ai_state cuando el adapter reporta fallo', function () {
     $conversation = Conversation::factory()->create(['metadata' => ['ai_state' => ['customer_identified' => false]]]);
 
     $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('identifyCustomer')
+    $adapter->shouldReceive('handleToolCall')
         ->once()
         ->andReturn(['success' => false, 'error' => 'DNI inválido', 'error_code' => 'validation_error']);
 

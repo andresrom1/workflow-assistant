@@ -50,8 +50,9 @@ class CheckoutTool implements Mockable, Tool
 
         $this->logToolCall($request->all());
 
-        $result = $this->adapter->checkout(
+        $result = $this->adapter->handleToolCall(
             $request->all(),
+            'checkout',
             $this->conversation
         );
 

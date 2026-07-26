@@ -47,7 +47,7 @@ class GetQuoteTool implements Mockable, Tool
 
         $this->logToolCall($request->all());
 
-        $result = $this->adapter->getQuote($request->all());
+        $result = $this->adapter->handleToolCall($request->all(), 'get_quote', $this->conversation);
 
         if ($result['success']) {
             $this->conversation->updateAiState(['quote_ready' => true]);

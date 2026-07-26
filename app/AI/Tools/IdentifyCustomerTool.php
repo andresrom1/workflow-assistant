@@ -51,8 +51,10 @@ class IdentifyCustomerTool implements Mockable, Tool
         $this->logToolCall($request->all());
 
         // La conversación (y su BSUID/customer) van inyectados en $this->conversation; el
-        // payload solo lleva el identificador que dio el usuario (email o DNI).
-        $result = $this->adapter->identifyCustomer($request->all(), $this->conversation);
+        // payload solo lleva el identificador que dio el usuario (email o DNI). Se entra por
+        // handleToolCall() y no por el handler directo: es el único lugar que loguea el motivo
+        // real si algo falla (ver su docblock).
+        $result = $this->adapter->handleToolCall($request->all(), 'identify_customer', $this->conversation);
 
         if ($result['success']) {
             $this->conversation->refresh();
