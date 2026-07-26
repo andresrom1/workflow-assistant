@@ -137,23 +137,73 @@ class CustomerIdentificationService
     }
 
     /**
-     * Buscar cliente según el tipo y valor. Normaliza email/dni igual que el merge para que
-     * el match sea consistente (`findByPhone` ya normaliza internamente).
+     * Buscar cliente por cualquiera de sus identificadores. **Es la única búsqueda de identidad
+     * de la app**: toda puerta por la que entra un cliente (ingesta de WhatsApp, alta del admin,
+     * ingesta local de pólizas, chat) pasa por acá en vez de tener su propia consulta.
+     *
+     * Normaliza cada tipo igual que el merge para que la comparación sea consistente
+     * (`findByPhone` ya normaliza internamente).
+     *
+     * `$documentType`/`$personType` solo aplican al tipo `dni` y solo hacen falta cuando el
+     * llamador los tiene declarados (ingesta de pólizas, alta del admin). Sin ellos, el tipo de
+     * persona se infiere del prefijo del número.
      */
-    private function findCustomer(string $type, string $value): ?Customer
-    {
+    public function findCustomer(
+        string $type,
+        string $value,
+        ?string $documentType = null,
+        ?string $personType = null,
+    ): ?Customer {
         $this->logCustomer('Service: Buscando cliente', ['type' => $type, 'value' => $value]);
 
         $customer = match ($type) {
+            'ext_user_id' => $this->findByExtUserId($value),
             'phone' => $this->customerRepo->findByPhone($value),
             'email' => $this->customerRepo->findByEmail(mb_strtolower(trim($value))),
-            'dni' => $this->customerRepo->findByDni(trim($value)),
+            'dni' => $this->findByDocumento($value, $documentType, $personType),
             default => null,
         };
 
         $this->logCustomer('Cliente encontrado por tipo', ['customer' => $customer]);
 
         return $customer;
+    }
+
+    /**
+     * Cliente asociado a un identificador externo de usuario (el BSUID de WhatsApp). El BSUID
+     * **no** vive en `customers` —es identidad del canal, no de la persona— así que se resuelve
+     * por la conversación: la última de ese BSUID que tenga cliente, incluidas las archivadas.
+     */
+    private function findByExtUserId(string $extUserId): ?Customer
+    {
+        $customerId = $this->conversationRepo->findCustomerIdByExtUserId(trim($extUserId));
+
+        return $customerId === null ? null : $this->customerRepo->findWithRelations($customerId);
+    }
+
+    /**
+     * Cliente por documento, comparando la **identidad derivada** y no el número crudo: para una
+     * persona física el DNI y su CUIL/CUIT son la misma identidad, y quien dio uno en una puerta
+     * y el otro en otra tiene que resolver a la misma fila. La derivación la hace
+     * {@see DocumentoIdentidad::clave()} — el mismo helper que el hook `saving` del modelo usa
+     * para llenar `documento_key`, así que la comparación es por igualdad.
+     *
+     * Respaldo por igualdad exacta en `dni` para filas viejas cuya `documento_key` esté vacía.
+     */
+    private function findByDocumento(string $value, ?string $documentType = null, ?string $personType = null): ?Customer
+    {
+        $value = trim($value);
+        $clave = DocumentoIdentidad::clave($value, $documentType, $personType);
+
+        if ($clave !== null) {
+            $porClave = $this->customerRepo->findByDocumentoKey($clave);
+
+            if ($porClave instanceof Customer) {
+                return $porClave;
+            }
+        }
+
+        return $this->customerRepo->findByDni($value);
     }
 
     /**

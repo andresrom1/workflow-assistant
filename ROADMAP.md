@@ -84,6 +84,30 @@
 
 > Entrada por cada cambio relevante. Formato: `fecha — qué — commit/PR`.
 
+- **2026-07-26** — **Clientes duplicados: toda puerta identifica con `CustomerIdentificationService`.**
+  Reporte: tres `Customer` para el mismo teléfono (`+5493516280778`, ids 7, 9 y 10). Diagnóstico: la
+  búsqueda no fallaba, **ya no existía**. Hasta el 24-jul `InsuranceOrchestrator::handle()` arrancaba con
+  `tryAutoIdentifyByPhone()` → `CustomerIdentificationService::findOrCreate()` →
+  `CustomerRepository::findByPhone()`, y linkeaba el cliente existente a la conversación nueva. El commit
+  `626ed99` (migración a BSUID) la eliminó a propósito ("se materializa desde la ingesta sin
+  deduplicación insegura") y la reemplazó por `syncCustomerIdentifiedState()`, que solo lee el DNI para
+  prender un flag; la creación quedó en `ProcessWhatsAppMessage::captureCustomerAttributes()` con un
+  `create()` pelado. Las fechas cierran: el cliente 7 (23-jul) es anterior al refactor y fue legítimo;
+  los duplicados son todos posteriores. Efecto secundario: `findByPhone()` quedó sin usos.
+  **Decisión de dominio (Andrés):** si cualquier dato conocido coincide, es el mismo cliente — el
+  teléfono incluido. Fix: (1) `findCustomer()` gana el tipo `ext_user_id`, que resuelve el BSUID por
+  `conversations.ext_user_id` **incluidas las archivadas** (el Reset del admin archiva, y por eso el
+  usuario que volvía parecía nuevo), y pasa a público; (2) la búsqueda por `dni` compara la identidad
+  derivada (`DocumentoIdentidad::clave()`, DNI para físicas / CUIT para jurídicas) contra
+  `documento_key` en vez del número crudo, con respaldo exacto para filas viejas; (3) las tres puertas
+  que se salteaban el servicio ahora lo usan: ingesta de WhatsApp, `PolicyChainResolver` (que tenía su
+  propia copia de la búsqueda por documento) y las dos altas manuales del admin, que además avisan
+  "este cliente ya existía"; (4) comando `customers:dedupe` (en seco por defecto, `--apply` para
+  ejecutar) para los duplicados que ya están en producción, agrupando por teléfono y por BSUID.
+  Se revirtió la aserción del test `does not merge two different bsuids that share a phone`, que
+  blindaba la regla vieja. Principio documentado en el CLAUDE.md, junto con la distinción
+  servicio (identificar) vs helper (`DocumentoIdentidad`, normalizar/derivar).
+
 - **2026-07-25** — **Las tools vuelven a entrar por `handleToolCall()`: los errores dejan de ser
   invisibles.** Reporte: el cliente dio el DNI por WhatsApp (conversación 10) y el agente contestó
   "Tuve un inconveniente técnico"; `laravel.log` no tenía **ni una línea** de ese turno. El resultado

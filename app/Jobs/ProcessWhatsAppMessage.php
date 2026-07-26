@@ -9,6 +9,7 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Repositories\ConversationRepository;
 use App\Repositories\CustomerRepository;
+use App\Services\CustomerIdentificationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -38,8 +39,11 @@ class ProcessWhatsAppMessage implements ShouldQueue
         private readonly ?string $mediaMimeType = null,
     ) {}
 
-    public function handle(ConversationRepository $conversationRepo, CustomerRepository $customerRepo): void
-    {
+    public function handle(
+        ConversationRepository $conversationRepo,
+        CustomerRepository $customerRepo,
+        CustomerIdentificationService $customerService,
+    ): void {
         // 1. Idempotencia — evita procesar el mismo mensaje dos veces si Meta reenvía el webhook.
         $cacheKey = 'processed_wamid_'.$this->messageId;
         if (Cache::has($cacheKey)) {
@@ -85,7 +89,7 @@ class ProcessWhatsAppMessage implements ShouldQueue
         // 4b. Customer del primer mensaje: capturar teléfono/nombre del webhook como ATRIBUTOS
         //     (no identidad — el DNI/email es el "quién", y no se deduplica por teléfono). El
         //     BSUID vive en la conversación. Ver docs del modelo de identidad.
-        $this->captureCustomerAttributes($conversation, $customerRepo);
+        $this->captureCustomerAttributes($conversation, $customerRepo, $customerService);
 
         // 4c. Persistir mensaje entrante (firstOrCreate evita duplicados por retry de Meta).
         //     processed_at queda null — el inbox processor lo marcará al procesarlo.
@@ -143,22 +147,31 @@ class ProcessWhatsAppMessage implements ShouldQueue
 
     /**
      * Materializa/enriquece el Customer de la conversación con los atributos del webhook.
-     * En el primer mensaje crea el Customer (aunque sea anónimo — solo BSUID); en los
-     * siguientes completa nombre/teléfono vacíos sin pisar. No deduplica por teléfono: la
-     * unificación de identidad es solo por DNI/email (la resuelve el flujo del agente).
+     *
+     * La identificación pasa por {@see CustomerIdentificationService}, como toda puerta por la
+     * que entra un cliente: primero por BSUID (identidad estable del canal, sobrevive al Reset
+     * del admin que archiva la conversación) y si no, por teléfono. Solo si no aparece nadie se
+     * crea una fila nueva. Sin esto, cada conversación nueva del mismo usuario acuñaba un
+     * Customer duplicado — ver ROADMAP, bitácora 2026-07-26.
+     *
+     * En los mensajes siguientes completa nombre/teléfono vacíos sin pisar.
      */
-    private function captureCustomerAttributes(Conversation $conversation, CustomerRepository $customerRepo): void
-    {
+    private function captureCustomerAttributes(
+        Conversation $conversation,
+        CustomerRepository $customerRepo,
+        CustomerIdentificationService $customerService,
+    ): void {
         $name = $this->realContactName();
 
         if (! $conversation->customer_id) {
-            $customer = $customerRepo->create(array_filter([
-                'phone' => $this->waId,
-                'name' => $name,
-            ]));
-            $conversation->update(['customer_id' => $customer->id]);
+            $customer = $this->identifyCustomer($customerService)
+                ?? $customerRepo->create(array_filter([
+                    'phone' => $this->waId,
+                    'name' => $name,
+                ]));
 
-            return;
+            $conversation->update(['customer_id' => $customer->id]);
+            $conversation->setRelation('customer', $customer);
         }
 
         $conversation->loadMissing('customer');
@@ -176,6 +189,26 @@ class ProcessWhatsAppMessage implements ShouldQueue
         if ($updates !== []) {
             $customerRepo->update($customer, $updates);
         }
+    }
+
+    /**
+     * Cliente ya existente detrás de este mensaje, o null si es alguien nuevo. El BSUID va
+     * primero por ser la identidad estable del canal; el teléfono cubre al usuario cuyo BSUID
+     * cambió o que escribe desde otro lado con el mismo número.
+     */
+    private function identifyCustomer(CustomerIdentificationService $customerService): ?Customer
+    {
+        $porBsuid = $this->extUserId === null
+            ? null
+            : $customerService->findCustomer('ext_user_id', $this->extUserId);
+
+        if ($porBsuid instanceof Customer) {
+            return $porBsuid;
+        }
+
+        return $this->waId === null
+            ? null
+            : $customerService->findCustomer('phone', $this->waId);
     }
 
     /**

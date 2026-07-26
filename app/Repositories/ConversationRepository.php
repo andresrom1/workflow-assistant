@@ -71,6 +71,20 @@ class ConversationRepository
     }
 
     /**
+     * Cliente de la última conversación de ese usuario externo (BSUID), **incluidas las
+     * archivadas**: el Reset del admin archiva la conversación, y si no se miran, el usuario que
+     * vuelve a escribir parece nuevo y se le crea un cliente duplicado. Es la contraparte de
+     * {@see findByExtUserId()}, que sí excluye archivadas porque busca la conversación viva.
+     */
+    public function findCustomerIdByExtUserId(string $extUserId): ?int
+    {
+        return Conversation::where('ext_user_id', $extUserId)
+            ->whereNotNull('customer_id')
+            ->latest('id')
+            ->value('customer_id');
+    }
+
+    /**
      * Summary of linkCustomer
      */
     public function linkCustomer(int $conversationId, int $customerId): void

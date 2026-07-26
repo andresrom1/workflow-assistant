@@ -26,6 +26,7 @@ class PolicyChainResolver
     public function __construct(
         private readonly CustomerRepository $customers,
         private readonly CustomerMergeService $merge,
+        private readonly CustomerIdentificationService $identification,
     ) {}
 
     /**
@@ -39,11 +40,13 @@ class PolicyChainResolver
     {
         $clave = DocumentoIdentidad::clave($dni, $documentType, $personType);
 
-        if ($clave !== null) {
-            $existing = $this->customers->findByDocumentoKey($clave);
-            if ($existing instanceof Customer) {
-                return $existing;
-            }
+        // La búsqueda de identidad va SIEMPRE por el servicio de identificación, como toda
+        // puerta por la que entra un cliente: acá se pasan los tipos declarados del documento,
+        // que el servicio usa para derivar la identidad (DNI si es física, CUIT si es jurídica).
+        $existing = $this->identification->findCustomer('dni', $dni, $documentType, $personType);
+
+        if ($existing instanceof Customer) {
+            return $existing;
         }
 
         $firstName = $names['first_name'] ?? null;

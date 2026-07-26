@@ -194,6 +194,28 @@ CustomerRepository / VehicleRepository / QuoteRepository ...
 - `app/Services/` — lógica de negocio (agnóstica)
 - `app/Repositories/` — acceso a datos (agnóstico)
 
+### Toda puerta identifica con `CustomerIdentificationService`
+
+Cualquier lugar donde entra un cliente **busca primero por el servicio de identificación** y recién crea si no encontró a nadie. Nunca `CustomerRepository::create()` a secas, y nunca una consulta propia por documento/teléfono/email.
+
+```php
+// ✅ el servicio es la única búsqueda de identidad
+$customer = $identification->findCustomer('ext_user_id', $bsuid)
+    ?? $identification->findCustomer('phone', $waId)
+    ?? $customerRepo->create([...]);
+
+// ❌ crear sin identificar → cliente duplicado
+$customer = $customerRepo->create(['phone' => $waId]);
+```
+
+`findCustomer($type, $value)` acepta `ext_user_id` (el BSUID de WhatsApp, que se resuelve por `conversations.ext_user_id` porque **no** se guarda en `customers`), `phone`, `email` y `dni`. Para `dni` compara la **identidad derivada**, no el número crudo: DNI y CUIL/CUIT de la misma persona física resuelven a la misma fila.
+
+Las puertas hoy: ingesta de WhatsApp (`ProcessWhatsAppMessage`), chat (`resolveForConversation`), ingesta local de pólizas y reporte de cartera (`PolicyChainResolver`), alta manual del admin (`CustomerController`, `ConversationController`) y checkout (`CheckoutController`).
+
+Historia, para que no se repita: hasta el 2026-07-24 el orquestador hacía esta búsqueda en cada turno (`tryAutoIdentifyByPhone`); el refactor a BSUID la eliminó sin reemplazarla y cada conversación nueva empezó a acuñar un cliente duplicado. Ver ROADMAP, bitácora 2026-07-26. Para limpiar duplicados viejos: `php artisan customers:dedupe` (en seco; `--apply` para ejecutar).
+
+**Servicio ≠ helper.** `App\Support\DocumentoIdentidad` es una utilidad pura que cualquier clase puede llamar para normalizar un documento o derivar la identidad (DNI si es persona física, CUIT completo si es jurídica). El modelo `Customer` la usa en su hook `saving` para llenar `documento_key`. Por el **servicio** se pasa cuando lo que se está haciendo es *identificar a un cliente*; el helper se llama directo cuando solo hace falta formatear o comparar un número.
+
 ### Principio de desacople (REGLA GENERAL — no es opcional)
 
 Al agregar una responsabilidad nueva, **NO la cuelgues de un componente existente de otra capa "porque está cerca en el flujo". Creá un componente nuevo que dependa solo del modelo de dominio.** Esta regla es general; los ejemplos de abajo son instancias, no el límite.
