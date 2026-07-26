@@ -1,71 +1,38 @@
 <template>
-  <Head :title="`${cobertura.label} — ${vehiculo.descripcion}`" />
+  <Head :title="`${vista.cobertura.label} — ${vista.vehiculo.descripcion}`" />
 
   <MangoLayout hide-header>
-    <!--
-      Andamio temporal: muestra las props que arma PublicQuoteController para poder verificarlas
-      contra la maqueta. La UI real se porta en la fase siguiente.
-    -->
-    <div class="p-6 text-xs" style="font-family: var(--mg-font-mono)">
-      <p class="mg-display text-2xl mb-1" style="font-family: var(--mg-font-display)">
-        {{ vehiculo.descripcion }} {{ vehiculo.year }}
-      </p>
-      <p class="mb-4" style="color: var(--mg-fg-dim)">
-        {{ cobertura.label }} · {{ totalOpciones }} opciones ·
-        {{ vigente ? 'vigente' : 'vencida' }}
-      </p>
-      <pre class="overflow-x-auto whitespace-pre-wrap">{{ props }}</pre>
-    </div>
+    <ComparadorMobile v-if="esMovil" :vista="vista" />
+    <ComparadorDesktop v-else :vista="vista" />
   </MangoLayout>
 </template>
 
 <script setup lang="ts">
+import { onMounted, onUnmounted, ref } from 'vue'
 import { Head } from '@inertiajs/vue3'
 import MangoLayout from '@/layouts/MangoLayout.vue'
+import ComparadorDesktop from '@/components/Cotizaciones/ComparadorDesktop.vue'
+import ComparadorMobile from '@/components/Cotizaciones/ComparadorMobile.vue'
+import type { Vista } from '@/components/Cotizaciones/comparador'
 
-const props = defineProps<{
-  vigente: boolean
-  expiresAt: string | null
-  cotizadoEl: string | null
-  vehiculo: {
-    marca: string | null
-    modelo: string | null
-    version: string | null
-    year: number | null
-    combustible: string | null
-    descripcion: string
-  }
-  cobertura: { grade: string | null; label: string }
-  totalOpciones: number
-  glosario: Record<string, { nota: string; esCobertura: boolean }>
-  companias: Array<{
-    slug: string
-    nombre: string
-    desde: number
-    sumaAsegurada: number | null
-    planes: Array<{
-      id: number
-      aseguradora: string
-      companiaSlug: string
-      titulo: string
-      franquicia: string | null
-      precio: number
-      sumaAsegurada: number
-      sumaAseguradaTexto: string | null
-      features: string[]
-    }>
-  }>
-  recomendadas: {
-    principal: { planId: number; razon: string | null }
-    segunda: { planId: number; razon: string | null }
-  } | null
-  comparacion: {
-    comunes: Array<{ label: string; nota: string; esCobertura: boolean }>
-    soloA: Array<{ label: string; nota: string; esCobertura: boolean }>
-    soloB: Array<{ label: string; nota: string; esCobertura: boolean }>
-    diferenciaPrecio: number
-    ahorroAnual: number
-  } | null
-  whatsappNumber: string | null
-}>()
+const vista = defineProps<Vista>()
+
+// El corte es de layout, no de dispositivo: abajo de 900px la vista de dos columnas no entra.
+// Con matchMedia también acompaña el giro de pantalla y el redimensionado en escritorio.
+const consulta = '(max-width: 899px)'
+const esMovil = ref(typeof window === 'undefined' ? true : window.matchMedia(consulta).matches)
+
+let mql: MediaQueryList | null = null
+
+function onCambio(e: MediaQueryListEvent): void {
+  esMovil.value = e.matches
+}
+
+onMounted(() => {
+  mql = window.matchMedia(consulta)
+  esMovil.value = mql.matches
+  mql.addEventListener('change', onCambio)
+})
+
+onUnmounted(() => mql?.removeEventListener('change', onCambio))
 </script>

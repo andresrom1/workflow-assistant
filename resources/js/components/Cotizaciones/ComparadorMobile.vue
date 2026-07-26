@@ -8,24 +8,37 @@
     >
       <div class="flex items-center justify-between mb-2.5">
         <MangoLogo compact :height="20" />
-        <span class="mg-overline">{{ totalOpciones }} opciones</span>
+        <span class="mg-overline">{{ vista.totalOpciones }} opciones</span>
       </div>
       <p class="mg-heading text-[15px] leading-tight truncate">
-        {{ contexto.vehiculo }} {{ contexto.anio }}
+        {{ vista.vehiculo.descripcion }} {{ vista.vehiculo.year }}
       </p>
       <div class="flex items-center gap-2 mt-1.5">
         <span
           class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
           :style="{ background: 'var(--mg-mango-tint)', color: 'var(--mg-mango)' }"
         >
-          {{ contexto.cobertura }}
+          {{ vista.cobertura.label }}
         </span>
-        <span class="text-[11px]" style="color: var(--mg-fg-dim)">{{ contexto.combustible }}</span>
+        <span v-if="vista.vehiculo.combustible" class="text-[11px]" style="color: var(--mg-fg-dim)">
+          {{ vista.vehiculo.combustible.toUpperCase() }}
+        </span>
       </div>
     </header>
 
+    <!-- ══════ Cotización vencida ══════ -->
+    <div
+      v-if="!vista.vigente"
+      class="mx-4 mt-4 p-3.5 rounded-xl text-[12.5px] leading-relaxed"
+      :style="{ background: 'var(--mg-mango-tint)', color: 'var(--mg-fg)' }"
+    >
+      <strong>Estos precios ya vencieron.</strong> Los valores eran del
+      {{ vista.cotizadoEl }} y las compañías los actualizan todos los días. Escribime y te los
+      recotizo en el momento.
+    </div>
+
     <!-- ══════ Las dos que presentó el agente ══════ -->
-    <section class="px-4 pt-5">
+    <section v-if="destacadas.length" class="px-4 pt-5">
       <p class="mg-overline mb-2.5">Lo que te recomendé</p>
 
       <article
@@ -49,7 +62,7 @@
           <div class="flex items-start gap-2.5">
             <span
               class="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold text-white"
-              :style="{ background: colorDe(item.plan.aseguradora) }"
+              :style="{ background: colorDeCompania(item.plan.companiaSlug) }"
             >
               {{ item.plan.aseguradora.charAt(0) }}
             </span>
@@ -69,7 +82,7 @@
           </div>
 
           <div class="grid grid-cols-2 gap-2 mt-3">
-            <div>
+            <div v-if="item.plan.franquicia">
               <p class="mg-overline mb-0.5">Franquicia</p>
               <p class="text-[12.5px] leading-snug font-semibold">{{ item.plan.franquicia }}</p>
             </div>
@@ -80,29 +93,29 @@
           </div>
 
           <blockquote
+            v-if="item.razon"
             class="mt-3 pl-3 text-[13px] leading-relaxed"
             :style="{ borderLeft: '2px solid var(--mg-hairline-strong)', color: 'var(--mg-fg-dim)' }"
           >
             {{ item.razon }}
           </blockquote>
 
-          <div class="flex gap-2 mt-3.5">
-            <button
-              type="button"
-              class="flex-1 py-2.5 rounded-full text-[12px] font-semibold uppercase tracking-wider"
-              :style="{
-                background: i === 0 ? 'var(--mg-mango)' : 'transparent',
-                color: i === 0 ? '#fff' : 'var(--mg-fg)',
-                border: i === 0 ? 'none' : '1px solid var(--mg-hairline-strong)',
-              }"
-              @click="abrirPlan(item.plan.id)"
-            >
-              Ver qué cubre
-            </button>
-          </div>
+          <button
+            type="button"
+            class="w-full mt-3.5 py-2.5 rounded-full text-[12px] font-semibold uppercase tracking-wider"
+            :style="{
+              background: i === 0 ? 'var(--mg-mango)' : 'transparent',
+              color: i === 0 ? '#fff' : 'var(--mg-fg)',
+              border: i === 0 ? 'none' : '1px solid var(--mg-hairline-strong)',
+            }"
+            @click="abrirPlan(item.plan.id)"
+          >
+            Ver qué cubre
+          </button>
 
           <a
-            :href="waLink(`Hola, tengo una pregunta sobre ${item.plan.aseguradora} ${item.plan.titulo}.`)"
+            v-if="waLink(vista.whatsappNumber, preguntaSobre(item.plan))"
+            :href="waLink(vista.whatsappNumber, preguntaSobre(item.plan))!"
             class="mt-2 w-full py-2.5 rounded-full flex items-center justify-center gap-2 text-[12px] font-semibold"
             :style="{ border: '1px solid var(--mg-hairline-strong)', color: 'var(--mg-fg)' }"
           >
@@ -114,6 +127,7 @@
 
       <!-- Diff — el gancho: dos opciones, una pantalla -->
       <button
+        v-if="vista.comparacion"
         type="button"
         class="w-full mg-card px-3.5 py-3 flex items-center justify-between"
         :style="{ background: 'var(--mg-surface-2)', borderStyle: 'dashed' }"
@@ -133,12 +147,14 @@
     <section class="px-4 pt-7">
       <p class="mg-overline mb-1">Todas las opciones</p>
       <p class="text-[12px] mb-3" style="color: var(--mg-fg-dim)">
-        {{ totalOpciones }} planes de {{ companias.length }} compañías, todos
-        {{ contexto.cobertura.toLowerCase() }}. Lo que cambia entre ellos es la franquicia.
+        {{ vista.totalOpciones }} {{ vista.totalOpciones === 1 ? 'plan' : 'planes' }} de
+        {{ vista.companias.length }}
+        {{ vista.companias.length === 1 ? 'compañía' : 'compañías' }}, todos
+        {{ vista.cobertura.label.toLowerCase() }}.
       </p>
 
       <button
-        v-for="c in companias"
+        v-for="c in vista.companias"
         :key="c.slug"
         type="button"
         class="w-full mg-card px-3.5 py-3 mb-2 flex items-center gap-3 text-left"
@@ -146,7 +162,7 @@
       >
         <span
           class="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold text-white"
-          :style="{ background: c.color }"
+          :style="{ background: colorDeCompania(c.slug) }"
         >
           {{ c.nombre.charAt(0) }}
         </span>
@@ -154,7 +170,7 @@
           <p class="mg-heading text-[14px] leading-tight">{{ c.nombre }}</p>
           <p class="text-[12px] mt-0.5" style="color: var(--mg-fg-dim)">
             {{ c.planes.length }} {{ c.planes.length === 1 ? 'plan' : 'planes' }} · desde
-            ${{ formatPrecio(desdePrecio(c)) }}
+            ${{ formatPrecio(c.desde) }}
           </p>
         </div>
         <svg
@@ -170,11 +186,17 @@
     <!-- ══════ Pie: vigencia y vuelta al chat ══════ -->
     <footer class="px-4 pt-7">
       <p class="text-[11.5px] leading-relaxed" style="color: var(--mg-fg-faint)">
-        Cotizado el {{ contexto.cotizadoEl }}. Los precios valen hasta el final del día; después te
-        los recotizo.
+        <template v-if="vista.vigente">
+          Cotizado el {{ vista.cotizadoEl }}. Los precios valen hasta el final del día; después te
+          los recotizo.
+        </template>
+        <template v-else>
+          Cotizado el {{ vista.cotizadoEl }}. Los precios ya no están vigentes.
+        </template>
       </p>
       <a
-        :href="waLink('Volvamos con lo del seguro del 2008.')"
+        v-if="waLink(vista.whatsappNumber, textoVolverAlChat)"
+        :href="waLink(vista.whatsappNumber, textoVolverAlChat)!"
         class="mt-4 w-full py-3 rounded-full flex items-center justify-center gap-2 text-[12px] font-semibold uppercase tracking-wider"
         :style="{ border: '1px solid var(--mg-hairline-strong)', color: 'var(--mg-fg)' }"
       >
@@ -202,7 +224,7 @@
         <div class="flex items-start gap-3 pt-1">
           <span
             class="flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-[15px] font-bold text-white"
-            :style="{ background: colorDe(planActivo.aseguradora) }"
+            :style="{ background: colorDeCompania(planActivo.companiaSlug) }"
           >
             {{ planActivo.aseguradora.charAt(0) }}
           </span>
@@ -211,7 +233,7 @@
             <p class="text-[13px]" style="color: var(--mg-fg-dim)">{{ planActivo.titulo }}</p>
           </div>
           <span
-            v-if="planActivo.id === recomendadas.principal.plan.id"
+            v-if="esRecomendada(planActivo.id)"
             class="flex-shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full"
             :style="{ background: 'var(--mg-mango-tint)', color: 'var(--mg-mango)' }"
           >Recomendada</span>
@@ -231,7 +253,7 @@
           </div>
         </div>
 
-        <div class="mt-3.5">
+        <div v-if="planActivo.franquicia" class="mt-3.5">
           <p class="mg-overline mb-1">Franquicia</p>
           <p class="text-[13.5px] font-semibold leading-snug">{{ planActivo.franquicia }}</p>
           <p class="text-[11.5px] mt-1 leading-snug" style="color: var(--mg-fg-dim)">
@@ -256,7 +278,9 @@
           </svg>
           <div class="min-w-0 flex-1">
             <p class="text-[13.5px] font-semibold leading-tight">{{ item.label }}</p>
-            <p class="text-[12px] mt-0.5 leading-snug" style="color: var(--mg-fg-dim)">{{ item.nota }}</p>
+            <p v-if="item.nota" class="text-[12px] mt-0.5 leading-snug" style="color: var(--mg-fg-dim)">
+              {{ item.nota }}
+            </p>
           </div>
         </div>
 
@@ -269,21 +293,34 @@
             :style="{ borderBottom: '1px solid var(--mg-hairline)' }"
           >
             <p class="text-[13.5px] font-semibold leading-tight">{{ item.label }}</p>
-            <p class="text-[12px] mt-0.5 leading-snug" style="color: var(--mg-fg-dim)">{{ item.nota }}</p>
+            <p v-if="item.nota" class="text-[12px] mt-0.5 leading-snug" style="color: var(--mg-fg-dim)">
+              {{ item.nota }}
+            </p>
           </div>
         </template>
       </div>
 
       <template #footer>
         <div v-if="planActivo" class="flex gap-2.5">
+          <!-- Vencida la cotización, el CTA de contratar se apaga: el precio ya no vale. -->
+          <button
+            v-if="!vista.vigente"
+            type="button"
+            disabled
+            class="mg-btn-primary flex-1 !opacity-50 !cursor-not-allowed !shadow-none"
+          >
+            Precio vencido
+          </button>
           <a
-            :href="waLink(`Quiero avanzar con ${planActivo.aseguradora} ${planActivo.titulo} a $${formatPrecio(planActivo.precio)} por mes.`)"
+            v-else-if="waLink(vista.whatsappNumber, textoLaQuiero(planActivo))"
+            :href="waLink(vista.whatsappNumber, textoLaQuiero(planActivo))!"
             class="mg-btn-primary flex-1"
           >
             La quiero
           </a>
           <a
-            :href="waLink(`Tengo una pregunta sobre ${planActivo.aseguradora} ${planActivo.titulo}.`)"
+            v-if="waLink(vista.whatsappNumber, preguntaSobre(planActivo))"
+            :href="waLink(vista.whatsappNumber, preguntaSobre(planActivo))!"
             class="mg-btn-ghost flex-shrink-0 !px-4"
           >
             <ChatIcon :size="16" />
@@ -299,21 +336,26 @@
         <div class="flex items-center gap-3 pt-1">
           <span
             class="flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-[15px] font-bold text-white"
-            :style="{ background: companiaActiva.color }"
+            :style="{ background: colorDeCompania(companiaActiva.slug) }"
           >
             {{ companiaActiva.nombre.charAt(0) }}
           </span>
           <div>
             <p class="mg-display text-[19px] leading-tight">{{ companiaActiva.nombre }}</p>
             <p class="text-[12px]" style="color: var(--mg-fg-dim)">
-              {{ companiaActiva.planes.length }} planes de {{ contexto.cobertura.toLowerCase() }}
+              {{ companiaActiva.planes.length }}
+              {{ companiaActiva.planes.length === 1 ? 'plan' : 'planes' }} de
+              {{ vista.cobertura.label.toLowerCase() }}
             </p>
           </div>
         </div>
 
-        <p class="text-[12px] mt-4 mb-1" style="color: var(--mg-fg-dim)">
-          Todos cubren lo mismo y tienen la misma suma asegurada
-          ({{ formatSuma(companiaActiva.planes[0].sumaAsegurada) }}). Lo que cambia es la franquicia:
+        <p
+          v-if="companiaActiva.sumaAsegurada !== null"
+          class="text-[12px] mt-4 mb-1"
+          style="color: var(--mg-fg-dim)"
+        >
+          Todos con suma asegurada de {{ formatSuma(companiaActiva.sumaAsegurada) }}.
         </p>
 
         <button
@@ -322,18 +364,20 @@
           type="button"
           class="w-full flex items-center gap-3 py-3.5 text-left"
           :style="{ borderBottom: '1px solid var(--mg-hairline)' }"
-          @click="abrirPlan(p.id, companiaActiva.slug)"
+          @click="abrirPlan(p.id, companiaActiva!.slug)"
         >
           <div class="min-w-0 flex-1">
             <p class="text-[14px] font-semibold leading-tight">
-              Franquicia {{ p.franquicia }}
+              {{ p.franquicia ? `Franquicia ${p.franquicia}` : p.titulo }}
               <span
                 v-if="esRecomendada(p.id)"
                 class="ml-1.5 text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full align-middle"
                 :style="{ background: 'var(--mg-mango-tint)', color: 'var(--mg-mango)' }"
               >Te la recomendé</span>
             </p>
-            <p class="text-[11.5px] mt-0.5 leading-snug" style="color: var(--mg-fg-faint)">{{ p.titulo }}</p>
+            <p v-if="p.franquicia" class="text-[11.5px] mt-0.5 leading-snug" style="color: var(--mg-fg-faint)">
+              {{ p.titulo }}
+            </p>
           </div>
           <div class="flex-shrink-0 text-right leading-none">
             <span class="mg-display text-[19px]">${{ formatPrecio(p.precio) }}</span>
@@ -345,7 +389,7 @@
 
     <!-- ══════════════ SHEET: comparación de las dos ══════════════ -->
     <BottomSheet :open="sheet === 'compare'" @close="cerrar">
-      <div class="px-4 pb-5">
+      <div v-if="vista.comparacion && destacadas.length === 2" class="px-4 pb-5">
         <p class="mg-display text-[19px] pt-1">Qué cambia entre las dos</p>
 
         <div class="grid grid-cols-2 gap-2.5 mt-4">
@@ -364,7 +408,6 @@
           </div>
         </div>
 
-        <!-- Lo que de verdad las separa -->
         <p class="mg-overline mt-5 mb-2">Lo que más cambia</p>
         <div
           v-for="fila in filasClave"
@@ -383,18 +426,18 @@
           class="mt-3 p-3 rounded-xl text-[12.5px] leading-relaxed"
           :style="{ background: 'var(--mg-ok-tint)', color: 'var(--mg-fg)' }"
         >
-          <strong>{{ recomendadas.segunda.plan.aseguradora }} sale
-            ${{ formatPrecio(diferenciaPrecio) }} menos por mes.</strong>
-          Vas a ahorrar aproximadamente ${{ formatPrecio(ahorroAnual) }} al año.
+          <strong>{{ masBarata(destacadas[0].plan, destacadas[1].plan).aseguradora }} sale
+            ${{ formatPrecio(vista.comparacion.diferenciaPrecio) }} menos por mes.</strong>
+          Vas a ahorrar aproximadamente ${{ formatPrecio(vista.comparacion.ahorroAnual) }} al año.
         </p>
 
         <div class="mt-5">
-          <p class="mg-overline mb-2">Solo en {{ recomendadas.principal.plan.aseguradora }}</p>
-          <p v-if="!comparacion.soloA.length" class="text-[12.5px]" style="color: var(--mg-fg-dim)">
+          <p class="mg-overline mb-2">Solo en {{ destacadas[0].plan.aseguradora }}</p>
+          <p v-if="!vista.comparacion.soloA.length" class="text-[12.5px]" style="color: var(--mg-fg-dim)">
             Nada que la otra no tenga.
           </p>
           <div
-            v-for="f in comparacion.soloA"
+            v-for="f in vista.comparacion.soloA"
             :key="f.label"
             class="flex items-start gap-2.5 py-2"
           >
@@ -410,13 +453,13 @@
         </div>
 
         <div class="mt-4">
-          <p class="mg-overline mb-2">Solo en {{ recomendadas.segunda.plan.aseguradora }}</p>
-          <p v-if="!comparacion.soloB.length" class="text-[12.5px] leading-relaxed" style="color: var(--mg-fg-dim)">
-            Nada: todo lo que cubre {{ recomendadas.segunda.plan.aseguradora }} lo cubre también
-            {{ recomendadas.principal.plan.aseguradora }}.
+          <p class="mg-overline mb-2">Solo en {{ destacadas[1].plan.aseguradora }}</p>
+          <p v-if="!vista.comparacion.soloB.length" class="text-[12.5px] leading-relaxed" style="color: var(--mg-fg-dim)">
+            Nada: todo lo que cubre {{ destacadas[1].plan.aseguradora }} lo cubre también
+            {{ destacadas[0].plan.aseguradora }}.
           </p>
           <div
-            v-for="f in comparacion.soloB"
+            v-for="f in vista.comparacion.soloB"
             :key="f.label"
             class="flex items-start gap-2.5 py-2"
           >
@@ -432,21 +475,20 @@
         </div>
 
         <div class="mt-5 pt-4" :style="{ borderTop: '1px solid var(--mg-hairline)' }">
-          <p class="mg-overline mb-1.5">Incluidas en las dos ({{ comparacion.comunes.length }})</p>
+          <p class="mg-overline mb-1.5">Incluidas en las dos ({{ vista.comparacion.comunes.length }})</p>
           <p class="text-[11.5px] mb-2" style="color: var(--mg-fg-faint)">
             Las dos las incluyen. Los topes y límites de cada una te los confirmo por chat.
           </p>
           <p class="text-[12.5px] leading-relaxed" style="color: var(--mg-fg-dim)">
-            {{ comparacion.comunes.map((f) => f.label).join(' · ') }}
+            {{ vista.comparacion.comunes.map((f) => f.label).join(' · ') }}
           </p>
         </div>
       </div>
 
       <template #footer>
         <a
-          :href="waLink(
-            `Vi la comparación de ${recomendadas.principal.plan.aseguradora} y ${recomendadas.segunda.plan.aseguradora}. ¿Cuál me conviene?`,
-          )"
+          v-if="waLink(vista.whatsappNumber, textoCualMeConviene)"
+          :href="waLink(vista.whatsappNumber, textoCualMeConviene)!"
           class="mg-btn-primary w-full"
         >
           <ChatIcon :size="16" />
@@ -462,21 +504,21 @@ import { computed, ref } from 'vue'
 import MangoLogo from '@/components/Mango/MangoLogo.vue'
 import BottomSheet from '@/components/Mango/BottomSheet.vue'
 import ChatIcon from '@/components/Mango/ChatIcon.vue'
+import { colorDeCompania } from './companyColors'
 import {
   coberturasDe,
-  ahorroAnual,
-  companias,
-  comparacion,
-  contexto,
-  desdePrecio,
-  diferenciaPrecio,
+  companiaDe,
   formatPrecio,
   formatSuma,
+  masBarata,
   planPorId,
-  recomendadas,
-  totalOpciones,
+  pluralizar,
   waLink,
-} from './comparadorData'
+  type Plan,
+  type Vista,
+} from './comparador'
+
+const props = defineProps<{ vista: Vista }>()
 
 type SheetKind = 'plan' | 'company' | 'compare' | null
 
@@ -486,30 +528,78 @@ const companiaActivaSlug = ref<string | null>(null)
 /** Si el plan se abrió desde una compañía, el sheet muestra el link de vuelta. */
 const volverACompaniaSlug = ref<string | null>(null)
 
-const destacadas = [recomendadas.principal, recomendadas.segunda]
-
-const planActivo = computed(() => (planActivoId.value ? planPorId(planActivoId.value) : null))
-const companiaActiva = computed(() => companias.find((c) => c.slug === companiaActivaSlug.value) ?? null)
-const volverACompania = computed(() => companias.find((c) => c.slug === volverACompaniaSlug.value) ?? null)
-
-const coberturasPlan = computed(() =>
-  planActivo.value ? coberturasDe(planActivo.value).filter((i) => i.esCobertura) : [],
-)
-const extrasPlan = computed(() =>
-  planActivo.value ? coberturasDe(planActivo.value).filter((i) => !i.esCobertura) : [],
-)
-
-/** Las tres filas que de verdad separan a las dos recomendadas. */
-const filasClave = computed(() => {
-  const a = recomendadas.principal.plan
-  const b = recomendadas.segunda.plan
+/** Las dos recomendadas resueltas a planes. Vacío si la cotización nunca se presentó. */
+const destacadas = computed(() => {
+  const r = props.vista.recomendadas
+  if (r === null) {
+    return []
+  }
 
   return [
-    { label: 'Franquicia', a: a.franquicia, b: b.franquicia },
-    { label: 'Suma asegurada', a: formatSuma(a.sumaAsegurada), b: formatSuma(b.sumaAsegurada) },
-    { label: 'Coberturas', a: `${a.features.length} ítems`, b: `${b.features.length} ítems` },
-  ]
+    { plan: planPorId(props.vista.companias, r.principal.planId), razon: r.principal.razon },
+    { plan: planPorId(props.vista.companias, r.segunda.planId), razon: r.segunda.razon },
+  ].filter((d): d is { plan: Plan; razon: string | null } => d.plan !== null)
 })
+
+const planActivo = computed(() =>
+  planActivoId.value === null ? null : planPorId(props.vista.companias, planActivoId.value),
+)
+const companiaActiva = computed(() =>
+  companiaActivaSlug.value === null ? null : companiaDe(props.vista.companias, companiaActivaSlug.value),
+)
+const volverACompania = computed(() =>
+  volverACompaniaSlug.value === null ? null : companiaDe(props.vista.companias, volverACompaniaSlug.value),
+)
+
+const coberturasPlan = computed(() =>
+  planActivo.value ? coberturasDe(planActivo.value, props.vista.glosario).filter((i) => i.esCobertura) : [],
+)
+const extrasPlan = computed(() =>
+  planActivo.value ? coberturasDe(planActivo.value, props.vista.glosario).filter((i) => !i.esCobertura) : [],
+)
+
+/** Las filas que de verdad separan a las dos recomendadas. */
+const filasClave = computed(() => {
+  if (destacadas.value.length !== 2) {
+    return []
+  }
+
+  const [a, b] = destacadas.value.map((d) => d.plan)
+  const filas = [
+    { label: 'Suma asegurada', a: formatSuma(a.sumaAsegurada), b: formatSuma(b.sumaAsegurada) },
+    {
+      label: 'Coberturas',
+      a: pluralizar(a.features.length, 'ítem', 'ítems'),
+      b: pluralizar(b.features.length, 'ítem', 'ítems'),
+    },
+  ]
+
+  if (a.franquicia || b.franquicia) {
+    filas.unshift({ label: 'Franquicia', a: a.franquicia ?? '—', b: b.franquicia ?? '—' })
+  }
+
+  return filas
+})
+
+const auto = computed(() => props.vista.vehiculo.modelo ?? 'mi auto')
+const textoVolverAlChat = computed(() => `Volvamos con lo del seguro del ${auto.value}.`)
+const textoCualMeConviene = computed(() =>
+  destacadas.value.length === 2
+    ? `Vi la comparación de ${destacadas.value[0].plan.aseguradora} y ${destacadas.value[1].plan.aseguradora}. ¿Cuál me conviene?`
+    : 'Vi las opciones de la cotización. ¿Cuál me conviene?',
+)
+
+function preguntaSobre(plan: Plan): string {
+  return `Hola, tengo una pregunta sobre ${plan.aseguradora} ${plan.titulo}.`
+}
+
+function textoLaQuiero(plan: Plan): string {
+  return `Quiero avanzar con ${plan.aseguradora} ${plan.titulo} a $${formatPrecio(plan.precio)} por mes.`
+}
+
+function esRecomendada(id: number): boolean {
+  return destacadas.value.some((d) => d.plan.id === id)
+}
 
 function abrirPlan(id: number, desdeCompania?: string): void {
   planActivoId.value = id
@@ -524,13 +614,5 @@ function abrirCompania(slug: string): void {
 
 function cerrar(): void {
   sheet.value = null
-}
-
-function esRecomendada(id: number): boolean {
-  return id === recomendadas.principal.plan.id || id === recomendadas.segunda.plan.id
-}
-
-function colorDe(aseguradora: string): string {
-  return companias.find((c) => c.nombre === aseguradora)?.color ?? 'var(--mg-fg-dim)'
 }
 </script>

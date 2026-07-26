@@ -175,6 +175,24 @@ it('expone las dos recomendadas con su razón', function (): void {
             ->has('comparacion.soloB'));
 });
 
+// Sin número configurado la vista no puede armar links de WhatsApp: los CTA se esconden en vez
+// de generar un wa.me roto.
+it('pasa el número público de WhatsApp cuando está configurado', function (): void {
+    config(['whatsapp.public_number' => '5493510000000']);
+    cotizacionPublica();
+
+    $this->get('/cotizaciones/abcdefghijklmnop')
+        ->assertInertia(fn ($page) => $page->where('whatsappNumber', '5493510000000'));
+});
+
+it('pasa null cuando no hay número configurado', function (): void {
+    config(['whatsapp.public_number' => null]);
+    cotizacionPublica();
+
+    $this->get('/cotizaciones/abcdefghijklmnop')
+        ->assertInertia(fn ($page) => $page->where('whatsappNumber', null));
+});
+
 it('sin recomendación la vista se sirve igual', function (): void {
     cotizacionPublica();
 
