@@ -51,15 +51,41 @@ A resolver: si el link va adosado al mensaje de presentación, si va como un bot
 (hoy los 3 slots de Meta están ocupados: 2 opciones + "Tengo una pregunta"), o si va en un mensaje
 aparte. Y qué pasa con el link cuando el cliente vuelve días después.
 
-### 2. El bloqueo de la emisión es cosmético 🔴
+### 2. "La quiero" tiene que abrir el checkout 🔴
 
-Decisión tomada a conciencia, pero conviene tenerla presente: **vencida la cotización, solo se
-apaga el botón en la vista**. El cliente igual puede escribirle al asistente y avanzar, y
-[CheckoutController](../app/Http/Controllers/CheckoutController.php) sigue guardando únicamente por
-`status` — nunca compara `expires_at` contra `now()`.
+Hoy el CTA es un link a WhatsApp con un texto prearmado: el cliente le escribe al asistente y el
+asistente ejecuta `checkout`. **Tiene que crear el checkout directamente** — si el cliente ya
+eligió, no hay razón para hacerlo pasar de nuevo por el chat.
 
-Si se quiere bloqueo real, los puntos son `show()`, `submit()`, `uploadPhoto()` y `deletePhoto()`.
-Ojo: `show()` hoy sirve la página también con `status = checkout_submitted`.
+Lo que implica:
+
+**Un endpoint nuevo** tipo `POST /cotizaciones/{token}/checkout` con el `alternative_id`, que valide
+que la alternativa pertenece a esa cotización, cree el checkout y redirija a
+`/checkout/{checkout_token}`.
+
+**Extraer la creación del checkout, que hoy está duplicada.** Vive en
+[WhatsAppAdapter::checkout()](../app/Adapters/AIProviders/WhatsAppAdapter.php) (`Str::random(10)` +
+`status = checkout_pending` + `checkout_token` + `checkout_alternative_id`) y otra vez en
+`OpenAI\AgentToolAdapter`. Si el controller lo copia, son tres. Va a un service agnóstico de canal
+que llamen los tres, siguiendo la regla de capas: el adapter conoce el canal, el service no.
+
+**El guard de vigencia deja de ser cosmético y pasa a ser obligatorio.** Con el botón abriendo el
+checkout de verdad, apagarlo en el frontend no alcanza: el endpoint tiene que rechazar una
+cotización vencida. Y [CheckoutController](../app/Http/Controllers/CheckoutController.php) también,
+porque un link de checkout viejo sigue siendo válido — hoy guarda únicamente por `status` y nunca
+compara `expires_at` contra `now()`. Los puntos son `show()`, `submit()`, `uploadPhoto()` y
+`deletePhoto()`; ojo que `show()` sirve la página también con `status = checkout_submitted`.
+
+**La conversación se desincroniza.** `checkout_done` en `ai_state` lo setea hoy
+[CheckoutTool](../app/AI/Tools/CheckoutTool.php); si el cliente arranca el checkout desde la web, el
+agente no se entera y puede seguir vendiendo. El endpoint debería escribir ese estado. Es una
+escritura de dominio desde un controller, no un cambio de agente.
+
+**El checkout rechaza el escritorio.** `Checkout/Show.vue` tiene un gate por user-agent: si no es
+móvil muestra *"No podés ingresar desde este dispositivo"*, porque el flujo necesita la cámara para
+las 7 fotos de inspección. El comparador **sí** tiene layout de escritorio, así que un cliente que
+toque "La quiero" desde la compu llega a una pared. Hay que decidir qué hace ese caso: avisar antes
+de mandarlo, ofrecer seguir por WhatsApp, o mandarle el link al teléfono.
 
 ### 3. La etiqueta de variante no tiene origen 🟡
 
@@ -128,8 +154,6 @@ borrar una conversación.
 
 ## Decisiones ya tomadas — no re-litigar
 
-- **El CTA "La quiero" es un link a WhatsApp**, no un botón que abra el checkout. Vencida la
-  cotización, se deshabilita y nada más.
 - **La vigencia reusa `quotes.expires_at`**, que pasó de `now()->addDays(7)` a fin del día
   argentino en UTC.
 - **La recomendación se persiste en columnas de `quotes`**, escritas desde la tool. No se lee de
@@ -139,7 +163,7 @@ borrar una conversación.
 - **La vista no muestra patente, DNI, nombre ni teléfono.** Los campos se enumeran a mano en el
   controller y hay un test que busca los tres valores en el HTML crudo.
 - **Una cotización vencida renderiza igual**, con `vigente: false`. No es 404: el cliente que abre
-  el link al día siguiente merece ver la página.
+  el link al día siguiente merece ver la página, con el CTA de contratar apagado.
 
 ---
 
