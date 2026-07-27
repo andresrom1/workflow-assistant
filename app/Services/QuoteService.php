@@ -52,6 +52,8 @@ class QuoteService
         try {
             $this->apiStrategy->resolve($quote, $snapshot);
 
+            $this->auditarVocabulario($quote);
+
             return true;
         } catch (\Throwable $e) {
             Log::error("[QuoteService] Error resolviendo Quote #{$quote->id}", [
@@ -60,6 +62,81 @@ class QuoteService
 
             return false;
         }
+    }
+
+    /**
+     * Canario del vocabulario de coberturas del proveedor.
+     *
+     * El diff de la vista pública es una diferencia de conjuntos sobre `features_tags`, sin
+     * diccionario de sinónimos. Eso vale mientras el proveedor mande la misma cobertura con el
+     * mismo texto exacto en todas las compañías. Cuando deja de valer, el diff no se rompe: miente
+     * en silencio, y reporta como diferencia algo que las dos opciones cubren igual.
+     *
+     * No traduce ni normaliza nada — solo avisa. La decisión de qué hacer con un tag nuevo es
+     * humana; esto es para enterarse el día que aparece y no seis semanas después.
+     */
+    private function auditarVocabulario(Quote $quote): void
+    {
+        /** @var list<string> $conocidos */
+        $conocidos = config('quotes.tags_conocidos', []);
+
+        // Índice por forma canónica (sin mayúsculas ni acentos) para distinguir "tag nuevo" de
+        // "el mismo tag escrito distinto", que son problemas distintos.
+        $porForma = [];
+        foreach ($conocidos as $tag) {
+            $porForma[$this->formaCanonica($tag)] = $tag;
+        }
+
+        $vistos = [];
+
+        foreach ($quote->alternatives()->get() as $alternative) {
+            foreach ($alternative->features_tags ?? [] as $tag) {
+                if (isset($vistos[$tag])) {
+                    continue;
+                }
+                $vistos[$tag] = true;
+
+                $contexto = [
+                    'quote_id' => $quote->id,
+                    'tag' => $tag,
+                    'aseguradora' => $alternative->aseguradora,
+                ];
+
+                if (in_array($tag, $conocidos, true)) {
+                    // Un tag compuesto funde dos conceptos que el resto de las compañías trae
+                    // separados, así que el diff los cuenta como distintos aunque cubran lo mismo.
+                    // Se avisa aunque el tag ya sea conocido: el problema es la forma, no la
+                    // novedad.
+                    if (preg_match('/\s(y|o)\s/u', $tag) === 1) {
+                        Log::warning('coverage.tag_compuesto', $contexto);
+                    }
+
+                    continue;
+                }
+
+                $similar = $porForma[$this->formaCanonica($tag)] ?? null;
+
+                if ($similar !== null) {
+                    // El caso peor: el diff los ve como coberturas distintas.
+                    Log::warning('coverage.tag_variante', $contexto + ['variante_de' => $similar]);
+
+                    continue;
+                }
+
+                Log::warning('coverage.tag_desconocido', $contexto);
+            }
+        }
+    }
+
+    /** Minúsculas y sin acentos: dos escrituras del mismo tag colapsan a la misma forma. */
+    private function formaCanonica(string $tag): string
+    {
+        $sinAcentos = strtr(
+            mb_strtolower(trim($tag)),
+            ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n']
+        );
+
+        return preg_replace('/\s+/u', ' ', $sinAcentos) ?? $sinAcentos;
     }
 
     /**

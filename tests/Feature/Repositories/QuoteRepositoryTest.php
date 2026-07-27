@@ -162,3 +162,27 @@ it('una cotización recién guardada queda vigente', function () {
 
     Carbon\Carbon::setTestNow();
 });
+
+// Recotizar borra las alternativas viejas, así que la recomendación del agente queda apuntando a
+// ids que ya no existen y las razones que le dio al cliente hablan de precios que no existen más.
+it('invalida la presentación anterior al guardar resultados nuevos', function () {
+    $quote = pendingQuote();
+    app(QuoteRepository::class)->saveResults($quote, engineResultWith([parsedAlternative('QR-1')]));
+
+    $vieja = $quote->alternatives()->first();
+    $quote->update([
+        'recommended_alternative_id' => $vieja->id,
+        'presented_alternative_ids' => [$vieja->id, $vieja->id],
+        'presentation_reasons' => [(string) $vieja->id => 'La franquicia más baja.'],
+        'presented_at' => now(),
+    ]);
+
+    app(QuoteRepository::class)->saveResults($quote, engineResultWith([parsedAlternative('QR-2')]));
+    $quote->refresh();
+
+    expect($quote->recommended_alternative_id)->toBeNull()
+        ->and($quote->presented_alternative_ids)->toBeNull()
+        ->and($quote->presentation_reasons)->toBeNull()
+        ->and($quote->presented_at)->toBeNull()
+        ->and($quote->presentedPair())->toBeNull();
+});

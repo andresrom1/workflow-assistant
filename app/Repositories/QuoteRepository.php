@@ -53,6 +53,15 @@ class QuoteRepository
                 // Los precios de las compañías valen por día calendario argentino: pasado el
                 // cierre hay que recotizar. Ver Quote::endOfBusinessDay().
                 'expires_at' => Quote::endOfBusinessDay(),
+
+                // La presentación anterior queda invalidada: las alternativas que el agente
+                // recomendó se acaban de borrar arriba, y las razones que le dio al cliente
+                // hablan de precios que ya no existen. Sin esto, la vista pública sigue
+                // mostrando una recomendación que apunta a ids muertos.
+                'recommended_alternative_id' => null,
+                'presented_alternative_ids' => null,
+                'presentation_reasons' => null,
+                'presented_at' => null,
             ]);
 
             // 3. Insertar alternativas de dominio (sin campos de proveedor)

@@ -83,6 +83,13 @@ grep -rn "opcion-de-configuracion" workflow-assistant/
 | Paths de API (`/v1/...`) | consts en `Visred{Quotation,Emission,Document,Inspection}*` | verificados contra sandbox | **C** |
 | Sandbox flag (`X-Mock-Scenario`) | `config/visred.php` (`sandbox`) | env `VISRED_SANDBOX` | **B** — en prod debe quedar `false` (403 si se manda a la API real) |
 
+### 3b. Cotizaciones (vigencia y vocabulario)
+
+| Valor | Ubicación | Valor actual / fuente | Destino |
+|---|---|---|---|
+| Vigencia de una cotización | `Quote::endOfBusinessDay()`, aplicado en `QuoteRepository::saveResults` | fin del día calendario **argentino**, expresado en UTC | **C** — es una regla de negocio, no un parámetro: los precios de las compañías valen por el día en que se cotizó. A las 00:01 hay que recotizar porque la tarifa puede haber cambiado. Una cotización generada 23:50 ART vence en 10 minutos, y es el comportamiento pedido |
+| Vocabulario de coberturas conocido | `config/quotes.php` (`tags_conocidos`) | snapshot del vocabulario observado del proveedor | **A?** — no es un mapeo (nadie traduce contra él): es el canario que avisa cuando el proveedor manda un tag nuevo y el diff de la vista pública empieza a reportar diferencias falsas. Se actualiza a mano cuando el aviso salta. Ver `QuoteService::auditarVocabulario()` |
+
 ### 4. Checkout / emergencia
 
 | Valor | Ubicación | Valor actual / fuente | Destino |
