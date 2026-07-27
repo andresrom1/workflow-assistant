@@ -55,22 +55,27 @@ it('pulls and clears pending_interactive from conversation metadata on handle()'
                 'checkout_done' => false,
             ],
             'pending_interactive' => ['buttons' => [['id' => 'alt:9', 'title' => 'Test $1K']]],
+            'pending_public_link' => 'https://mango.test/cotizaciones/abcdefghijklmnop',
         ],
     ]);
 
-    // Reflexión sobre el método privado pullPendingInteractive, ya que probarlo
-    // vía handle() completo requeriría mockear la llamada real al LLM del CheckoutAgent.
+    // Reflexión sobre el método privado pullPending, ya que probarlo vía handle()
+    // completo requeriría mockear la llamada real al LLM del CheckoutAgent.
     $adapter = Mockery::mock(WhatsAppAdapter::class);
     $orchestrator = new InsuranceOrchestrator($adapter);
 
-    $method = (new ReflectionClass($orchestrator))->getMethod('pullPendingInteractive');
+    $method = (new ReflectionClass($orchestrator))->getMethod('pullPending');
     $method->setAccessible(true);
-    $buttons = $method->invoke($orchestrator, $conversation);
+    $pendiente = $method->invoke($orchestrator, $conversation);
 
-    expect($buttons)->toBe([['id' => 'alt:9', 'title' => 'Test $1K']]);
+    expect($pendiente['buttons'])->toBe([['id' => 'alt:9', 'title' => 'Test $1K']])
+        ->and($pendiente['public_link'])->toBe('https://mango.test/cotizaciones/abcdefghijklmnop');
 
+    // Las dos claves se consumen: si el link sobreviviera al turno, saldría de nuevo en el
+    // siguiente mensaje del agente.
     $conversation->refresh();
-    expect($conversation->metadata)->not->toHaveKey('pending_interactive');
+    expect($conversation->metadata)->not->toHaveKey('pending_interactive')
+        ->and($conversation->metadata)->not->toHaveKey('pending_public_link');
 });
 
 it('returns null buttons when nothing is pending', function () {
@@ -81,9 +86,10 @@ it('returns null buttons when nothing is pending', function () {
     $adapter = Mockery::mock(WhatsAppAdapter::class);
     $orchestrator = new InsuranceOrchestrator($adapter);
 
-    $method = (new ReflectionClass($orchestrator))->getMethod('pullPendingInteractive');
+    $method = (new ReflectionClass($orchestrator))->getMethod('pullPending');
     $method->setAccessible(true);
-    $buttons = $method->invoke($orchestrator, $conversation);
+    $pendiente = $method->invoke($orchestrator, $conversation);
 
-    expect($buttons)->toBeNull();
+    expect($pendiente['buttons'])->toBeNull()
+        ->and($pendiente['public_link'])->toBeNull();
 });

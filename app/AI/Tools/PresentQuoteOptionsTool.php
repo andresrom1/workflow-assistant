@@ -151,8 +151,10 @@ class PresentQuoteOptionsTool implements Mockable, Tool
             'presented_at' => now(),
         ]);
 
-        // El link existe desde acá, pero todavía nadie lo manda: ver el tool_output.
-        $quote->ensurePublicToken();
+        // El link a la vista pública sale en un mensaje aparte, inmediatamente después del texto
+        // de presentación. Se arma acá y lo despacha el llamador del orquestador: el LLM nunca
+        // lo escribe, así no puede deformarlo ni inventarlo.
+        $publicLink = route('cotizaciones.show', ['token' => $quote->ensurePublicToken()]);
 
         // La recomendada va primero.
         $ordered = collect($alternativeIds)
@@ -171,18 +173,21 @@ class PresentQuoteOptionsTool implements Mockable, Tool
 
         $meta = $this->conversation->metadata ?? [];
         $meta['pending_interactive'] = ['buttons' => $buttons];
+        $meta['pending_public_link'] = $publicLink;
         $this->conversation->update(['metadata' => $meta]);
 
         $titles = implode(' / ', array_column($buttons, 'title'));
 
-        // El tool_output no menciona ninguna URL a propósito: el link de la vista pública existe
-        // pero todavía no se le manda al cliente, y si lo nombráramos acá el agente lo pegaría
-        // en el chat.
+        // El agente se entera de que el link sale, pero nunca ve la URL: si la tuviera la pegaría
+        // en el chat con su propio formato, y el mensaje de abajo dejaría de tener sentido.
         return json_encode([
             'success' => true,
             'tool_output' => "Botones preparados: {$titles}. Tu próxima respuesta va a salir acompañada de esos botones. "
                 .'Las razones quedaron guardadas. '
-                .'Escribí SOLO el texto de presentación: ambas opciones con sus features, marcando la recomendada y por qué.',
+                .'Escribí SOLO el texto de presentación: ambas opciones con sus features, marcando la recomendada y por qué. '
+                .'Justo después de tu mensaje le llega al cliente, en un mensaje aparte, el link a la comparación '
+                .'completa de las opciones. Ya está encolado: no escribas ninguna URL ni lo prometas como algo que '
+                .'vas a mandar. Si te sirve, podés cerrar con algo del estilo "abajo te paso el detalle completo".',
         ]);
     }
 

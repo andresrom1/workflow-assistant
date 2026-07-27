@@ -6,6 +6,7 @@ use App\AI\InsuranceOrchestrator;
 use App\Models\AgentExecutionLog;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Traits\DespachaRespuestaDelAgente;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\Log;
 
 class ProcessConversationInbox implements ShouldQueue
 {
+    use DespachaRespuestaDelAgente;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
@@ -91,8 +93,14 @@ class ProcessConversationInbox implements ShouldQueue
             ->update(['inbound_message_ids' => json_encode($inboundIds)]);
 
         // Destinatario: el teléfono del webhook si llegó; si no, el BSUID de la conversación.
-        SendWhatsAppMessage::dispatch($this->waId, $conversation->ext_user_id, $reply['text'], $this->phoneNumberId, $this->conversationId, $reply['agent'], $lastLogId, $reply['buttons'] ?? null)
-            ->onQueue('whatsapp-outbound');
+        $this->despacharRespuesta(
+            new SendWhatsAppMessage($this->waId, $conversation->ext_user_id, $reply['text'], $this->phoneNumberId, $this->conversationId, $reply['agent'], $lastLogId, $reply['buttons'] ?? null),
+            $reply['public_link'] ?? null,
+            $this->waId,
+            $conversation->ext_user_id,
+            $this->phoneNumberId,
+            $this->conversationId,
+        );
 
         $contactName = $messages->first()?->sender_name;
 

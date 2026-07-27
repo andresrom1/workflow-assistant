@@ -209,6 +209,30 @@ it('mintea el token de la vista pública', function () {
     expect($quote->refresh()->public_token)->toHaveLength(16);
 });
 
+// El link sale en un mensaje aparte que despacha el llamador del orquestador; la tool solo lo
+// deja armado. Si el LLM lo escribiera, lo deformaría o lo inventaría.
+it('deja el link de la vista pública listo para despachar, sin dárselo al LLM', function () {
+    ['quote' => $quote, 'alt1' => $alt1, 'alt2' => $alt2, 'conversation' => $conversation] = quoteWithTwoAlternatives();
+
+    $salida = json_decode((new PresentQuoteOptionsTool($conversation))->handle(new Request([
+        'quote_id' => $quote->id,
+        'alternative_ids' => [$alt1->id, $alt2->id],
+        'recommended_alternative_id' => $alt1->id,
+        'recommended_reason' => 'Razón A.',
+        'alternative_reason' => 'Razón B.',
+    ])), true);
+
+    $token = $quote->refresh()->public_token;
+    $link = data_get($conversation->refresh()->metadata, 'pending_public_link');
+
+    expect($link)->toBe(route('cotizaciones.show', ['token' => $token]));
+
+    // El agente se entera de que el mensaje sale, pero nunca ve la URL.
+    expect($salida['tool_output'])->not->toContain($token)
+        ->and($salida['tool_output'])->not->toContain('http')
+        ->and($salida['tool_output'])->toContain('mensaje aparte');
+});
+
 // Un link que ya se le mandó al cliente no puede romperse porque el agente vuelva a presentar.
 it('re-presentar no cambia el token pero sí actualiza las razones', function () {
     ['quote' => $quote, 'alt1' => $alt1, 'alt2' => $alt2, 'conversation' => $conversation] = quoteWithTwoAlternatives();
