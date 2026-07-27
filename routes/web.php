@@ -142,6 +142,13 @@ Route::get('/cotizaciones/{token}', [PublicQuoteController::class, 'show'])
     ->where('token', '[A-Za-z0-9]{16}')
     ->name('cotizaciones.show');
 
+// El CTA "La quiero": abre el checkout de la alternativa elegida. Sin CSRF a propósito (ver
+// bootstrap/app.php) y con throttle porque es escritura sin autenticación.
+Route::post('/cotizaciones/{token}/checkout', [PublicQuoteController::class, 'checkout'])
+    ->middleware(['noindex', 'throttle:10,1'])
+    ->where('token', '[A-Za-z0-9]{16}')
+    ->name('cotizaciones.checkout');
+
 Route::get('/privacy', function () {
     return view('privacy');
 })->name('privacy');

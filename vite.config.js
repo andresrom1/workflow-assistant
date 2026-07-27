@@ -26,22 +26,20 @@ export default defineConfig({
         },
     },
     server: {
+        // El host que Vite escribe en `public/hot`, de donde Laravel sirve los assets en dev.
+        // Hardcodear una IP de LAN acá deja la página en blanco desde cualquier otra máquina
+        // apenas la IP cambia — que ya pasó dos veces. Dejarlo sin definir tampoco sirve: Vite
+        // escribe `http://[::]:5174`, que el browser no resuelve.
+        // Para probar desde el móvil: VITE_DEV_HOST=192.168.0.X npm run dev
+        host: env.VITE_DEV_HOST ?? 'localhost',
         port: 5174,
-        // para poder ingresar desde el movil en local
         strictPort: true,
         cors: {
             origin: '*',           // Permite CORS desde cualquier origen
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
             allowedHeaders: ['Content-Type', 'Authorization'],
         },
-        hmr: {
-            // Sin VITE_HMR_HOST, Vite usa el host de la request. Hardcodear una IP de LAN
-            // hace que `public/hot` apunte ahí y que la página cargue en blanco desde
-            // cualquier otra máquina apenas cambia la IP. Para probar desde el móvil:
-            // VITE_HMR_HOST=192.168.0.X npm run dev
-            host: env.VITE_HMR_HOST,
-            port: 5174,
-            protocol: 'ws',        // WebSocket para HMR
-        },
+        // Sin bloque `hmr`: el cliente se conecta al mismo host desde el que cargó la página,
+        // que es exactamente lo que hace falta en los dos casos (localhost y celular en la LAN).
     },
 });

@@ -254,11 +254,13 @@
                 disabled
                 class="mg-btn-primary !opacity-50 !cursor-not-allowed !shadow-none"
               >Precio vencido</button>
-              <a
-                v-else-if="waLink(vista.whatsappNumber, textoLaQuiero(planActivo))"
-                :href="waLink(vista.whatsappNumber, textoLaQuiero(planActivo))!"
+              <button
+                v-else
+                type="button"
                 class="mg-btn-primary"
-              >La quiero</a>
+                :disabled="estadoContratacion === 'enviando'"
+                @click="contratar(planActivo.id)"
+              >La quiero</button>
               <a
                 v-if="waLink(vista.whatsappNumber, preguntaSobre(planActivo))"
                 :href="waLink(vista.whatsappNumber, preguntaSobre(planActivo))!"
@@ -332,14 +334,16 @@
                   class="mt-4 w-full py-2.5 rounded-full text-[11.5px] font-semibold uppercase tracking-wider opacity-50 cursor-not-allowed"
                   :style="{ border: '1px solid var(--mg-hairline-strong)', color: 'var(--mg-fg)' }"
                 >Precio vencido</button>
-                <a
-                  v-else-if="waLink(vista.whatsappNumber, textoLaQuiero(item.plan))"
-                  :href="waLink(vista.whatsappNumber, textoLaQuiero(item.plan))!"
+                <button
+                  v-else
+                  type="button"
+                  :disabled="estadoContratacion === 'enviando'"
                   class="mt-4 w-full py-2.5 rounded-full flex items-center justify-center text-[11.5px] font-semibold uppercase tracking-wider"
                   :style="i === 0
                     ? { background: 'var(--mg-mango)', color: '#fff' }
                     : { border: '1px solid var(--mg-hairline-strong)', color: 'var(--mg-fg)' }"
-                >Quiero esta</a>
+                  @click="contratar(item.plan.id)"
+                >Quiero esta</button>
               </div>
             </div>
 
@@ -403,6 +407,13 @@
         </div>
       </div>
     </div>
+
+    <ContratarModal
+      :estado="estadoContratacion"
+      :mensaje-error="mensajeError"
+      :whatsapp-number="vista.whatsappNumber"
+      @cerrar="cerrarContratacion"
+    />
   </div>
 </template>
 
@@ -410,6 +421,8 @@
 import { computed, ref } from 'vue'
 import MangoLogo from '@/components/Mango/MangoLogo.vue'
 import ChatIcon from '@/components/Mango/ChatIcon.vue'
+import ContratarModal from './ContratarModal.vue'
+import { useContratar } from './useContratar'
 import { colorDeCompania } from './companyColors'
 import {
   coberturasDe,
@@ -424,6 +437,13 @@ import {
 } from './comparador'
 
 const props = defineProps<{ vista: Vista }>()
+
+const {
+  estado: estadoContratacion,
+  mensajeError,
+  contratar,
+  cerrar: cerrarContratacion,
+} = useContratar(props.vista.token)
 
 /** Qué muestra el panel derecho. El nombre evita colisión con la prop `vista`. */
 const panel = ref<'plan' | 'compare'>('plan')
@@ -489,10 +509,6 @@ const textoCualMeConviene = computed(() =>
 
 function preguntaSobre(plan: Plan): string {
   return `Hola, tengo una pregunta sobre ${plan.aseguradora} ${plan.titulo}.`
-}
-
-function textoLaQuiero(plan: Plan): string {
-  return `Quiero avanzar con ${plan.aseguradora} ${plan.titulo} a $${formatPrecio(plan.precio)} por mes.`
 }
 
 function esRecomendada(id: number): boolean {

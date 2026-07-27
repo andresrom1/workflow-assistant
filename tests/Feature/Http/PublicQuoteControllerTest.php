@@ -1,11 +1,13 @@
 <?php
 
+use App\Jobs\SendWhatsAppMessage;
 use App\Models\Customer;
 use App\Models\Quote;
 use App\Models\QuoteAlternative;
 use App\Models\RiskSnapshot;
 use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 
 uses(RefreshDatabase::class);
 
@@ -202,4 +204,130 @@ it('sin recomendación la vista se sirve igual', function (): void {
             ->where('recomendadas', null)
             ->where('comparacion', null)
             ->where('totalOpciones', 2));
+});
+
+// ─── CTA "La quiero" ──────────────────────────────────────────────────────────────────────────
+// El botón abre el checkout directo: si el cliente ya eligió, no hay razón para hacerlo volver
+// al chat. Los guards de dominio (vigencia, pertenencia de la alternativa) los prueba
+// QuoteServiceCheckoutTest; acá se prueba la traducción al canal web.
+
+it('desde un celular abre el checkout y redirige al formulario', function (): void {
+    $quote = cotizacionPublica();
+    $alternative = $quote->alternatives->first();
+
+    $this->post('/cotizaciones/abcdefghijklmnop/checkout', [
+        'alternative_id' => $alternative->id,
+        'movil' => true,
+    ])->assertRedirect();
+
+    $quote->refresh();
+
+    expect($quote->status)->toBe('checkout_pending')
+        ->and($quote->checkout_alternative_id)->toBe($alternative->id)
+        ->and($quote->conversation->aiState()['checkout_done'])->toBeTrue();
+
+    $this->post('/cotizaciones/abcdefghijklmnop/checkout', [
+        'alternative_id' => $alternative->id,
+        'movil' => true,
+    ])->assertRedirect(route('checkout.show', ['token' => $quote->fresh()->checkout_token]));
+});
+
+it('desde escritorio manda el link por WhatsApp en vez de redirigir', function (): void {
+    Queue::fake();
+    config(['services.whatsapp.phone_number_id' => '123456']);
+
+    $quote = cotizacionPublica();
+    $alternative = $quote->alternatives->first();
+
+    $this->from('/cotizaciones/abcdefghijklmnop')
+        ->post('/cotizaciones/abcdefghijklmnop/checkout', [
+            'alternative_id' => $alternative->id,
+            'movil' => false,
+        ])
+        ->assertRedirect('/cotizaciones/abcdefghijklmnop')
+        ->assertSessionHasNoErrors();
+
+    expect($quote->fresh()->status)->toBe('checkout_pending');
+
+    Queue::assertPushed(SendWhatsAppMessage::class, function (SendWhatsAppMessage $job) use ($quote): bool {
+        // El texto del job es privado; se lee con un closure bindeado en vez de aflojar la clase.
+        $texto = (fn (): string => $this->text)->call($job);
+
+        return str_contains($texto, $quote->fresh()->checkout_token);
+    });
+});
+
+it('rechaza el CTA de una cotización vencida con un mensaje para el cliente', function (): void {
+    $quote = cotizacionPublica(['expires_at' => now()->subDay()]);
+
+    $this->from('/cotizaciones/abcdefghijklmnop')
+        ->post('/cotizaciones/abcdefghijklmnop/checkout', [
+            'alternative_id' => $quote->alternatives->first()->id,
+            'movil' => true,
+        ])
+        ->assertRedirect('/cotizaciones/abcdefghijklmnop')
+        ->assertSessionHasErrors('alternative_id');
+
+    expect($quote->fresh()->checkout_token)->toBeNull();
+});
+
+it('rechaza una alternativa que no es de esta cotización', function (): void {
+    cotizacionPublica();
+    $ajena = QuoteAlternative::factory()->create(['quote_id' => Quote::factory()->create()->id]);
+
+    $this->from('/cotizaciones/abcdefghijklmnop')
+        ->post('/cotizaciones/abcdefghijklmnop/checkout', [
+            'alternative_id' => $ajena->id,
+            'movil' => true,
+        ])
+        ->assertSessionHasErrors('alternative_id');
+});
+
+it('404 al contratar con un token que no existe', function (): void {
+    cotizacionPublica();
+
+    $this->post('/cotizaciones/nnnnnnnnnnnnnnnn/checkout', [
+        'alternative_id' => 1,
+        'movil' => true,
+    ])->assertNotFound();
+});
+
+// El endpoint es escritura sin autenticación por cookie: no hay autoridad ambiente que CSRF
+// pueda proteger, y exigirlo rompería el link abierto días después con un 419.
+it('no exige token CSRF', function (): void {
+    $quote = cotizacionPublica();
+
+    $this->withMiddleware()
+        ->post('/cotizaciones/abcdefghijklmnop/checkout', [
+            'alternative_id' => $quote->alternatives->first()->id,
+            'movil' => true,
+        ])
+        ->assertRedirect();
+});
+
+it('no abre el checkout si no hay a quién mandarle el link', function (): void {
+    Queue::fake();
+    config(['services.whatsapp.phone_number_id' => '123456']);
+
+    // Sin BSUID y sin teléfono del cliente no hay destinatario posible: el outbound resuelve uno
+    // u otro (ver Conversation::recipientPhone()).
+    $quote = cotizacionPublica();
+    $quote->conversation->update(['ext_user_id' => null]);
+    $quote->conversation->customer->update(['phone' => null]);
+
+    $this->from('/cotizaciones/abcdefghijklmnop')
+        ->post('/cotizaciones/abcdefghijklmnop/checkout', [
+            'alternative_id' => $quote->alternatives->first()->id,
+            'movil' => false,
+        ])
+        ->assertSessionHasErrors('alternative_id');
+
+    // Sin este guard la cotización quedaría en checkout_pending mientras al cliente le decimos
+    // que no se pudo.
+    $quote->refresh();
+
+    expect($quote->status)->not->toBe('checkout_pending')
+        ->and($quote->checkout_token)->toBeNull();
+
+    Queue::assertNotPushed(SendWhatsAppMessage::class);
 });

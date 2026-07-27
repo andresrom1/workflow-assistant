@@ -57,6 +57,8 @@ export type Vehiculo = {
 
 /** El payload completo que arma PublicQuoteController. */
 export type Vista = {
+  /** El de la URL. Lo necesita el CTA para postear el checkout. */
+  token: string
   vigente: boolean
   expiresAt: string | null
   cotizadoEl: string | null

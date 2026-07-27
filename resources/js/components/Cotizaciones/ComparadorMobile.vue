@@ -311,13 +311,15 @@
           >
             Precio vencido
           </button>
-          <a
-            v-else-if="waLink(vista.whatsappNumber, textoLaQuiero(planActivo))"
-            :href="waLink(vista.whatsappNumber, textoLaQuiero(planActivo))!"
+          <button
+            v-else
+            type="button"
             class="mg-btn-primary flex-1"
+            :disabled="estadoContratacion === 'enviando'"
+            @click="contratar(planActivo.id)"
           >
             La quiero
-          </a>
+          </button>
           <a
             v-if="waLink(vista.whatsappNumber, preguntaSobre(planActivo))"
             :href="waLink(vista.whatsappNumber, preguntaSobre(planActivo))!"
@@ -496,6 +498,13 @@
         </a>
       </template>
     </BottomSheet>
+
+    <ContratarModal
+      :estado="estadoContratacion"
+      :mensaje-error="mensajeError"
+      :whatsapp-number="vista.whatsappNumber"
+      @cerrar="cerrarContratacion"
+    />
   </div>
 </template>
 
@@ -504,6 +513,8 @@ import { computed, ref } from 'vue'
 import MangoLogo from '@/components/Mango/MangoLogo.vue'
 import BottomSheet from '@/components/Mango/BottomSheet.vue'
 import ChatIcon from '@/components/Mango/ChatIcon.vue'
+import ContratarModal from './ContratarModal.vue'
+import { useContratar } from './useContratar'
 import { colorDeCompania } from './companyColors'
 import {
   coberturasDe,
@@ -519,6 +530,13 @@ import {
 } from './comparador'
 
 const props = defineProps<{ vista: Vista }>()
+
+const {
+  estado: estadoContratacion,
+  mensajeError,
+  contratar,
+  cerrar: cerrarContratacion,
+} = useContratar(props.vista.token)
 
 type SheetKind = 'plan' | 'company' | 'compare' | null
 
@@ -591,10 +609,6 @@ const textoCualMeConviene = computed(() =>
 
 function preguntaSobre(plan: Plan): string {
   return `Hola, tengo una pregunta sobre ${plan.aseguradora} ${plan.titulo}.`
-}
-
-function textoLaQuiero(plan: Plan): string {
-  return `Quiero avanzar con ${plan.aseguradora} ${plan.titulo} a $${formatPrecio(plan.precio)} por mes.`
 }
 
 function esRecomendada(id: number): boolean {
