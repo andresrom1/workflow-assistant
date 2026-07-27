@@ -1,14 +1,13 @@
-# Comparador de coberturas — qué falta
+# Comparador de coberturas — estado
 
-> Punto de entrada para retomar la feature en una sesión nueva. Rama: **`feat/comparador-coberturas`**.
-> El detalle de por qué cada cosa está como está vive en los mensajes de commit; acá va lo mínimo
-> para arrancar sin recontexto.
+> Rama: **`feat/comparador-coberturas`**. El detalle de por qué cada cosa está como está vive en los
+> mensajes de commit; acá va lo mínimo para retomar sin recontexto.
 
 ## Qué existe hoy
 
 Una vista pública que el cliente abre desde WhatsApp para ver el detalle de las cotizaciones de su
 auto: las dos que le recomendó el asistente marcadas y con la razón, el resto agrupado por
-compañía, y un diff entre las dos.
+compañía, y un diff entre las dos. Desde ahí puede contratar.
 
 `GET /cotizaciones/{token16}` → `Cotizaciones/Comparador` (Inertia). Sin autenticación: el token es
 la credencial.
@@ -17,13 +16,27 @@ la credencial.
 |---|---|
 | Controller | [PublicQuoteController.php](../app/Http/Controllers/PublicQuoteController.php) |
 | Dominio (glosario, dedupe, agrupación, diff) | [QuoteComparisonService.php](../app/Services/Quote/QuoteComparisonService.php) |
+| Apertura del checkout (punto único) | `QuoteService::crearCheckout()` + `QuoteRepository::marcarCheckoutPendiente()` |
 | Franquicia parseada del título | [Franquicia.php](../app/Support/Franquicia.php) |
 | Vigencia y token | helpers en [Quote.php](../app/Models/Quote.php) |
 | noindex | [NoIndex.php](../app/Http/Middleware/NoIndex.php) + meta condicional en `app.blade.php` |
 | UI | `resources/js/pages/Cotizaciones/` + `resources/js/components/Cotizaciones/` |
 | Persistencia de la recomendación | [PresentQuoteOptionsTool.php](../app/AI/Tools/PresentQuoteOptionsTool.php) |
+| Envío del link al cliente | `DespachaRespuestaDelAgente` (trait), usado por `ProcessConversationInbox` y `NotifyClientQuoteReady` |
+| Canario del vocabulario | `QuoteService::auditarVocabulario()` + `config/quotes.php` |
 
-Cinco commits, de `6ad6e6f` a `c38a2c8`. Suite completa en verde (673 tests).
+Suite completa en verde (695 tests).
+
+### El flujo, punta a punta
+
+1. El agente presenta 2 opciones → `PresentQuoteOptionsTool` guarda la recomendación, mintea el
+   token y deja el link en `metadata.pending_public_link`.
+2. Sale el mensaje de presentación con los 3 botones de Meta y, **encadenado detrás**, un segundo
+   mensaje con el link al comparador. El LLM sabe que el mensaje sale pero nunca ve la URL.
+3. El cliente abre el comparador y toca **"La quiero"** → `POST /cotizaciones/{token}/checkout`.
+   - Desde el **celular**: redirige a `/checkout/{checkout_token}`.
+   - Desde **escritorio**: el link del checkout le llega por WhatsApp y un modal se lo avisa. El
+     formulario necesita la cámara para las 7 fotos de inspección.
 
 ### Para verlo andando
 
@@ -35,135 +48,44 @@ Y abrir `/cotizaciones/{token}` en el preview, a 390px y a 1280px (el corte de l
 
 ---
 
-## Pendientes, por orden de importancia
+## Lo que sigue abierto
 
-### 1. Nadie le manda el link al cliente 🔴
+Todo lo que quedaba en este doc está cerrado o convertido en issue:
 
-**La feature es inalcanzable en producción.** El token se genera y se persiste al presentar
-opciones, pero ninguna parte del flujo se lo envía. Quedó explícitamente fuera de scope, y es lo
-único que falta para que la vista sirva de algo.
+| Issue | Qué |
+|---|---|
+| [#7](https://github.com/andresrom1/workflow-assistant/issues/7) | Vigencia obligatoria en el `CheckoutController` — la creación ya la valida, falta el link ya emitido |
+| [#8](https://github.com/andresrom1/workflow-assistant/issues/8) | Modelar el método de pago de las variantes duplicadas |
+| [#9](https://github.com/andresrom1/workflow-assistant/issues/9) | Retención de `agent_execution_logs` |
+| [#10](https://github.com/andresrom1/workflow-assistant/issues/10) | Revisar la patente expuesta en el checkout |
 
-El `tool_output` de `PresentQuoteOptionsTool` **evita mencionar la URL a propósito**: si la
-nombrara, el LLM la pegaría en el chat sin control de formato. Cualquier solución tiene que
-decidir dónde se arma la URL y quién la escribe.
-
-A resolver: si el link va adosado al mensaje de presentación, si va como un botón interactivo más
-(hoy los 3 slots de Meta están ocupados: 2 opciones + "Tengo una pregunta"), o si va en un mensaje
-aparte. Y qué pasa con el link cuando el cliente vuelve días después.
-
-### 2. "La quiero" tiene que abrir el checkout 🔴
-
-Hoy el CTA es un link a WhatsApp con un texto prearmado: el cliente le escribe al asistente y el
-asistente ejecuta `checkout`. **Tiene que crear el checkout directamente** — si el cliente ya
-eligió, no hay razón para hacerlo pasar de nuevo por el chat.
-
-Lo que implica:
-
-**Un endpoint nuevo** tipo `POST /cotizaciones/{token}/checkout` con el `alternative_id`, que valide
-que la alternativa pertenece a esa cotización, cree el checkout y redirija a
-`/checkout/{checkout_token}`.
-
-**Extraer la creación del checkout, que hoy está duplicada.** Vive en
-[WhatsAppAdapter::checkout()](../app/Adapters/AIProviders/WhatsAppAdapter.php) (`Str::random(10)` +
-`status = checkout_pending` + `checkout_token` + `checkout_alternative_id`) y otra vez en
-`OpenAI\AgentToolAdapter`. Si el controller lo copia, son tres. Va a un service agnóstico de canal
-que llamen los tres, siguiendo la regla de capas: el adapter conoce el canal, el service no.
-
-**El guard de vigencia deja de ser cosmético y pasa a ser obligatorio.** Con el botón abriendo el
-checkout de verdad, apagarlo en el frontend no alcanza: el endpoint tiene que rechazar una
-cotización vencida. Y [CheckoutController](../app/Http/Controllers/CheckoutController.php) también,
-porque un link de checkout viejo sigue siendo válido — hoy guarda únicamente por `status` y nunca
-compara `expires_at` contra `now()`. Los puntos son `show()`, `submit()`, `uploadPhoto()` y
-`deletePhoto()`; ojo que `show()` sirve la página también con `status = checkout_submitted`.
-
-**La conversación se desincroniza.** `checkout_done` en `ai_state` lo setea hoy
-[CheckoutTool](../app/AI/Tools/CheckoutTool.php); si el cliente arranca el checkout desde la web, el
-agente no se entera y puede seguir vendiendo. El endpoint debería escribir ese estado. Es una
-escritura de dominio desde un controller, no un cambio de agente.
-
-**El checkout rechaza el escritorio.** `Checkout/Show.vue` tiene un gate por user-agent: si no es
-móvil muestra *"No podés ingresar desde este dispositivo"*, porque el flujo necesita la cámara para
-las 7 fotos de inspección. El comparador **sí** tiene layout de escritorio, así que un cliente que
-toque "La quiero" desde la compu llega a una pared. Hay que decidir qué hace ese caso: avisar antes
-de mandarlo, ofrecer seguir por WhatsApp, o mandarle el link al teléfono.
-
-### 3. La etiqueta de variante no tiene origen 🟡
-
-En producción, el proveedor devuelve el mismo producto dos veces con precios distintos y nada en el
-dominio que lo explique:
-
-```
-Triunfo  D3 - Todo Riesgo Franq 10%   $70.447,20  y  $71.799,20
-Galicia  Todo Riesgo Franquicia 4%    $90.317,04  y  $116.461,65
-```
-
-Misma suma asegurada, mismos `features_tags`, mismo título. Lo único que cambia es el
-`external_quote_id` de Visred. **Hoy nos quedamos con la más barata** (`soloLaMasBarata` en el
-service), que es lo correcto para el cliente, pero se descarta algo sin saber qué.
-
-Hay que averiguar con Visred qué distingue esas variantes — periodicidad de pago, plan de cuotas,
-descuento — y modelarlo. Mientras tanto la regla se sostiene sola.
-
-### 4. Canario de tags nuevos 🟡
-
-El vocabulario de coberturas del proveedor es cerrado y estable (22 tags, una única descripción por
-tag en toda la base), y es lo que permite que el diff sea una diferencia de conjuntos sin
-diccionario de sinónimos. **Pero se mueve:** `Caída de árboles` apareció mientras se implementaba
-esto, cuando entró la cotización 6 con Galicia.
-
-Falta un aviso cuando aparece un tag fuera del conjunto conocido. No es un mapeo a mantener — es
-monitoreo. El caso que hay que agarrar es un tag compuesto tipo `Cristales y Cerraduras` (2
-apariciones, solo Triunfo), que funde dos conceptos que el resto trae separados y hace que el diff
-reporte diferencias falsas.
-
-### 5. Borde de vigencia 🟢
-
-Una cotización generada 23:50 ART vence en 10 minutos. Es la semántica pedida ("válidas hasta el
-final del día") y coincide con lo que dice la vista, pero conviene decidir si va un piso, tipo
-`max(endOfBusinessDay(), now()->addHours(2))`, en
-[QuoteRepository::saveResults()](../app/Repositories/QuoteRepository.php).
-
-### 6. Las razones son doble fuente de verdad 🟢
-
-`recommended_reason` / `alternative_reason` dicen lo mismo que el texto que el agente escribe en el
-chat, y nada las sincroniza. Se congelan al presentar: si después se recotiza, quedan viejas y
-nadie las invalida. Está documentado en el prompt de `CheckoutAgent`, pero sigue siendo deuda.
-
----
-
-## Deuda preexistente que roza esta feature
-
-**Las factories están en `database/Factories/` con mayúscula** mientras `composer.json` mapea
-`Database\Factories\` → `database/factories/`. Son 17 archivos y viene de antes; en Windows no se
-nota, pero en un filesystem case-sensitive (Linux, CI) el autoload no las encuentra. Las dos
-factories nuevas siguen la convención existente para no mezclar.
-
-**`vite.config.js` tiene `hmr.host` hardcodeado** a `192.168.0.102`, que ya no es la IP de la
-máquina. Cuando corre `npm run dev`, `public/hot` apunta ahí y cualquier página carga en blanco. El
-workaround es mover `public/hot` de lado; el arreglo es esa línea.
-
-**El checkout sí expone la patente** ([CheckoutController.php:70](../app/Http/Controllers/CheckoutController.php)),
-renderizada en `Checkout/Show.vue`. Ahí está justificado —va a un cliente ya identificado que a
-continuación carga su DNI— pero ahora que hay un criterio explícito de PII para links públicos,
-vale revisarlo.
-
-**`agent_execution_logs` no tiene retención.** Crece indefinidamente; solo se limpia por cascade al
-borrar una conversación.
+**Las razones son doble fuente de verdad.** `recommended_reason` / `alternative_reason` dicen lo
+mismo que el texto que el agente escribe en el chat, y nada las sincroniza. Ya no quedan viejas al
+recotizar (`saveResults` las invalida), pero siguen siendo dos escrituras del mismo contenido.
 
 ---
 
 ## Decisiones ya tomadas — no re-litigar
 
-- **La vigencia reusa `quotes.expires_at`**, que pasó de `now()->addDays(7)` a fin del día
-  argentino en UTC.
+- **La cotización vale por el día calendario argentino.** A las 00:01 del día siguiente hay que
+  recotizar: la tarifa puede haber cambiado. No va ningún piso de horas. Documentado en
+  configuracion-hardcodeada.md §3b.
 - **La recomendación se persiste en columnas de `quotes`**, escritas desde la tool. No se lee de
   `agent_execution_logs`.
 - **El diff es diferencia de conjuntos, sin diccionario ni LLM.** Se evaluó un catálogo canónico de
-  coberturas con tabla de mapeo y se descartó: el proveedor ya normaliza.
+  coberturas con tabla de mapeo y se descartó: el proveedor ya normaliza. El canario del vocabulario
+  es lo que sostiene ese supuesto.
 - **La vista no muestra patente, DNI, nombre ni teléfono.** Los campos se enumeran a mano en el
   controller y hay un test que busca los tres valores en el HTML crudo.
 - **Una cotización vencida renderiza igual**, con `vigente: false`. No es 404: el cliente que abre
   el link al día siguiente merece ver la página, con el CTA de contratar apagado.
+- **El link va en un mensaje de WhatsApp aparte**, no pegado al de presentación: los 3 slots de
+  botones de Meta ya están ocupados y un `cta_url` no se puede mezclar con reply buttons.
+- **`checkout_done` lo escribe `QuoteService`, no `CheckoutTool`.** El checkout también se abre
+  desde la web, donde no corre ninguna tool. Es la única excepción a "el estado lo escribe la tool".
+- **El endpoint del CTA va sin CSRF.** La página no tiene autenticación por cookie, así que no hay
+  autoridad ambiente que proteger; con el guard puesto, un link abierto días después revienta con
+  419 por sesión vencida.
 
 ---
 
@@ -182,9 +104,18 @@ No hardcodear ningún grado; el service lo deriva de la alternativa recomendada.
 son `B0 - Robo Total`, `M PLUS`, etc.: `Franquicia::extraer()` devuelve `null` y el dedupe cae a la
 clave `raw:<título>`, que es el comportamiento seguro.
 
-**El runtime no lee los prompts `.md`**, lee la tabla `agent_prompts` con `rememberForever`. Después
-de editar hay que correr `php artisan agent:sync-prompts` y verificar en `/admin/agent-prompts` que
-no haya un draft pisando el sync.
+**El vocabulario de coberturas no son 22 tags.** En la base hay 35, y varios son el mismo concepto
+escrito distinto (`Destrucción Total por accidente` vs `...por Accidente`) o compuestos
+(`Robo Total y Parcial`). El diff los cuenta como coberturas distintas. `config/quotes.php` toma la
+variante mayoritaria de cada par a propósito, para que la otra salte como aviso.
+
+**Detección de dispositivo ≠ corte de layout.** `esDispositivoMovil()` (user-agent, compartido con
+el checkout) decide si el CTA redirige o manda el link por WhatsApp. El `esMovil` del comparador es
+un `matchMedia` de 899px: una ventana angosta en escritorio es "mobile" para el layout y escritorio
+para el CTA.
+
+**El runtime no lee los prompts `.md`**, lee la tabla `agent_prompts` con `rememberForever`. Editar
+desde `/admin/agent-prompts/{key}`, que crea versión nueva e invalida la caché sola.
 
 ---
 
