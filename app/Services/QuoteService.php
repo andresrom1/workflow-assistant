@@ -111,4 +111,65 @@ class QuoteService
     {
         return $this->quoteRepo->getById($quote, $withAlternatives);
     }
+
+    /**
+     * Abre el checkout de una alternativa. Punto único: lo llaman el agente por WhatsApp
+     * (WhatsAppAdapter), el path OpenAI (AgentToolAdapter) y el CTA "La quiero" de la vista
+     * pública (PublicQuoteController). Antes estaba duplicado en los dos adapters.
+     *
+     * Agnóstico de canal: devuelve el resultado y no le habla al cliente. Cada llamador
+     * traduce el `error_code` al formato que le corresponde.
+     *
+     * OJO — acá se escribe `checkout_done` en el `ai_state`, y no en `CheckoutTool`
+     * como manda la convención de "el estado lo escribe la tool". Es a propósito: el checkout
+     * también se abre desde la web, donde no hay tool que corra. Si el flag quedara en la tool,
+     * el agente no se enteraría de un checkout iniciado desde el comparador y seguiría vendiendo.
+     *
+     * @return array{ok: true, token: string, url: string}|array{ok: false, error_code: string, error: string}
+     */
+    public function crearCheckout(int $quoteId, int $alternativeId): array
+    {
+        $quote = $this->quoteRepo->getById($quoteId, withAlternatives: true);
+
+        if ($quote === null || ! in_array($quote->status, ['processed', 'checkout_pending'], true)) {
+            return [
+                'ok' => false,
+                'error_code' => 'quote_not_found',
+                'error' => 'No se encontró una cotización válida con ese ID para esta sesión.',
+            ];
+        }
+
+        // Los precios valen por el día calendario argentino en que se cotizó. Pasado el cierre
+        // la tarifa puede haber cambiado, así que no se abre el checkout: hay que recotizar.
+        if (! $quote->isVigente()) {
+            return [
+                'ok' => false,
+                'error_code' => 'quote_expired',
+                'error' => 'Esta cotización venció: los precios valen por el día en que se cotizó. '
+                    .'Hay que hacer una cotización nueva.',
+            ];
+        }
+
+        $alternative = $quote->alternatives->firstWhere('id', $alternativeId);
+
+        if ($alternative === null) {
+            return [
+                'ok' => false,
+                'error_code' => 'alternative_not_found',
+                'error' => 'La alternativa seleccionada no corresponde a la cotización indicada.',
+            ];
+        }
+
+        $token = $this->quoteRepo->marcarCheckoutPendiente($quote, $alternative);
+
+        $quote->conversation?->updateAiState(['checkout_done' => true]);
+
+        $this->logQuotes("[QuoteService🫰] Checkout abierto para Quote #{$quote->id}, alternativa #{$alternative->id}");
+
+        return [
+            'ok' => true,
+            'token' => $token,
+            'url' => route('checkout.show', ['token' => $token]),
+        ];
+    }
 }

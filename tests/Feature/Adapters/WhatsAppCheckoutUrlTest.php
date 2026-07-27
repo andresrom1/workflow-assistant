@@ -28,6 +28,8 @@ class WhatsAppCheckoutUrlTest extends TestCase
             'risk_snapshot_id' => $snapshot->id,
             'conversation_id' => $conversation->id,
             'status' => 'processed',
+            // Sin vencimiento la cotización se trata como vencida y no se abre el checkout.
+            'expires_at' => Quote::endOfBusinessDay(),
         ]);
 
         $alternative = QuoteAlternative::create([

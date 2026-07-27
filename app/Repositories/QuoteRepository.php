@@ -4,10 +4,12 @@ namespace App\Repositories;
 
 use App\Models\Conversation;
 use App\Models\Quote;
+use App\Models\QuoteAlternative;
 use App\Models\QuoteProviderRef;
 use App\Models\RiskSnapshot;
 use App\Traits\ConditionalLogger;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class QuoteRepository
 {
@@ -103,6 +105,33 @@ class QuoteRepository
             'status' => 'failed',
             'metadata' => ['error' => $errorMessage],
         ]);
+    }
+
+    /**
+     * Abre el checkout de una alternativa: mintea el token opaco y deja la cotización lista
+     * para que el cliente complete la contratación.
+     *
+     * Es el único lugar del código que escribe `checkout_token`. La verificación de unicidad
+     * espeja a `Quote::ensurePublicToken()`: los dos tokens son credenciales de acceso a
+     * páginas sin autenticación, así que una colisión silenciosa le daría a un cliente el
+     * checkout de otro.
+     *
+     * No decide si corresponde abrirlo — eso es dominio y vive en
+     * `QuoteService::crearCheckout()`.
+     */
+    public function marcarCheckoutPendiente(Quote $quote, QuoteAlternative $alternative): string
+    {
+        do {
+            $token = Str::random(10);
+        } while (Quote::withTrashed()->where('checkout_token', $token)->exists());
+
+        $quote->update([
+            'status' => 'checkout_pending',
+            'checkout_token' => $token,
+            'checkout_alternative_id' => $alternative->id,
+        ]);
+
+        return $token;
     }
 
     /**

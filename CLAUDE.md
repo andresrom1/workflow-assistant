@@ -62,6 +62,12 @@ and delegates to a specialized sub-agent per step:
 
 State is updated inside each Tool's `handle()` method upon success (not in the orchestrator).
 
+**Excepción: `checkout_done`.** Lo escribe `QuoteService::crearCheckout()`, no `CheckoutTool`. El
+checkout también se abre desde el CTA de la vista pública de cotizaciones, donde no corre ninguna
+tool; si el flag viviera en la tool, el agente no se enteraría de un checkout iniciado desde la web
+y seguiría vendiendo. Ese método es el punto único de apertura de checkout — lo llaman
+`WhatsAppAdapter`, `AgentToolAdapter` y `PublicQuoteController`.
+
 ### Editar prompts de agentes — REQUIERE SYNC MANUAL
 
 Los prompts viven en `resources/prompts/agents/*.md` pero el runtime los carga de la tabla `agent_prompts` (ver `AgentPrompt::activeFor($key)`). El archivo `.md` es solo fallback. Cada agente cachea el resultado con `Cache::rememberForever("agent_prompt:{$agentKey}")`.

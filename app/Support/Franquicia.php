@@ -115,7 +115,6 @@ final class Franquicia
             return null;
         }
 
-        /** @var list<array{0: string, 1: int}> $encontrados */
         $encontrados = $matches[1];
 
         $marcador = preg_match(self::MARCADOR, $titulo, $m, PREG_OFFSET_CAPTURE) === 1
