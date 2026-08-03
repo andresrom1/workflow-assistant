@@ -1,0 +1,30 @@
+{
+    "success": false,
+    "error": {
+        "message": "Error de validación.",
+        "code": "validation_error",
+        "field_errors": {
+            "payment": {
+                "credit_card_brand_id": [
+                    "Invalid pk \"naranja\" - object does not exist."
+                ]
+            },
+            "person_holder": {
+                "document_number": [
+                    "Debes usar el mismo document_number que en la cotización."
+                ]
+            },
+            "inspections": [
+                {},
+                {
+                    "image_base64": [
+                        "Requerido."
+                    ]
+                }
+            ],
+            "product_id": [
+                "Requerido."
+            ]
+        }
+    }
+}

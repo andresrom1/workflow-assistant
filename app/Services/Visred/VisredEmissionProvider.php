@@ -236,7 +236,14 @@ class VisredEmissionProvider implements EmissionProvider
      * `document_type_id` del catálogo Visred deducido del número. Un documento de 11
      * dígitos (CUIT o CUIL) DEBE declararse como `cuit`; mandarlo como `dni` — o
      * incluso como `cuil`, que existe en el catálogo — hace que la emisión falle con
-     * `400 validation_error` / `field_errors: {person_holder: [""]}`.
+     * `400 validation_error` bajo la clave `person_holder`.
+     *
+     * En su momento ese error se registró como `field_errors: {person_holder: [""]}`,
+     * pero el `[""]` NO era de Visred: lo producía nuestro propio normalizador, que
+     * aplastaba a string vacío todo valor no-escalar y por lo tanto el dict entero de
+     * un serializer anidado. El mensaje real de Visred nunca se llegó a ver. Desde el
+     * fix del 2026-08-03 llega como `person_holder.<subcampo>`. La conclusión de abajo
+     * se sostiene igual porque se validó por A/B, no por leer ese payload.
      *
      * Verificado live contra el sandbox (2026-07-19) con el MISMO `quotation_result_id`
      * variando sólo este campo: `dni` → rechazado, `cuil` → rechazado, `cuit` → aceptado.

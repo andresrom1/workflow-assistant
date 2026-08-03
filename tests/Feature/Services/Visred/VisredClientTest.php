@@ -185,6 +185,27 @@ it('expone field_errors por campo en el error de validación', function () {
     }
 });
 
+it('aplana los field_errors de serializers anidados al pasar por el cliente', function () {
+    // Los serializers anidados de Visred (`payment`, `person_holder`) y los `many=True`
+    // devuelven dicts, no `dict[str, list[str]]`. Antes se perdía el mensaje entero y
+    // llegaba `['payment' => ['']]` — ver bitácora 2026-08-03.
+    Cache::put(ACCESS_CACHE_KEY, 'VALID_ACCESS', 3300);
+    $emitirUrl = 'https://visred.test/v1/patrimoniales/vehicles/emitir/';
+    Http::fake([$emitirUrl => Http::response(visredFixture('error_400_nested'), 400)]);
+
+    try {
+        (new VisredClient)->post('/v1/patrimoniales/vehicles/emitir/', ['quotation_result_id' => 1]);
+        $this->fail('Se esperaba VisredApiException 400.');
+    } catch (VisredApiException $e) {
+        expect($e->fieldErrors())->toBe([
+            'payment.credit_card_brand_id' => ['Invalid pk "naranja" - object does not exist.'],
+            'person_holder.document_number' => ['Debes usar el mismo document_number que en la cotización.'],
+            'inspections.1.image_base64' => ['Requerido.'],
+            'product_id' => ['Requerido.'],
+        ]);
+    }
+});
+
 it('NO envía X-Mock-Scenario fuera de sandbox', function () {
     config()->set('visred.sandbox', false);
     Cache::put(ACCESS_CACHE_KEY, 'VALID_ACCESS', 3300);

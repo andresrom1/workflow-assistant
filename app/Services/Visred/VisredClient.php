@@ -9,6 +9,8 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Throwable;
 
@@ -122,6 +124,19 @@ class VisredClient
         }
 
         if ($response->failed()) {
+            // Único punto de throw del cliente: loguear acá le da traza a TODAS las
+            // rutas de Visred de una. Sin esto, un 4xx desde documentos, inspecciones,
+            // catálogos o el polling de /tasks/ se pierde entero — solo emisión y
+            // cotización loguean río abajo.
+            //
+            // SOLO el bloque `error` de la RESPUESTA. Nunca el request: el body de
+            // `emitir/` lleva `credit_card_number` y `credit_card_holder`.
+            Log::warning('[VisredClient] respuesta de error', [
+                'path' => $path,
+                'status' => $response->status(),
+                'error' => Str::limit((string) json_encode($response->json('error')), 2000),
+            ]);
+
             throw VisredApiException::fromResponse($response);
         }
 
