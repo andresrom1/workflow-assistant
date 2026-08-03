@@ -4,6 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    {{-- Lo comparte el middleware `noindex` en las páginas cuyo link es la única credencial. --}}
+    @if ($noindex ?? false)
+        <meta name="robots" content="noindex, nofollow">
+    @endif
     <title inertia>{{ config('app.name', 'PAS Mobile') }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

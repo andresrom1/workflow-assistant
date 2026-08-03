@@ -41,7 +41,7 @@ class InsuranceOrchestrator
      * El estado se actualiza dentro de cada Tool al ejecutarse exitosamente,
      * por lo que en el próximo mensaje el orquestador derivará al siguiente agente.
      *
-     * @return array{text: string, agent: string, execution_log_ids: int[], buttons: list<array{id: string, title: string}>|null}
+     * @return array{text: string, agent: string, execution_log_ids: int[], buttons: list<array{id: string, title: string}>|null, public_link: string|null}
      */
     public function handle(string $message, Conversation $conversation): array
     {
@@ -155,11 +155,14 @@ class InsuranceOrchestrator
                 'tool_calls' => $this->extractToolCalls($checkoutResponse),
             ]);
 
+            $pendienteEncadenado = $this->pullPending($conversation);
+
             return [
                 'text' => $checkoutResponse->text,
                 'agent' => class_basename($checkoutAgent),
                 'execution_log_ids' => [$quoteLog->id, $checkoutLog->id],
-                'buttons' => $this->pullPendingInteractive($conversation),
+                'buttons' => $pendienteEncadenado['buttons'],
+                'public_link' => $pendienteEncadenado['public_link'],
             ];
         }
 
@@ -181,32 +184,38 @@ class InsuranceOrchestrator
             'tool_calls' => $this->extractToolCalls($response),
         ]);
 
+        $pendiente = $this->pullPending($conversation);
+
         return [
             'text' => $response->text,
             'agent' => class_basename($agent),
             'execution_log_ids' => [$log->id],
-            'buttons' => $this->pullPendingInteractive($conversation),
+            'buttons' => $pendiente['buttons'],
+            'public_link' => $pendiente['public_link'],
         ];
     }
 
     /**
-     * Levanta y limpia los botones que una tool (ej. PresentQuoteOptionsTool)
-     * haya dejado pendientes en metadata durante este turno.
+     * Levanta y limpia lo que una tool (ej. PresentQuoteOptionsTool) haya dejado pendiente en
+     * metadata durante este turno: los botones que acompañan al mensaje y el link a la vista
+     * pública de la cotización, que sale en un mensaje aparte inmediatamente después.
      *
-     * @return list<array{id: string, title: string}>|null
+     * @return array{buttons: list<array{id: string, title: string}>|null, public_link: string|null}
      */
-    private function pullPendingInteractive(Conversation $conversation): ?array
+    private function pullPending(Conversation $conversation): array
     {
         $conversation->refresh();
         $meta = $conversation->metadata ?? [];
-        $buttons = data_get($meta, 'pending_interactive.buttons');
 
-        if ($buttons !== null) {
-            unset($meta['pending_interactive']);
+        $buttons = data_get($meta, 'pending_interactive.buttons');
+        $publicLink = data_get($meta, 'pending_public_link');
+
+        if ($buttons !== null || $publicLink !== null) {
+            unset($meta['pending_interactive'], $meta['pending_public_link']);
             $conversation->update(['metadata' => $meta]);
         }
 
-        return $buttons;
+        return ['buttons' => $buttons, 'public_link' => $publicLink];
     }
 
     /**

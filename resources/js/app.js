@@ -8,8 +8,9 @@ import AppLayout from './layouts/AppLayout.vue';
  * - Checkout/: flujo mobile-only de inspección fotográfica
  * - Auth/:     login/register (cuando se implemente)
  * - Landing/:  landing pública de marca
+ * - Cotizaciones/: vista pública del comparador de coberturas
  */
-const LAYOUT_EXCLUDED = ['Checkout/', 'Auth/', 'Landing/'];
+const LAYOUT_EXCLUDED = ['Checkout/', 'Auth/', 'Landing/', 'Cotizaciones/'];
 
 createInertiaApp({
     resolve: name => {

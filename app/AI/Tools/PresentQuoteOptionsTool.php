@@ -5,6 +5,7 @@ namespace App\AI\Tools;
 use App\AI\Concerns\HasMockReplay;
 use App\AI\Contracts\Mockable;
 use App\Models\Conversation;
+use App\Models\Quote;
 use App\Models\QuoteAlternative;
 use App\Traits\ConditionalLogger;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -17,11 +18,18 @@ use Laravel\Ai\Tools\Request;
  * botón, así que no puede inventarlos ni exceder el límite de Meta. Los deja
  * en `metadata.pending_interactive`; el orquestador los levanta al retornar
  * y `SendWhatsAppMessage` los adjunta al mensaje de texto que escriba el agente.
+ *
+ * Además deja registrada la presentación en la cotización (qué par se mostró, cuál se recomendó
+ * y por qué) y mintea el token de la vista pública. Antes de esto, la única traza de la
+ * recomendación era `agent_execution_logs.tool_calls`, un log de auditoría sin retención.
  */
 class PresentQuoteOptionsTool implements Mockable, Tool
 {
     use ConditionalLogger;
     use HasMockReplay;
+
+    /** Tope de cada razón: la card de la vista pública está diseñada para 2 a 4 oraciones. */
+    private const MAX_REASON = 600;
 
     public function __construct(
         private readonly Conversation $conversation,
@@ -51,6 +59,16 @@ class PresentQuoteOptionsTool implements Mockable, Tool
                 ->required(),
             'recommended_alternative_id' => $schema->integer()
                 ->description('Cuál de los 2 anteriores es el recomendado (va primero en los botones).')
+                ->required(),
+            'recommended_reason' => $schema->string()
+                ->description('Por qué recomendás ESA opción, en 2 a 4 oraciones, hablándole al cliente. '
+                    .'OJO: se guarda tal cual y se muestra en una página web PÚBLICA que puede abrir '
+                    .'cualquiera con el link. Nada de nombre, DNI, patente ni teléfono. Tampoco '
+                    .'prometas topes, sublímites ni plazos que no estén en los datos del producto.')
+                ->required(),
+            'alternative_reason' => $schema->string()
+                ->description('Por qué la OTRA es la alternativa: qué gana y qué pierde el cliente frente '
+                    .'a la recomendada. Mismas reglas que recommended_reason.')
                 ->required(),
         ];
     }
@@ -88,6 +106,56 @@ class PresentQuoteOptionsTool implements Mockable, Tool
             ]);
         }
 
+        // Sin este guard el sortByDesc de abajo no reordena nada y la recomendación queda mal
+        // atribuida en silencio.
+        if (! in_array($recommendedId, $alternativeIds, true)) {
+            return json_encode([
+                'success' => false,
+                'error' => 'El recommended_alternative_id tiene que ser uno de los 2 alternative_ids.',
+                'error_code' => 'recommended_not_in_set',
+            ]);
+        }
+
+        $recommendedReason = trim((string) ($request['recommended_reason'] ?? ''));
+        $alternativeReason = trim((string) ($request['alternative_reason'] ?? ''));
+
+        // Las razones son load-bearing en la vista pública: sin ellas el bloque citado de la
+        // card queda hueco.
+        if ($recommendedReason === '' || $alternativeReason === '') {
+            return json_encode([
+                'success' => false,
+                'error' => 'Faltan recommended_reason y/o alternative_reason.',
+                'error_code' => 'missing_reason',
+            ]);
+        }
+
+        $quote = Quote::find($quoteId);
+        if ($quote === null) {
+            return json_encode([
+                'success' => false,
+                'error' => 'No existe esa cotización.',
+                'error_code' => 'quote_not_found',
+            ]);
+        }
+
+        $otherId = (int) collect($alternativeIds)->first(fn (int $id): bool => $id !== $recommendedId);
+
+        // Se truncan y no se rechazan: que el modelo escriba de más no justifica romper el turno.
+        $quote->update([
+            'recommended_alternative_id' => $recommendedId,
+            'presented_alternative_ids' => [$recommendedId, $otherId],
+            'presentation_reasons' => [
+                (string) $recommendedId => $this->acotar($recommendedReason),
+                (string) $otherId => $this->acotar($alternativeReason),
+            ],
+            'presented_at' => now(),
+        ]);
+
+        // El link a la vista pública sale en un mensaje aparte, inmediatamente después del texto
+        // de presentación. Se arma acá y lo despacha el llamador del orquestador: el LLM nunca
+        // lo escribe, así no puede deformarlo ni inventarlo.
+        $publicLink = route('cotizaciones.show', ['token' => $quote->ensurePublicToken()]);
+
         // La recomendada va primero.
         $ordered = collect($alternativeIds)
             ->sortByDesc(fn (int $id): bool => $id === $recommendedId)
@@ -105,15 +173,35 @@ class PresentQuoteOptionsTool implements Mockable, Tool
 
         $meta = $this->conversation->metadata ?? [];
         $meta['pending_interactive'] = ['buttons' => $buttons];
+        $meta['pending_public_link'] = $publicLink;
         $this->conversation->update(['metadata' => $meta]);
 
         $titles = implode(' / ', array_column($buttons, 'title'));
 
+        // El agente se entera de que el link sale, pero nunca ve la URL: si la tuviera la pegaría
+        // en el chat con su propio formato, y el mensaje de abajo dejaría de tener sentido.
         return json_encode([
             'success' => true,
             'tool_output' => "Botones preparados: {$titles}. Tu próxima respuesta va a salir acompañada de esos botones. "
-                .'Escribí SOLO el texto de presentación: ambas opciones con sus features, marcando la recomendada y por qué.',
+                .'Las razones quedaron guardadas. '
+                .'Escribí SOLO el texto de presentación: ambas opciones con sus features, marcando la recomendada y por qué. '
+                .'Justo después de tu mensaje le llega al cliente, en un mensaje aparte, el link a la comparación '
+                .'completa de las opciones. Ya está encolado: no escribas ninguna URL ni lo prometas como algo que '
+                .'vas a mandar. Si te sirve, podés cerrar con algo del estilo "abajo te paso el detalle completo".',
         ]);
+    }
+
+    /**
+     * Recorta una razón al tope, contando los puntos suspensivos adentro del límite y no
+     * después, para que lo guardado nunca supere MAX_REASON.
+     */
+    private function acotar(string $reason): string
+    {
+        if (mb_strlen($reason) <= self::MAX_REASON) {
+            return $reason;
+        }
+
+        return mb_substr($reason, 0, self::MAX_REASON - 1).'…';
     }
 
     /**

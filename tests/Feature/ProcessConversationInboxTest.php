@@ -292,3 +292,69 @@ it('ignores outbound messages in inbox query', function () {
 
     Bus::assertNotDispatched(SendWhatsAppMessage::class);
 });
+
+// ─── Link a la vista pública ───────────────────────────────────────────────────────────────────
+// Cuando el turno presentó opciones, el link a la comparación sale en un mensaje aparte
+// inmediatamente después. Encadenado y no dos dispatch sueltos: los dos van a la misma cola y con
+// más de un worker el link puede adelantarse al mensaje que le da sentido.
+
+it('manda el link de la comparación en un segundo mensaje, detrás del primero', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
+
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldReceive('handle')->once()->andReturn([
+        'text' => 'Te dejo las dos mejores opciones.',
+        'agent' => 'QuoteAgent',
+        'execution_log_ids' => [],
+        'buttons' => [['id' => 'alt:1', 'title' => 'Galicia $90K']],
+        'public_link' => 'https://mango.test/cotizaciones/abcdefghijklmnop',
+    ]);
+
+    $conversation = Conversation::factory()->create([
+        'external_conversation_id' => $this->waId,
+        'customer_id' => Customer::factory()->create(['name' => null])->id,
+    ]);
+
+    Message::create([
+        'conversation_id' => $conversation->id,
+        'direction' => 'inbound',
+        'content' => 'Dale, mostrame',
+        'external_message_id' => 'wamid.link001',
+        'sender_phone' => $this->waId,
+    ]);
+
+    ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
+
+    Bus::assertChained([SendWhatsAppMessage::class, SendWhatsAppMessage::class]);
+});
+
+it('sin link presentado sigue saliendo un solo mensaje', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
+
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldReceive('handle')->once()->andReturn([
+        'text' => '¿Qué auto querés asegurar?',
+        'agent' => 'VehicleIdentifierAgent',
+        'execution_log_ids' => [],
+        'buttons' => null,
+        'public_link' => null,
+    ]);
+
+    $conversation = Conversation::factory()->create([
+        'external_conversation_id' => $this->waId,
+        'customer_id' => Customer::factory()->create(['name' => null])->id,
+    ]);
+
+    Message::create([
+        'conversation_id' => $conversation->id,
+        'direction' => 'inbound',
+        'content' => 'Hola',
+        'external_message_id' => 'wamid.link002',
+        'sender_phone' => $this->waId,
+    ]);
+
+    ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
+
+    Bus::assertDispatchedTimes(SendWhatsAppMessage::class, 1);
+    Bus::assertDispatched(SendWhatsAppMessage::class, fn ($job): bool => $job->chained === []);
+});

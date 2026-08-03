@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\AI\InsuranceOrchestrator;
 use App\Models\Conversation;
 use App\Models\Quote;
+use App\Traits\DespachaRespuestaDelAgente;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -15,6 +16,7 @@ use Illuminate\Support\Facades\Log;
 
 class NotifyClientQuoteReady implements ShouldQueue
 {
+    use DespachaRespuestaDelAgente;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 2;
@@ -85,8 +87,14 @@ class NotifyClientQuoteReady implements ShouldQueue
 
         $reply = $orchestrator->handle($trigger, $conversation);
 
-        SendWhatsAppMessage::dispatch($phone, $bsuid, $reply['text'], $phoneNumberId, $this->conversationId, $reply['agent'], null, $reply['buttons'] ?? null)
-            ->onQueue('whatsapp-outbound');
+        $this->despacharRespuesta(
+            new SendWhatsAppMessage($phone, $bsuid, $reply['text'], $phoneNumberId, $this->conversationId, $reply['agent'], null, $reply['buttons'] ?? null),
+            $reply['public_link'] ?? null,
+            $phone,
+            $bsuid,
+            $phoneNumberId,
+            $this->conversationId,
+        );
     }
 
     public function failed(\Throwable $exception): void

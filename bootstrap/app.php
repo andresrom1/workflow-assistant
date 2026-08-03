@@ -3,6 +3,7 @@
 use App\Exceptions\Api\ApiException;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\IsAdmin;
+use App\Http\Middleware\NoIndex;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -34,8 +35,18 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->trustProxies(at: '*');
 
+        // La vista pública de cotizaciones no tiene autenticación por cookie, así que no hay
+        // autoridad ambiente que CSRF pueda proteger: el token de 16 chars de la URL es la única
+        // credencial, y quien lo tiene ya puede hacer todo lo que el endpoint hace. Con el guard
+        // puesto, en cambio, un link abierto días después revienta con 419 por sesión vencida —
+        // que es justo el caso que la feature tiene que cubrir.
+        $middleware->validateCsrfTokens(except: [
+            'cotizaciones/*/checkout',
+        ]);
+
         $middleware->alias([
             'admin' => IsAdmin::class,
+            'noindex' => NoIndex::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

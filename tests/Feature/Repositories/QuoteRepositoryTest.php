@@ -136,3 +136,53 @@ it('es idempotente: re-ejecutar saveResults deja la elegida resolviendo su ref',
         ->and($alternatives[0]->providerRef->external_quote_id)->toBe('7386')
         ->and($alternatives[1]->providerRef->external_quote_id)->toBe('7387');
 });
+
+// Los precios de las compañías valen por día calendario argentino. La app corre en UTC, así que
+// un endOfDay() sin conversión de zona vencería un día tarde todo lo cotizado entre las 21:00 ART
+// y la medianoche.
+it('vence al cierre del día argentino, no del UTC', function () {
+    // 26/07 02:00 UTC = 25/07 23:00 ART → cierra al terminar el 25 en Argentina.
+    Carbon\Carbon::setTestNow(Carbon\Carbon::parse('2026-07-26 02:00:00', 'UTC'));
+
+    $quote = pendingQuote();
+    app(QuoteRepository::class)->saveResults($quote, engineResultWith([parsedAlternative('7386')]));
+
+    expect($quote->refresh()->expires_at->toDateTimeString())->toBe('2026-07-26 02:59:59');
+
+    Carbon\Carbon::setTestNow();
+});
+
+it('una cotización recién guardada queda vigente', function () {
+    Carbon\Carbon::setTestNow(Carbon\Carbon::parse('2026-07-26 15:00:00', 'UTC'));
+
+    $quote = pendingQuote();
+    app(QuoteRepository::class)->saveResults($quote, engineResultWith([parsedAlternative('7386')]));
+
+    expect($quote->refresh()->isVigente())->toBeTrue();
+
+    Carbon\Carbon::setTestNow();
+});
+
+// Recotizar borra las alternativas viejas, así que la recomendación del agente queda apuntando a
+// ids que ya no existen y las razones que le dio al cliente hablan de precios que no existen más.
+it('invalida la presentación anterior al guardar resultados nuevos', function () {
+    $quote = pendingQuote();
+    app(QuoteRepository::class)->saveResults($quote, engineResultWith([parsedAlternative('QR-1')]));
+
+    $vieja = $quote->alternatives()->first();
+    $quote->update([
+        'recommended_alternative_id' => $vieja->id,
+        'presented_alternative_ids' => [$vieja->id, $vieja->id],
+        'presentation_reasons' => [(string) $vieja->id => 'La franquicia más baja.'],
+        'presented_at' => now(),
+    ]);
+
+    app(QuoteRepository::class)->saveResults($quote, engineResultWith([parsedAlternative('QR-2')]));
+    $quote->refresh();
+
+    expect($quote->recommended_alternative_id)->toBeNull()
+        ->and($quote->presented_alternative_ids)->toBeNull()
+        ->and($quote->presentation_reasons)->toBeNull()
+        ->and($quote->presented_at)->toBeNull()
+        ->and($quote->presentedPair())->toBeNull();
+});

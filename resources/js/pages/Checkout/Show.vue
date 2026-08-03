@@ -457,6 +457,7 @@ import { ref, reactive, computed, defineComponent, h, onMounted, onUnmounted, wa
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 import MangoLayout from '@/layouts/MangoLayout.vue'
 import MangoLogo from '@/components/Mango/MangoLogo.vue'
+import { esDispositivoMovil } from '@/lib/dispositivo'
 
 // ─── Componentes inline ────────────────────────────────────────────────────────
 const Field = defineComponent({
@@ -506,8 +507,10 @@ const props = defineProps<{
 }>()
 
 // ─── Mobile detection ──────────────────────────────────────────────────────────
-// El form solo se completa desde un celular (cámara + flujo de inspección).
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+// El form solo se completa desde un celular (cámara + flujo de inspección). El criterio es
+// compartido con el CTA del comparador: si clasificaran distinto, el cliente pasaría el CTA y
+// chocaría con la pared de acá.
+const isMobile = esDispositivoMovil()
 // ─── CSRF ──────────────────────────────────────────────────────────────────────
 const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? ''
 

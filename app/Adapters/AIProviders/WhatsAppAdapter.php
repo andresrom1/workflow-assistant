@@ -438,6 +438,9 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
     /**
      * Genera un token de checkout y devuelve la URL firmada al cliente.
      *
+     * La creación vive en QuoteService: la comparten este adapter, el path OpenAI y el CTA de
+     * la vista pública. Acá queda solo la traducción al canal.
+     *
      * @param  array  $data  Datos normalizados del payload
      * @param  Conversation  $conversation  La conversación activa
      */
@@ -448,41 +451,18 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             'quote_alternative_id' => 'required|integer',
         ]);
 
-        $quote = Quote::where('id', $data['quoteId'])
-            ->whereIn('status', ['processed', 'checkout_pending'])
-            ->first();
+        $resultado = $this->quoteService->crearCheckout(
+            (int) $data['quoteId'],
+            (int) $data['quote_alternative_id']
+        );
 
-        if (! $quote) {
-            return $this->formatError(
-                'No se encontró una cotización válida con ese ID para esta sesión.',
-                'quote_not_found'
-            );
+        if (! $resultado['ok']) {
+            return $this->formatError($resultado['error'], $resultado['error_code']);
         }
-
-        $alternative = QuoteAlternative::where('id', $data['quote_alternative_id'])
-            ->where('quote_id', $quote->id)
-            ->first();
-
-        if (! $alternative) {
-            return $this->formatError(
-                'La alternativa seleccionada no corresponde a la cotización indicada.',
-                'alternative_not_found'
-            );
-        }
-
-        $token = Str::random(10);
-
-        $quote->update([
-            'status' => 'checkout_pending',
-            'checkout_token' => $token,
-            'checkout_alternative_id' => $alternative->id,
-        ]);
-
-        $checkoutUrl = route('checkout.show', ['token' => $token]);
 
         return $this->formatSuccess(
-            "Tu link de checkout está listo. Completá tus datos aquí: {$checkoutUrl}",
-            ['checkout_url' => $checkoutUrl]
+            "Tu link de checkout está listo. Completá tus datos aquí: {$resultado['url']}",
+            ['checkout_url' => $resultado['url']]
         );
     }
 
