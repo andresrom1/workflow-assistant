@@ -5,6 +5,14 @@
          colors="true"
 >
     <testsuites>
+        <!--
+            `tests/Unit` no estaba declarado: 120 tests existían en el repo y NUNCA
+            corrían en la suite por defecto (solo si se les pasaba el path a mano).
+            Detectado el 2026-08-03 al ver que el total no subía con tests nuevos.
+        -->
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
