@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\PolizaEstado;
 use App\Models\Customer;
 use App\Repositories\CustomerRepository;
+use App\Services\CustomerIdentificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -16,6 +17,7 @@ class ConversationController extends Controller
 {
     public function __construct(
         protected CustomerRepository $customerRepository,
+        protected CustomerIdentificationService $identification,
     ) {}
 
     public function index(Request $request): Response
@@ -111,10 +113,19 @@ class ConversationController extends Controller
     {
         $validated = $this->validateCustomer($request, null);
 
-        $customer = $this->customerRepository->create($validated);
+        // Identificar antes de crear, como toda puerta por la que entra un cliente: si ya
+        // existía por otra vía (WhatsApp por teléfono, ingesta de pólizas por documento) se
+        // abre esa ficha en vez de duplicarla.
+        $existing = $this->identifyExisting($validated);
+
+        $customer = $existing ?? $this->customerRepository->create($validated);
 
         return redirect()->route('conversations.show', $customer)
-            ->with('flash', ['success' => 'Cliente creado.']);
+            ->with('flash', [
+                'success' => $existing instanceof Customer
+                    ? 'Este cliente ya existía: se abrió su ficha en vez de duplicarla.'
+                    : 'Cliente creado.',
+            ]);
     }
 
     public function edit(Customer $customer): Response
@@ -161,6 +172,29 @@ class ConversationController extends Controller
     /**
      * @return array<string, mixed>
      */
+    /**
+     * Cliente ya existente detrás de los datos del formulario, o null si es alguien nuevo.
+     * Va por {@see CustomerIdentificationService}, igual que el resto de las puertas.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function identifyExisting(array $validated): ?Customer
+    {
+        foreach (['dni', 'email', 'phone'] as $tipo) {
+            if (empty($validated[$tipo])) {
+                continue;
+            }
+
+            $customer = $this->identification->findCustomer($tipo, (string) $validated[$tipo]);
+
+            if ($customer instanceof Customer) {
+                return $customer;
+            }
+        }
+
+        return null;
+    }
+
     private function validateCustomer(Request $request, ?Customer $customer): array
     {
         $ignoreId = $customer?->id;

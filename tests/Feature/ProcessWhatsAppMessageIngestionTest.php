@@ -188,15 +188,20 @@ it('reuses the same conversation and customer for a repeat bsuid', function () {
     $this->assertDatabaseCount('messages', 2);
 });
 
-it('does not merge two different bsuids that share a phone', function () {
+it('two different bsuids sharing a phone are the same customer', function () {
     Bus::fake([ProcessConversationInbox::class]);
 
     ProcessWhatsAppMessage::dispatchSync(waId: $this->waId, messageBody: 'Hola', messageId: 'wamid.a', phoneNumberId: $this->phoneNumberId, contactName: 'A', extUserId: 'US.11111111111111111');
     ProcessWhatsAppMessage::dispatchSync(waId: $this->waId, messageBody: 'Hola', messageId: 'wamid.b', phoneNumberId: $this->phoneNumberId, contactName: 'B', extUserId: 'US.22222222222222222');
 
-    // Mismo teléfono, distinto BSUID → dos conversaciones y dos customers: no se deduplica por teléfono.
+    // Dos BSUIDs distintos son dos conversaciones (la conversación es del canal)...
     $this->assertDatabaseCount('conversations', 2);
-    $this->assertDatabaseCount('customers', 2);
+
+    // ...pero un solo cliente: el mismo teléfono es el mismo cliente. Antes esta prueba
+    // afirmaba lo contrario ("no se deduplica por teléfono", del refactor a BSUID del
+    // 2026-07-24); esa regla se revirtió al aparecer clientes duplicados en producción.
+    // Ver ROADMAP, bitácora 2026-07-26.
+    $this->assertDatabaseCount('customers', 1);
 });
 
 function dispatchIngestion(string $waId, string $messageId, string $phoneNumberId): void

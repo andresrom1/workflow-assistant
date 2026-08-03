@@ -41,38 +41,67 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
     ) {}
 
     /**
-     * Entry point para llamadas directas por herramienta (compatibilidad con la interfaz).
-     * En el flujo WhatsApp, los sub-agentes llaman a los métodos directamente.
+     * Entry point ÚNICO de las tools. Normaliza el payload, delega al handler y atrapa
+     * cualquier excepción para que quede logueada con su motivo real.
+     *
+     * Ninguna tool debe llamar a los handlers directamente: al saltearse este try/catch la
+     * excepción escapa al SDK, que la convierte en un texto genérico ("Invalid parameters
+     * for tool : X") descartando el mensaje original, y el turno queda mudo en el log.
+     * Ver ROADMAP, bitácora 2026-07-25.
      */
-    public function handleToolCall(array $payload, string $toolName): array
+    public function handleToolCall(array $payload, string $toolName, ?Conversation $conversation = null): array
     {
         $data = $this->normalizePayload($payload);
-        $conversation = $this->conversationRepo->findOrCreateByExternalId(
-            $data['external_conversation_id'],
-            'whatsapp'
-        );
+
+        // Camino WhatsApp: la conversación llega inyectada en la tool (anclada en el BSUID).
+        // Camino web/OpenAI legacy: se resuelve por el identificador externo del payload.
+        $conversation ??= $data['external_conversation_id'] !== null
+            ? $this->conversationRepo->findOrCreateByExternalId($data['external_conversation_id'], 'whatsapp')
+            : null;
 
         $this->logAdapter("WhatsApp tool llamado: {$toolName}", [
             'payload' => $payload,
-            'conversation_id' => $conversation->id,
+            'conversation_id' => $conversation?->id,
         ]);
 
         try {
+            if (! $conversation instanceof Conversation && $toolName !== 'get_quote') {
+                return $this->formatError(
+                    "La tool {$toolName} requiere una conversación y no se pudo resolver ninguna.",
+                    'missing_conversation'
+                );
+            }
+
             return match ($toolName) {
                 'identify_customer' => $this->identifyCustomer($data, $conversation),
                 'identify_vehicle' => $this->identifyVehicle($data, $conversation),
+                'provide_vehicle_fact' => $this->provideVehicleFact($data, $conversation),
                 'coverage_preference' => $this->coveragePreference($data, $conversation),
                 'get_quote' => $this->getQuote($data),
                 'checkout' => $this->checkout($data, $conversation),
+                'revert_stage' => $this->revertStage($data, $conversation),
                 default => $this->formatError("Herramienta no soportada: {$toolName}", 'tool_not_found'),
             };
         } catch (InvalidArgumentException $e) {
-            Log::warning('WhatsApp Adapter: validación fallida', ['error' => $e->getMessage()]);
+            Log::warning('WhatsApp Adapter: validación fallida', [
+                'tool' => $toolName,
+                'conversation_id' => $conversation?->id,
+                'payload' => $payload,
+                'error' => $e->getMessage(),
+            ]);
 
             return $this->formatError($e->getMessage(), 'validation_error');
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            // \Throwable y no \Exception: un TypeError (argumento con el tipo equivocado desde
+            // el modelo) es un Error, no una Exception, y con `catch (\Exception)` se escapaba
+            // sin dejar rastro.
             Log::error('WhatsApp Adapter: error interno', [
+                'tool' => $toolName,
+                'conversation_id' => $conversation?->id,
+                'payload' => $payload,
+                'exception' => $e::class,
                 'msg' => $e->getMessage(),
+                'at' => $e->getFile().':'.$e->getLine(),
                 'trace' => $e->getTraceAsString(),
             ]);
 

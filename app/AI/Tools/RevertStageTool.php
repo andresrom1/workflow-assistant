@@ -61,7 +61,7 @@ class RevertStageTool implements Mockable, Tool
 
         $this->logToolCall($request->all());
 
-        $result = $this->adapter->revertStage($request->all(), $this->conversation);
+        $result = $this->adapter->handleToolCall($request->all(), 'revert_stage', $this->conversation);
 
         if ($result['success']) {
             $stage = $request['stage'] ?? null;

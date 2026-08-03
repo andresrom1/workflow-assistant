@@ -89,6 +89,57 @@
 
 - **2026-07-26** — **Vista pública de cotizaciones (comparador de coberturas) 🚧.** El agente presenta al cliente **exactamente 2** alternativas por WhatsApp (`PresentQuoteOptionsTool` fuerza `min(2)->max(2)` por el límite de 3 botones de Meta), mientras una cotización real trae entre 24 y 118: todo el detalle de coberturas quedaba en el backend. Nueva ruta pública **`GET /cotizaciones/{token16}`** con las dos recomendadas marcadas y su justificación, el resto agrupado por compañía, y un diff entre las dos. Se validó primero como maqueta hardcodeada, se aprobó, y se portó a datos reales. **Dominio:** `QuoteComparisonService` (glosario canónico desde `full_details`, filtro de alternativas sin coberturas, dedupe a la más barata dentro de compañía+franquicia+coberturas, agrupación con "desde $X", diff por diferencia de conjuntos sobre `features_tags`); `App\Support\Franquicia` extrae porcentaje y mínimo del **título** del producto, que es donde el proveedor manda la franquicia como texto libre en 5 formatos distintos (si no parsea devuelve `null` y la clave de dedupe cae al título crudo, para no colapsar productos distintos en silencio). **Sin diccionario de sinónimos ni LLM en el diff:** se verificó sobre la base entera de producción que el vocabulario es cerrado (22 tags) y que **cada tag tiene una única descripción, idéntica entre las 7 compañías** (~3.700 apariciones, cero excepciones) — el proveedor ya normaliza. Se evaluó y descartó un catálogo canónico con tabla de mapeo. **Vigencia:** `quotes.expires_at` pasa de `now()->addDays(7)` a **fin del día calendario argentino** en UTC (`Quote::endOfBusinessDay()`, +`isVigente()`/`scopeVigente()`); antes ese campo se escribía y **nadie lo comparaba nunca contra `now()`**. **Persistencia de la recomendación:** migración con `public_token` (16 chars, minteado al presentar, idempotente), `recommended_alternative_id`, `presented_alternative_ids`, `presentation_reasons` y `presented_at`; los escribe `PresentQuoteOptionsTool`, que suma al schema `recommended_reason`/`alternative_reason` (obligatorias, truncadas a 600) y dos guards nuevos (`recommended_not_in_set` — antes un id fuera del par no reordenaba nada y quedaba mal atribuido en silencio — y `missing_reason`). Hasta acá la única traza de qué se presentó era `agent_execution_logs.tool_calls`, un log de auditoría sin retención. Prompt de `CheckoutAgent` actualizado con la **deuda documentada** (doble fuente de verdad con el texto del chat, contenido que va a una página pública, razones que se congelan al presentar) y sincronizado a v8. **Privacidad:** la página **no expone patente, DNI, nombre ni teléfono** — props enumeradas a mano, nunca `$snapshot->toArray()`, con test que busca los tres valores en el HTML crudo. Middleware `noindex` (header `X-Robots-Tag` + meta condicional en el blade raíz; **no** se toca `robots.txt`: un `Disallow` impediría el crawl y sin crawl nadie lee el noindex). **UI:** dos layouts, bottom sheets en móvil y master-detail en escritorio, corte por `matchMedia` en 900px; vencida la cotización aparece un banner y el CTA de contratar se reemplaza por un botón deshabilitado. Verificado contra la cotización 30 local: **26 alternativas → 17 planes** tras filtrar las sin coberturas y colapsar los duplicados de Mercantil Andina y San Cristóbal. Suite **673 verdes** · Pint ✅ · build ✅. **Pendientes en [`docs/comparador-coberturas-pendientes.md`](docs/comparador-coberturas-pendientes.md)** — el más importante: **nadie le manda el link al cliente todavía** (quedó fuera de scope), así que la vista es inalcanzable en producción. Además: el CTA "La quiero" tiene que **crear el checkout** en vez de mandar al chat, lo que vuelve obligatorio el guard de vigencia que hoy no existe (`CheckoutController` guarda solo por `status`), falta el canario de tags nuevos, y sigue sin explicarse qué distingue las variantes repetidas que devuelve el proveedor con distinto `external_quote_id`. _(rama `feat/comparador-coberturas`, commits `6ad6e6f`→`c38a2c8`)_
 
+- **2026-07-26** — **Clientes duplicados: toda puerta identifica con `CustomerIdentificationService`.**
+  Reporte: tres `Customer` para el mismo teléfono (`+5493516280778`, ids 7, 9 y 10). Diagnóstico: la
+  búsqueda no fallaba, **ya no existía**. Hasta el 24-jul `InsuranceOrchestrator::handle()` arrancaba con
+  `tryAutoIdentifyByPhone()` → `CustomerIdentificationService::findOrCreate()` →
+  `CustomerRepository::findByPhone()`, y linkeaba el cliente existente a la conversación nueva. El commit
+  `626ed99` (migración a BSUID) la eliminó a propósito ("se materializa desde la ingesta sin
+  deduplicación insegura") y la reemplazó por `syncCustomerIdentifiedState()`, que solo lee el DNI para
+  prender un flag; la creación quedó en `ProcessWhatsAppMessage::captureCustomerAttributes()` con un
+  `create()` pelado. Las fechas cierran: el cliente 7 (23-jul) es anterior al refactor y fue legítimo;
+  los duplicados son todos posteriores. Efecto secundario: `findByPhone()` quedó sin usos.
+  **Decisión de dominio (Andrés):** si cualquier dato conocido coincide, es el mismo cliente — el
+  teléfono incluido. Fix: (1) `findCustomer()` gana el tipo `ext_user_id`, que resuelve el BSUID por
+  `conversations.ext_user_id` **incluidas las archivadas** (el Reset del admin archiva, y por eso el
+  usuario que volvía parecía nuevo), y pasa a público; (2) la búsqueda por `dni` compara la identidad
+  derivada (`DocumentoIdentidad::clave()`, DNI para físicas / CUIT para jurídicas) contra
+  `documento_key` en vez del número crudo, con respaldo exacto para filas viejas; (3) las tres puertas
+  que se salteaban el servicio ahora lo usan: ingesta de WhatsApp, `PolicyChainResolver` (que tenía su
+  propia copia de la búsqueda por documento) y las dos altas manuales del admin, que además avisan
+  "este cliente ya existía"; (4) comando `customers:dedupe` (en seco por defecto, `--apply` para
+  ejecutar) para los duplicados que ya están en producción, agrupando por teléfono y por BSUID.
+  Se revirtió la aserción del test `does not merge two different bsuids that share a phone`, que
+  blindaba la regla vieja. Principio documentado en el CLAUDE.md, junto con la distinción
+  servicio (identificar) vs helper (`DocumentoIdentidad`, normalizar/derivar).
+
+- **2026-07-25** — **Las tools vuelven a entrar por `handleToolCall()`: los errores dejan de ser
+  invisibles.** Reporte: el cliente dio el DNI por WhatsApp (conversación 10) y el agente contestó
+  "Tuve un inconveniente técnico"; `laravel.log` no tenía **ni una línea** de ese turno. El resultado
+  real de la tool quedó en `agent_conversation_messages.tool_results`:
+  `"Invalid parameters for tool : IdentifyCustomerTool"`, dos veces. Causa de la ceguera: las 7 tools
+  llamaban al handler del adapter **directo** (`$adapter->identifyCustomer(...)`), salteándose
+  `handleToolCall()`, que es donde vive el `try/catch` con los `Log::warning`/`Log::error`. Sin ese
+  catch, la excepción escapa al SDK; Prism mapea cualquier `TypeError`/`InvalidArgumentException` a
+  ese texto genérico (`PrismException::invalidParameterInTool()`), lo captura en
+  `CallsTools::executeToolCall()` y lo devuelve como resultado de tool **sin loguear**, descartando el
+  mensaje original (`getPrevious()` se pierde). O sea: el motivo real nunca se escribió en ningún
+  lado. Fix: `handleToolCall(array $payload, string $toolName, ?Conversation $conversation = null)`
+  —la conversación ahora llega inyectada desde la tool en vez de re-resolverse por
+  `external_conversation_id` (vestigio del camino web), con fallback al lookup viejo para
+  `ToolsController`—, se agregaron los arms faltantes (`provide_vehicle_fact`, `revert_stage`), el
+  catch pasó de `\Exception` a **`\Throwable`** (un `TypeError` es `Error`, no `Exception`: se escapaba)
+  y ambos logs incluyen ahora `tool`, `conversation_id`, `payload`, clase de excepción, archivo:línea
+  y trace. Las 7 tools pasan por ahí. Verificado con `ToolErrorVisibilityTest` (7 casos) y sonda
+  manual: cada payload malformado devuelve su motivo real
+  (`DNI inválido`, `The identifier value field must be a string.`,
+  `The selected identifier type is invalid.`, `... field is required.`) en vez de un texto opaco.
+  **Nota sobre el incidente:** ninguna de esas cinco validaciones explica el fallo si el payload que
+  llegó a la tool fue el que quedó guardado (`{"identifier_type":"dni","identifier_value":"30123727"}`
+  → ese caso pasa y persiste el DNI, probado en prod contra la conversación 10). Queda pendiente de
+  diagnóstico; con esta instrumentación la próxima vez el motivo sale en una línea de log.
+  **Regla:** ninguna tool debe llamar a los handlers del adapter directamente.
+
 - **2026-07-25** — **Migración a DeepSeek v4 + normalización del modelo por agente.** DeepSeek
   deprecó `deepseek-chat` y `deepseek-reasoner` (2026-07-24) en favor de `deepseek-v4-flash` y
   `deepseek-v4-pro`. Se aprovechó para arreglar la inconsistencia de fondo: solo 3 de los 8 agentes

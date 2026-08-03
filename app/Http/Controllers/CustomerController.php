@@ -9,6 +9,7 @@ use App\Models\PolicyDocument;
 use App\Models\User;
 use App\Repositories\CustomerRepository;
 use App\Services\CustomerConsolidationService;
+use App\Services\CustomerIdentificationService;
 use App\Services\Visred\VisredCatalogService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,6 +32,7 @@ class CustomerController extends Controller
     public function __construct(
         protected CustomerRepository $customerRepository,
         protected CustomerConsolidationService $consolidation,
+        protected CustomerIdentificationService $identification,
     ) {}
 
     public function index(Request $request): Response
@@ -139,9 +141,14 @@ class CustomerController extends Controller
     {
         $validated = $this->validateCustomer($request, null);
 
+        // El alta identifica antes de crear, como toda puerta por la que entra un cliente: si
+        // ya existía por otra vía (WhatsApp por teléfono, ingesta de pólizas por documento) se
+        // edita esa fila en vez de duplicarla.
+        $existing = $this->identifyExisting($validated);
+
         // El alta crea con los identificadores base; la consolidación registra los
         // campos de holder con provenance/audit de fuente admin.
-        $customer = $this->customerRepository->create([
+        $customer = $existing ?? $this->customerRepository->create([
             'name' => $validated['name'] ?? null,
             'dni' => $validated['dni'] ?? null,
             'email' => $validated['email'] ?? null,
@@ -151,7 +158,11 @@ class CustomerController extends Controller
         $this->consolidation->apply($customer, $this->holderPayload($validated), 'admin', $request->user()?->id);
 
         return redirect()->route('customers.show', $customer)
-            ->with('flash', ['success' => 'Cliente creado.']);
+            ->with('flash', [
+                'success' => $existing instanceof Customer
+                    ? 'Este cliente ya existía: se actualizó la ficha existente en vez de duplicarla.'
+                    : 'Cliente creado.',
+            ]);
     }
 
     public function edit(Customer $customer, VisredCatalogService $catalog): Response
@@ -243,6 +254,41 @@ class CustomerController extends Controller
     /**
      * @return array<string, mixed>
      */
+    /**
+     * Cliente ya existente detrás de los datos del formulario, o null si es alguien nuevo.
+     * La búsqueda va por {@see CustomerIdentificationService}, igual que el resto de las
+     * puertas. Las reglas `unique` de dni/email ya frenan el duplicado exacto; esto cubre lo
+     * que se les escapa: el mismo teléfono que un cliente creado por WhatsApp, y el CUIL/CUIT
+     * de alguien cargado antes con su DNI pelado.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function identifyExisting(array $validated): ?Customer
+    {
+        $porDocumento = empty($validated['dni']) ? null : $this->identification->findCustomer(
+            'dni',
+            (string) $validated['dni'],
+            $validated['document_type_id'] ?? null,
+            $validated['person_type_id'] ?? null,
+        );
+
+        if ($porDocumento instanceof Customer) {
+            return $porDocumento;
+        }
+
+        $porEmail = empty($validated['email'])
+            ? null
+            : $this->identification->findCustomer('email', (string) $validated['email']);
+
+        if ($porEmail instanceof Customer) {
+            return $porEmail;
+        }
+
+        return empty($validated['phone'])
+            ? null
+            : $this->identification->findCustomer('phone', (string) $validated['phone']);
+    }
+
     private function validateCustomer(Request $request, ?Customer $customer): array
     {
         $ignoreId = $customer?->id;

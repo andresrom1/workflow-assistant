@@ -68,11 +68,12 @@ class IdentifyVehicleTool implements Mockable, Tool
 
         // El sessionUuid se genera aquí porque en el flujo WhatsApp no existe
         // un identificador de sesión del front-end como en el flujo web/OpenAI.
-        $result = $this->adapter->identifyVehicle(
+        $result = $this->adapter->handleToolCall(
             array_merge($request->all(), [
                 'channel' => 'whatsapp',
                 'sessionUuid' => (string) Str::uuid(),
             ]),
+            'identify_vehicle',
             $this->conversation
         );
 

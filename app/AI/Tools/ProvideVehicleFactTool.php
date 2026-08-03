@@ -51,8 +51,9 @@ class ProvideVehicleFactTool implements Mockable, Tool
 
         $this->logToolCall($request->all());
 
-        $result = $this->adapter->provideVehicleFact(
+        $result = $this->adapter->handleToolCall(
             $request->all(),
+            'provide_vehicle_fact',
             $this->conversation
         );
 

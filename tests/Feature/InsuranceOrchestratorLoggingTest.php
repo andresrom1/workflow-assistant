@@ -41,7 +41,7 @@ function fakeAgent(AgentResponse $response): object
 function makeOrchestrator(): InsuranceOrchestrator
 {
     $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('identifyCustomer')->andReturn(['success' => false])->byDefault();
+    $adapter->shouldReceive('handleToolCall')->andReturn(['success' => false])->byDefault();
 
     return new InsuranceOrchestrator($adapter);
 }
@@ -74,7 +74,7 @@ it('creates an agent_execution_log on successful handle', function () {
 
     // Mockear toda la cadena de tools a través del WhatsAppAdapter
     $adapter = Mockery::mock(WhatsAppAdapter::class);
-    $adapter->shouldReceive('identifyCustomer')->andReturn(['success' => false]);
+    $adapter->shouldReceive('handleToolCall')->andReturn(['success' => false]);
 
     // Usar reflexión para inyectar el adapter mockeado
     $orchestrator = new InsuranceOrchestrator($adapter);

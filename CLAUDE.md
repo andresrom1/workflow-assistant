@@ -121,6 +121,27 @@ class MyTool implements Tool
 }
 ```
 
+### Las tools SIEMPRE entran por `handleToolCall()` — nunca al handler directo
+
+```php
+// ✅
+$result = $this->adapter->handleToolCall($request->all(), 'identify_customer', $this->conversation);
+
+// ❌ saltea el try/catch y deja el error invisible
+$result = $this->adapter->identifyCustomer($request->all(), $this->conversation);
+```
+
+`WhatsAppAdapter::handleToolCall()` es el único lugar con `try/catch` + logging. Si una tool llama al
+handler directo, la excepción escapa al SDK: Prism traduce cualquier `TypeError` o
+`InvalidArgumentException` a `"Invalid parameters for tool : X"`, lo captura en
+`CallsTools::executeToolCall()` y lo devuelve como resultado de tool **sin loguear nada**, tirando el
+mensaje original. Resultado: el modelo recibe un texto opaco, contesta "tuve un inconveniente técnico"
+y en `laravel.log` no queda ni una línea del turno. Pasó en producción — ver ROADMAP, bitácora
+2026-07-25.
+
+El catch es sobre `\Throwable`, no `\Exception`: un `TypeError` (argumento con el tipo equivocado desde
+el modelo) es `Error` y con `\Exception` se escapaba.
+
 ### Directory conventions
 - `app/AI/Agents/` — sub-agents (one per workflow step)
 - `app/AI/Tools/` — tool classes (one per adapter operation)
@@ -178,6 +199,28 @@ CustomerRepository / VehicleRepository / QuoteRepository ...
 - `app/Adapters/AIProviders/WhatsAppAdapter.php` — traduce tool calls del AI a llamadas de servicio
 - `app/Services/` — lógica de negocio (agnóstica)
 - `app/Repositories/` — acceso a datos (agnóstico)
+
+### Toda puerta identifica con `CustomerIdentificationService`
+
+Cualquier lugar donde entra un cliente **busca primero por el servicio de identificación** y recién crea si no encontró a nadie. Nunca `CustomerRepository::create()` a secas, y nunca una consulta propia por documento/teléfono/email.
+
+```php
+// ✅ el servicio es la única búsqueda de identidad
+$customer = $identification->findCustomer('ext_user_id', $bsuid)
+    ?? $identification->findCustomer('phone', $waId)
+    ?? $customerRepo->create([...]);
+
+// ❌ crear sin identificar → cliente duplicado
+$customer = $customerRepo->create(['phone' => $waId]);
+```
+
+`findCustomer($type, $value)` acepta `ext_user_id` (el BSUID de WhatsApp, que se resuelve por `conversations.ext_user_id` porque **no** se guarda en `customers`), `phone`, `email` y `dni`. Para `dni` compara la **identidad derivada**, no el número crudo: DNI y CUIL/CUIT de la misma persona física resuelven a la misma fila.
+
+Las puertas hoy: ingesta de WhatsApp (`ProcessWhatsAppMessage`), chat (`resolveForConversation`), ingesta local de pólizas y reporte de cartera (`PolicyChainResolver`), alta manual del admin (`CustomerController`, `ConversationController`) y checkout (`CheckoutController`).
+
+Historia, para que no se repita: hasta el 2026-07-24 el orquestador hacía esta búsqueda en cada turno (`tryAutoIdentifyByPhone`); el refactor a BSUID la eliminó sin reemplazarla y cada conversación nueva empezó a acuñar un cliente duplicado. Ver ROADMAP, bitácora 2026-07-26. Para limpiar duplicados viejos: `php artisan customers:dedupe` (en seco; `--apply` para ejecutar).
+
+**Servicio ≠ helper.** `App\Support\DocumentoIdentidad` es una utilidad pura que cualquier clase puede llamar para normalizar un documento o derivar la identidad (DNI si es persona física, CUIT completo si es jurídica). El modelo `Customer` la usa en su hook `saving` para llenar `documento_key`. Por el **servicio** se pasa cuando lo que se está haciendo es *identificar a un cliente*; el helper se llama directo cuando solo hace falta formatear o comparar un número.
 
 ### Principio de desacople (REGLA GENERAL — no es opcional)
 

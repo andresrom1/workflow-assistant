@@ -53,8 +53,9 @@ class CheckoutTool implements Mockable, Tool
         // `checkout_done` lo escribe QuoteService::crearCheckout(), no esta tool: el checkout
         // también se abre desde el CTA de la vista pública, donde no corre ninguna tool. Ver
         // el docblock de ese método.
-        $result = $this->adapter->checkout(
+        $result = $this->adapter->handleToolCall(
             $request->all(),
+            'checkout',
             $this->conversation
         );
 

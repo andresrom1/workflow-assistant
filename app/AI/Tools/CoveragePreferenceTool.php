@@ -55,8 +55,9 @@ class CoveragePreferenceTool implements Mockable, Tool
 
         $this->logToolCall($request->all());
 
-        $result = $this->adapter->coveragePreference(
+        $result = $this->adapter->handleToolCall(
             $request->all(),
+            'coverage_preference',
             $this->conversation
         );
 
