@@ -16,7 +16,8 @@ use SimpleXMLElement;
  * las únicas llamadas externas son a AFIP.
  *
  * Toda la complejidad SOAP queda encapsulada acá: el resto del sistema solo ve
- * {@see self::ultimoAutorizado()} y {@see self::autorizar()}, que devuelven arrays tipados.
+ * {@see self::ultimoAutorizado()}, {@see self::autorizar()} y {@see self::consultar()}, que
+ * devuelven arrays tipados.
  */
 class AfipSoapService
 {
@@ -102,6 +103,57 @@ class AfipSoapService
             'numero' => $numero,
             'cae' => (string) $this->first($xml, 'CAE'),
             'cae_vencimiento' => (string) $this->first($xml, 'CAEFchVto'), // Ymd
+        ];
+    }
+
+    /**
+     * Consulta un comprobante ya numerado. Solo lectura: no emite ni consume numeración.
+     *
+     * Sirve para resolver una emisión en duda — el proceso llamó a {@see self::autorizar()} y murió
+     * antes de persistir el CAE, así que no sabemos si AFIP lo autorizó. Devuelve `null` cuando el
+     * comprobante NO existe en AFIP (número todavía libre), y los datos si existe.
+     *
+     * Ojo con el manejo de errores: AFIP contesta "no existe" con el código de error 602, que para
+     * nosotros es una respuesta legítima y no una falla. Por eso NO se usa
+     * {@see self::throwOnErrors()}, que lanza ante cualquier `Errors/Msg`.
+     *
+     * @return array{numero: int, cae: string, cae_vencimiento: string, doc_nro: string, imp_total: string, resultado: string}|null
+     */
+    public function consultar(int $ptoVta, int $tipoCbte, int $numero): ?array
+    {
+        [$token, $sign] = $this->ticketAcceso();
+        $cuit = $this->emisor->cuit();
+
+        $body = <<<XML
+            <ar:FECompConsultar>
+              <ar:Auth>
+                <ar:Token>{$token}</ar:Token>
+                <ar:Sign>{$sign}</ar:Sign>
+                <ar:Cuit>{$cuit}</ar:Cuit>
+              </ar:Auth>
+              <ar:FeCompConsReq>
+                <ar:CbteTipo>{$tipoCbte}</ar:CbteTipo>
+                <ar:CbteNro>{$numero}</ar:CbteNro>
+                <ar:PtoVta>{$ptoVta}</ar:PtoVta>
+              </ar:FeCompConsReq>
+            </ar:FECompConsultar>
+            XML;
+
+        $xml = $this->callWsfe('FECompConsultar', $body);
+
+        if ($this->tieneErrorNoExiste($xml)) {
+            return null;
+        }
+
+        $this->throwOnErrors($xml);
+
+        return [
+            'numero' => (int) $this->first($xml, 'CbteDesde'),
+            'cae' => (string) $this->first($xml, 'CodAutorizacion'),
+            'cae_vencimiento' => (string) $this->first($xml, 'FchVto'), // Ymd
+            'doc_nro' => (string) $this->first($xml, 'DocNro'),
+            'imp_total' => (string) $this->first($xml, 'ImpTotal'),
+            'resultado' => (string) $this->first($xml, 'Resultado'),
         ];
     }
 
@@ -291,7 +343,7 @@ class AfipSoapService
         $xml = @simplexml_load_string($body);
 
         if (! $xml instanceof SimpleXMLElement) {
-            throw new AfipEmisionException('Respuesta ilegible de AFIP: '.mb_substr($body, 0, 300));
+            throw new AfipRespuestaIndeterminadaException('Respuesta ilegible de AFIP: '.mb_substr($body, 0, 300));
         }
 
         return $xml;
@@ -312,7 +364,7 @@ class AfipSoapService
         $fault = $xml->xpath("//*[local-name()='Fault']");
         if ($fault) {
             $msg = $this->first($xml, 'faultstring') ?? 'SOAP Fault de AFIP.';
-            throw new AfipEmisionException($msg);
+            throw new AfipRespuestaIndeterminadaException($msg);
         }
     }
 
@@ -323,6 +375,26 @@ class AfipSoapService
             $msgs = array_map(fn ($n): string => (string) $n, $errs);
             throw new AfipEmisionException(implode(' | ', $msgs));
         }
+    }
+
+    /**
+     * ¿La respuesta es el "no existen datos en nuestros registros" de AFIP (código 602)?
+     *
+     * Se compara por código y no por texto: el mensaje es prosa en castellano que AFIP puede
+     * reescribir sin aviso, y confundir "no existe" con una falla real haría que una emisión en
+     * duda se reintente a ciegas.
+     */
+    private function tieneErrorNoExiste(SimpleXMLElement $xml): bool
+    {
+        $codes = $xml->xpath("//*[local-name()='Errors']//*[local-name()='Code']");
+
+        foreach ($codes ?: [] as $code) {
+            if ((int) (string) $code === 602) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function observaciones(SimpleXMLElement $xml): string

@@ -347,6 +347,8 @@ Route::middleware(['auth'])->group(function () {
             ->whereNumber('invoiceBatch')->name('facturacion.show');
         Route::get('/facturacion/batches/{invoiceBatch}/download', [InvoiceBatchController::class, 'download'])
             ->whereNumber('invoiceBatch')->name('facturacion.download');
+        Route::post('/facturacion/batches/{invoiceBatch}/resume', [InvoiceBatchController::class, 'resume'])
+            ->whereNumber('invoiceBatch')->name('facturacion.resume');
         Route::get('/facturacion/invoices/{invoice}/pdf', [InvoiceBatchController::class, 'downloadInvoice'])
             ->whereNumber('invoice')->name('facturacion.invoices.pdf');
 

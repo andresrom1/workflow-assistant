@@ -106,7 +106,7 @@ interface BatchInvoice {
   numero_comprobante: number | null; cae: string | null; cae_vencimiento: string | null
   estado: string; estado_label: string; observaciones: string | null
 }
-interface Summary { autorizadas: number; rechazadas: number; total: number }
+interface Summary { autorizadas: number; rechazadas: number; pendientes?: number; total: number }
 interface Batch {
   id: number; codigo: string; concepto: string; punto_venta: number
   fecha_comprobante: string; fecha_servicio_desde: string; fecha_servicio_hasta: string; fecha_vto_pago: string
@@ -129,7 +129,9 @@ const totalAutorizado = computed(() =>
     .reduce((sum, i) => sum + Number(i.importe), 0),
 )
 
-const puedeDescargarZip = computed(() => (props.batch.summary?.autorizadas ?? 0) > 0)
+// Se deriva de las facturas y NO de `summary`: el summary lo escribe el cierre del lote, así que
+// en un lote que se cayó a mitad es null — justo cuando más hace falta bajar lo ya emitido.
+const puedeDescargarZip = computed(() => props.batch.invoices.some((i) => i.estado === 'authorized'))
 
 const estadoStyle = (estado: string): string => {
   switch (estado) {

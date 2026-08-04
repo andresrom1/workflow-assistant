@@ -17,22 +17,41 @@
         </a>
       </div>
 
-      <!-- Lote en proceso: progreso en vivo -->
+      <!-- Lote abierto: progreso en vivo, o acciones de recuperación si quedó detenido -->
       <div v-if="batchEnProceso"
         class="rounded-[14px] p-4 mb-6"
         style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
-        <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
           <div>
             <p class="text-sm font-semibold" style="color: var(--text-1);">
-              Lote {{ batchEnProceso.codigo }} — emitiendo…
+              Lote {{ batchEnProceso.codigo }} — {{ loteActivo ? 'emitiendo…' : 'detenido' }}
             </p>
             <p class="text-[11px]" style="color: var(--text-3);">{{ batchEnProceso.concepto }}</p>
           </div>
-          <span class="inline-flex items-center gap-2 text-xs" style="color: var(--text-3);">
+
+          <span v-if="loteActivo" class="inline-flex items-center gap-2 text-xs" style="color: var(--text-3);">
             <span class="w-2 h-2 rounded-full animate-pulse" style="background: var(--accent-600);"></span>
             Procesando contra AFIP
           </span>
+
+          <!-- Sin esto un lote caído no tiene salida: ni se descarga lo emitido ni se libera el
+               formulario de lotes nuevos. -->
+          <div v-else class="flex items-center gap-2">
+            <a v-if="hayAutorizadas" :href="`/admin/facturacion/batches/${batchEnProceso.id}/download`"
+              class="btn text-xs py-1.5 px-3" style="background: var(--bg-subtle); color: var(--text-2);">
+              Descargar emitidas (ZIP)
+            </a>
+            <button type="button" class="btn text-xs py-1.5 px-3" :disabled="reanudando"
+              style="background: var(--accent-600); color: #fff;" @click="reanudar">
+              {{ hayPendientes ? 'Reanudar emisión' : 'Cerrar lote' }}
+            </button>
+          </div>
         </div>
+
+        <p v-if="!loteActivo" class="text-[11px] mb-3" style="color: var(--text-3);">
+          La emisión se interrumpió. Reanudar retoma solo los comprobantes pendientes — los ya
+          autorizados no se vuelven a emitir.
+        </p>
 
         <div class="overflow-x-auto">
           <table class="w-full text-xs" style="color: var(--text-2);">
@@ -42,6 +61,7 @@
                 <th class="py-1.5 pr-3 font-semibold right">Importe</th>
                 <th class="py-1.5 pr-3 font-semibold">N° comp.</th>
                 <th class="py-1.5 pr-3 font-semibold">Estado</th>
+                <th class="py-1.5 pr-3 font-semibold"></th>
                 <th class="py-1.5 font-semibold">Observaciones</th>
               </tr>
             </thead>
@@ -54,6 +74,10 @@
                   <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold" :style="estadoStyle(i.estado)">
                     {{ i.estado_label }}
                   </span>
+                </td>
+                <td class="py-1.5 pr-3">
+                  <a v-if="i.estado === 'authorized'" :href="`/admin/facturacion/invoices/${i.id}/pdf`"
+                    class="text-xs underline" style="color: var(--accent-600);">PDF</a>
                 </td>
                 <td class="py-1.5" style="color: var(--badge-danger-txt);">{{ i.observaciones || '' }}</td>
               </tr>
@@ -198,7 +222,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { Link, useForm, usePoll } from '@inertiajs/vue3'
+import { Link, router, useForm, usePoll } from '@inertiajs/vue3'
 
 interface Company { id: number; razon_social: string; cuit: string; condicion_iva: string }
 interface BatchInvoice {
@@ -210,7 +234,7 @@ interface BatchEnProceso {
   id: number; codigo: string; concepto: string; estado: string
   finished_at: string | null; summary: Record<string, number> | null; invoices: BatchInvoice[]
 }
-interface Summary { autorizadas: number; rechazadas: number; total: number }
+interface Summary { autorizadas: number; rechazadas: number; pendientes?: number; total: number }
 interface Reciente { id: number; codigo: string; concepto: string; summary: Summary | null; finished_at: string | null }
 
 const props = defineProps<{
@@ -288,13 +312,32 @@ const emitir = (): void => {
   })
 }
 
-// ─── Polling mientras haya un lote en proceso ──────────────────────────────────
-const { start, stop } = usePoll(3000, { only: ['batchEnProceso', 'recientes'] }, { autoStart: false })
-watch(
-  () => !!props.batchEnProceso && !props.batchEnProceso.finished_at,
-  (activo) => { activo ? start() : stop() },
-  { immediate: true },
+// ─── Lote abierto: activo vs. detenido ─────────────────────────────────────────
+// Un lote que existe pero no está corriendo (`failed`, o `processing` que quedó huérfano por un
+// worker caído) necesita acciones de recuperación, no un spinner eterno.
+const loteActivo = computed(
+  () => !!props.batchEnProceso && props.batchEnProceso.estado === 'processing' && !props.batchEnProceso.finished_at,
 )
+const hayAutorizadas = computed(
+  () => (props.batchEnProceso?.invoices ?? []).some((i) => i.estado === 'authorized'),
+)
+const hayPendientes = computed(
+  () => (props.batchEnProceso?.invoices ?? []).some((i) => i.estado === 'pending'),
+)
+
+const reanudando = ref(false)
+const reanudar = (): void => {
+  if (!props.batchEnProceso || reanudando.value) return
+  reanudando.value = true
+  router.post(`/admin/facturacion/batches/${props.batchEnProceso.id}/resume`, {}, {
+    preserveScroll: true,
+    onFinish: () => { reanudando.value = false },
+  })
+}
+
+// ─── Polling mientras el lote esté efectivamente emitiendo ─────────────────────
+const { start, stop } = usePoll(3000, { only: ['batchEnProceso', 'recientes'] }, { autoStart: false })
+watch(loteActivo, (activo) => { activo ? start() : stop() }, { immediate: true })
 
 const estadoStyle = (estado: string): string => {
   switch (estado) {

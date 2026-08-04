@@ -5,7 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\InvoiceEstado;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreInvoiceBatchRequest;
-use App\Jobs\EmitInvoiceBatch;
+use App\Jobs\CloseInvoiceBatch;
+use App\Jobs\EmitInvoice;
 use App\Models\BillingCompany;
 use App\Models\Invoice;
 use App\Models\InvoiceBatch;
@@ -13,6 +14,7 @@ use App\Services\Facturacion\Emisor;
 use App\Services\InvoicePdfService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -22,9 +24,12 @@ use ZipArchive;
 /**
  * Facturación de comisiones (Facturas C contra AFIP). Solo admin. El usuario arma un lote con
  * los datos comunes + las compañías tildadas y sus importes; se crean las {@see Invoice} en
- * `Pending` y un job las emite una por una ({@see EmitInvoiceBatch}). El front hace polling
- * hasta que el lote cierra. Los PDF NO se persisten: se generan al vuelo con
- * {@see InvoicePdfService} (descarga individual o ZIP del lote).
+ * `Pending` y una cadena de {@see EmitInvoice} las emite de a una, cerrando con
+ * {@see CloseInvoiceBatch}. El front hace polling hasta que el lote cierra. Los PDF NO se
+ * persisten: se generan al vuelo con {@see InvoicePdfService} (descarga individual o ZIP).
+ *
+ * Un lote que no llegó a cerrar se puede reanudar ({@see self::resume()}); la cadena solo toma los
+ * comprobantes que siguen `Pending`, así que reanudar nunca re-emite lo ya autorizado.
  */
 class InvoiceBatchController extends Controller
 {
@@ -34,8 +39,11 @@ class InvoiceBatchController extends Controller
 
     public function index(): Response
     {
+        // Cualquier lote que no haya cerrado —`processing` o `failed`— sigue a la vista con sus
+        // acciones. Si se filtrara solo por `processing`, un lote fallido se volvería invisible y
+        // el módulo quedaría bloqueado sin nada en pantalla para destrabarlo.
         $enProceso = InvoiceBatch::query()
-            ->where('estado', 'processing')
+            ->where('estado', '!=', 'completed')
             ->latest('id')
             ->first();
 
@@ -114,9 +122,63 @@ class InvoiceBatchController extends Controller
             return $batch;
         });
 
-        EmitInvoiceBatch::dispatch($batch->id, $ptoVta);
+        $this->despacharCadena($batch);
 
         return back()->with('flash', ['success' => 'Lote en emisión. Se irá actualizando a medida que AFIP responde.']);
+    }
+
+    /**
+     * Reanuda un lote que no llegó a cerrar (crash, worker caído, AFIP inaccesible). Vuelve a
+     * despachar la cadena solo con lo que sigue `Pending`.
+     *
+     * Sin comprobantes pendientes NO es un error: la cadena queda reducida al cierre y el lote
+     * pasa a terminal. Es a propósito — un lote fallido sin nada por emitir, si no se pudiera
+     * cerrar, bloquearía el formulario de lotes nuevos para siempre.
+     */
+    public function resume(InvoiceBatch $invoiceBatch): RedirectResponse
+    {
+        $pendientes = $invoiceBatch->invoices()->where('estado', InvoiceEstado::Pending)->count();
+
+        $invoiceBatch->update([
+            'estado' => 'processing',
+            'finished_at' => null,
+            'summary' => null,
+        ]);
+
+        $this->despacharCadena($invoiceBatch);
+
+        return back()->with('flash', ['success' => $pendientes === 0
+            ? 'El lote no tenía comprobantes pendientes: se cerró.'
+            : "Reanudando la emisión de {$pendientes} comprobante(s).",
+        ]);
+    }
+
+    /**
+     * Encadena un job por comprobante pendiente + el cierre del lote.
+     *
+     * Es una cadena y no un batch de Bus a propósito: `Bus::batch` corre en paralelo y la
+     * numeración correlativa de AFIP no lo tolera. El `catch()` es lo que garantiza que el lote
+     * llegue a un estado terminal aunque un comprobante agote sus reintentos — si no, queda
+     * `processing` para siempre y bloquea el módulo.
+     */
+    private function despacharCadena(InvoiceBatch $batch): void
+    {
+        $ptoVta = $batch->punto_venta;
+
+        $jobs = $batch->invoices()
+            ->where('estado', InvoiceEstado::Pending)
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(fn (int $invoiceId): EmitInvoice => new EmitInvoice($invoiceId, $ptoVta))
+            ->all();
+
+        $batchId = $batch->id;
+
+        Bus::chain([...$jobs, new CloseInvoiceBatch($batchId)])
+            ->catch(function () use ($batchId): void {
+                CloseInvoiceBatch::dispatch($batchId, 'failed');
+            })
+            ->dispatch();
     }
 
     public function show(InvoiceBatch $invoiceBatch): Response

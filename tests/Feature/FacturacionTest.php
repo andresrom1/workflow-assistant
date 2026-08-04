@@ -1,7 +1,8 @@
 <?php
 
 use App\Enums\InvoiceEstado;
-use App\Jobs\EmitInvoiceBatch;
+use App\Jobs\CloseInvoiceBatch;
+use App\Jobs\EmitInvoice;
 use App\Models\BillingCompany;
 use App\Models\Invoice;
 use App\Models\InvoiceBatch;
@@ -73,7 +74,12 @@ it('crea el lote + facturas pending, snapshotea el receptor y despacha el job', 
         ->and($inv->pto_vta)->toBe(2)
         ->and((float) $inv->importe)->toBe(1500.50);
 
-    Bus::assertDispatched(EmitInvoiceBatch::class, fn (EmitInvoiceBatch $job): bool => $job->batchId === $batch->id && $job->ptoVta === 2);
+    // Un job de emisión por comprobante, y el cierre del lote como último eslabón.
+    Bus::assertChained([
+        new EmitInvoice(Invoice::orderBy('id')->first()->id, 2),
+        new EmitInvoice(Invoice::orderBy('id')->skip(1)->first()->id, 2),
+        new CloseInvoiceBatch($batch->id),
+    ]);
 });
 
 it('rechaza un payload inválido', function (): void {
@@ -161,4 +167,53 @@ it('muestra el detalle de un lote con sus facturas', function (): void {
             ->component('Facturacion/BatchShow')
             ->where('batch.id', $batch->id)
             ->has('batch.invoices', 1));
+});
+
+it('reanudar un lote caído reencola solo los comprobantes pendientes', function (): void {
+    Bus::fake();
+    $admin = User::factory()->admin()->create();
+    $batch = InvoiceBatch::factory()->create([
+        'punto_venta' => 2, 'estado' => 'failed', 'finished_at' => now(),
+    ]);
+    Invoice::factory()->authorized()->for($batch, 'batch')->create(['pto_vta' => 2, 'numero_comprobante' => 5]);
+    $pendiente = Invoice::factory()->for($batch, 'batch')->create(['pto_vta' => 2, 'estado' => InvoiceEstado::Pending]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.facturacion.resume', $batch))
+        ->assertRedirect();
+
+    $batch->refresh();
+    expect($batch->estado)->toBe('processing')
+        ->and($batch->finished_at)->toBeNull();
+
+    // La autorizada NO se re-emite: solo entra a la cadena la que seguía pendiente.
+    Bus::assertChained([
+        new EmitInvoice($pendiente->id, 2),
+        new CloseInvoiceBatch($batch->id),
+    ]);
+});
+
+it('un lote fallido sigue visible en el index para poder destrabarlo', function (): void {
+    $admin = User::factory()->admin()->create();
+    $batch = InvoiceBatch::factory()->create(['estado' => 'failed', 'finished_at' => now()]);
+    Invoice::factory()->authorized()->for($batch, 'batch')->create();
+
+    $this->actingAs($admin)
+        ->get(route('admin.facturacion.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('batchEnProceso.id', $batch->id));
+});
+
+it('reanudar un lote sin pendientes lo cierra en vez de dejarlo trabado', function (): void {
+    $admin = User::factory()->admin()->create();
+    $batch = InvoiceBatch::factory()->create(['punto_venta' => 2, 'estado' => 'failed', 'finished_at' => now()]);
+    Invoice::factory()->authorized()->for($batch, 'batch')->create(['pto_vta' => 2, 'numero_comprobante' => 5]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.facturacion.resume', $batch))
+        ->assertRedirect();
+
+    // La cadena queda reducida al cierre y corre sync en tests → el lote termina en terminal.
+    expect($batch->fresh()->estado)->toBe('completed')
+        ->and($batch->fresh()->finished_at)->not->toBeNull();
 });
