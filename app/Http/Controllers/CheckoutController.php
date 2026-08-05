@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -43,6 +44,7 @@ class CheckoutController extends Controller
         );
 
         $alternative = $quote->alternatives()
+            ->with('providerRef')
             ->where('id', $quote->checkout_alternative_id)
             ->firstOrFail();
 
@@ -76,6 +78,9 @@ class CheckoutController extends Controller
             ],
             // Catálogo de condiciones fiscales para el select del titular (D1).
             'taxConditions' => $catalog->taxConditions(),
+            // Marcas de tarjeta que acepta LA COMPAÑÍA de esta alternativa. La lista
+            // difiere por compañía y `submit()` valida contra esta misma.
+            'cardBrands' => $catalog->creditCards($alternative->providerRef?->company_id),
             // Token que el frontend incluye como campo oculto en el POST
             'checkoutToken' => $token,
             // URLs para el frontend
@@ -168,7 +173,7 @@ class CheckoutController extends Controller
      * Procesa el envío del formulario de checkout.
      * Recibe los datos del formulario + photo_ids (public_ids de Cloudinary ya subidos).
      */
-    public function submit(Request $request, CustomerConsolidationService $consolidation, CustomerMergeService $merge): JsonResponse
+    public function submit(Request $request, CustomerConsolidationService $consolidation, CustomerMergeService $merge, VisredCatalogService $catalog): JsonResponse
     {
         $token = $request->input('checkout_token');
 
@@ -183,8 +188,17 @@ class CheckoutController extends Controller
         );
 
         $alternative = $quote->alternatives()
+            ->with('providerRef')
             ->where('id', $quote->checkout_alternative_id)
             ->firstOrFail();
+
+        // La marca de tarjeta es una FK del catálogo de LA COMPAÑÍA, no un enum nuestro:
+        // se valida contra la misma lista que `show()` le mostró al cliente. Si el
+        // catálogo no está disponible (ni el de la compañía ni el global) se valida solo
+        // el formato — un hipo del endpoint no puede cortar una venta, y eso es lo que
+        // pasaba siempre, menos la whitelist inventada que ofrecía `maestro` (inexistente
+        // en Visred). Ver ROADMAP, bitácora 2026-08-05.
+        $brands = array_column($catalog->creditCards($alternative->providerRef?->company_id), 'ref');
 
         $validated = $request->validate([
             // Datos personales del titular (holder). Split de nombre/teléfono que la
@@ -212,7 +226,9 @@ class CheckoutController extends Controller
             'vehiculo_nro_motor' => 'required|string|max:50',
             'has_gnc' => 'boolean',
             // Tarjeta de crédito
-            'cc_brand' => 'required|string|in:visa,mastercard,amex,naranja,cabal,maestro',
+            'cc_brand' => $brands === []
+                ? ['required', 'string', 'max:50']
+                : ['required', 'string', Rule::in($brands)],
             'cc_pan' => ['required', 'string', 'regex:/^\d{16}$/'],
             'cc_expiry' => ['required', 'string', 'regex:/^\d{2}\/\d{2}$/'],
             'cc_holder_name' => 'required|string|max:255',

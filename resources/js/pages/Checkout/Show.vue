@@ -211,15 +211,13 @@
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="visa">Visa</SelectItem>
-                  <SelectItem value="mastercard">Mastercard</SelectItem>
-                  <SelectItem value="amex">American Express</SelectItem>
-                  <SelectItem value="naranja">Naranja</SelectItem>
-                  <SelectItem value="cabal">Cabal</SelectItem>
-                  <SelectItem value="maestro">Maestro</SelectItem>
+                  <SelectItem v-for="cb in cardBrands" :key="cb.ref" :value="cb.ref">{{ cb.label }}</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
+            <p v-if="!cardBrands.length" class="text-xs mt-1" style="color: var(--mg-warn)">
+              No se pudieron cargar las marcas de tarjeta. Reintentá más tarde.
+            </p>
           </Field>
 
           <Field label="Número de tarjeta *" :error="errors.cc_pan">
@@ -500,6 +498,8 @@ const props = defineProps<{
     version: string; year: number; combustible: string
   }
   taxConditions: { ref: string; label: string }[]
+  /** Marcas que acepta la compañía de esta alternativa (catálogo de Visred). */
+  cardBrands: { ref: string; label: string }[]
   checkoutToken: string
   submitUrl: string
   uploadPhotoUrl: string

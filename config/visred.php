@@ -147,6 +147,30 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Catálogo de marcas de tarjeta (`credit_card_brand_id`)
+    |--------------------------------------------------------------------------
+    |
+    | El `credit_card_brand_id` de la emisión es una FK del catálogo de Visred, y
+    | el catálogo es POR COMPAÑÍA. Se filtra con `?company_id=<id>` — ése es el
+    | camino normal: el checkout ofrece solo las marcas de la compañía que el
+    | cliente eligió. Sin filtro devuelve el catálogo global (33 marcas), que se
+    | usa únicamente como red si el de la compañía no está disponible.
+    |
+    | Ruta y shape VERIFICADOS live (sandbox, 2026-08-05): `{id, description}`.
+    | Los catálogos difieren de verdad (experta 7, triunfo 9, galicia 13) y hay
+    | descripciones repetidas con ids distintos (`amex` y `american-express`
+    | conviven en varias compañías) — NO se deduplican: son PKs distintos y no
+    | está verificado cuál acepta cada compañía.
+    |
+    | ⚠️ `maestro` NO existe en ningún catálogo, ni en el global. Estuvo ofrecido
+    | en el checkout desde una lista hardcodeada nuestra hasta esta verificación.
+    |
+    */
+    'credit_cards_path' => env('VISRED_CREDIT_CARDS_PATH', '/v1/params/credit-card/'),
+    'credit_cards_ttl' => (int) env('VISRED_CREDIT_CARDS_TTL', 86400),
+
+    /*
+    |--------------------------------------------------------------------------
     | Tope de descuento del productor, POR COMPAÑÍA (D8)
     |--------------------------------------------------------------------------
     |

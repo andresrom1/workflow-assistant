@@ -75,6 +75,7 @@ grep -rn "opcion-de-configuracion" workflow-assistant/
 | Timeout HTTP Visred | `config/visred.php` (`timeout` 30s) | env `VISRED_TIMEOUT` | **B** |
 | Reintentos de descarga de documentos | `config/visred.php` (`document_retry_delay`/`_backoff`, 60s/60s) + `CapturePendingPolicyDocuments::$tries = 10` | env `VISRED_DOCUMENT_RETRY_*`; tries hardcodeado | **B** — ventana acotada a propósito (el `presale_id` caduca) |
 | TTL caché catálogo condiciones fiscales | `config/visred.php` (`tax_conditions_ttl` 86400) | env | **B** |
+| TTL caché catálogo marcas de tarjeta | `config/visred.php` (`credit_cards_ttl` 86400); una entrada por compañía + la del global | env | **B** |
 | TTLs de tokens Visred (3300/72000s) y retry transitorio (3 × 200ms) | `VisredClient:39-45` | hardcodeados | **C** — derivados del proveedor |
 | Mapa de fotos de inspección (10 keys) | `config/visred.php` (`inspection_photo_map`) | verificado contra sandbox (2026-06-07) | **C** — catálogo del proveedor |
 | Mapa `task_type → kind` de documentos | `config/visred.php` (`document_task_types`) | verificado live (Triunfo, 2026-06-19) | **C** |
