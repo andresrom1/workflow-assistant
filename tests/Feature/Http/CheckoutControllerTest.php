@@ -10,6 +10,8 @@ use App\Models\Quote;
 use App\Models\RiskSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -85,10 +87,39 @@ function checkoutPayload(Quote $quote, array $paths, array $overrides = []): arr
     ], $overrides);
 }
 
+/**
+ * Le cuelga a la alternativa elegida la referencia del proveedor, que es de donde
+ * sale la compañía con la que se pide el catálogo de marcas de tarjeta.
+ */
+function withProviderCompany(Quote $quote, string $companyId): void
+{
+    $quote->alternatives()->firstOrFail()->providerRef()->create([
+        'external_quote_id' => '16543585',
+        'company_id' => $companyId,
+    ]);
+}
+
 beforeEach(function () {
     Storage::fake('r2');
     Bus::fake();
     Mail::fake();
+
+    // El checkout consulta catálogos de Visred (condiciones fiscales, marcas de
+    // tarjeta). Sin fake, cada test de submit le pegaría a la red de verdad.
+    //
+    // El fake se resuelve en cada request contra `$this->cards*` en vez de con un
+    // `Http::fake([url => ...])` por test: los stubs se ACUMULAN y el primero que
+    // matchea gana, así que un catch-all acá dejaría muertos a los de los tests.
+    // Default vacío = sin catálogo, que es como `cc_brand` valida solo el formato.
+    $this->cardsBody = [];
+    $this->cardsStatus = 200;
+
+    Http::fake(fn ($request) => str_contains($request->url(), '/params/credit-card/')
+        ? Http::response($this->cardsBody, $this->cardsStatus)
+        : Http::response([]));
+
+    config()->set('visred.base_url', 'https://visred.test');
+    Cache::put('visred:access_token', 'TESTTOKEN', 3300);
 });
 
 it('persiste los campos del titular partidos + GNC y compone nombre/telefono', function () {
@@ -194,5 +225,84 @@ it('acepta cualquier DNI cuando la cotización no tenía uno capturado (sin nada
     [$quote, $paths] = checkoutReadyQuote(); // snapshotDni null por default
 
     $this->postJson(route('checkout.submit'), checkoutPayload($quote, $paths, ['dni' => '99999999']))
+        ->assertOk();
+});
+
+// ─── Marca de tarjeta: sale del catálogo de la compañía, no de una lista nuestra ───
+//
+// `cc_brand` viaja verbatim a `payment.credit_card_brand_id`, que del lado de Visred
+// es una FK de catálogo POR COMPAÑÍA. Hasta 2026-08-05 se validaba contra una lista
+// hardcodeada que incluía `maestro`, que no existe en ningún catálogo de Visred.
+
+it('show() ofrece las marcas de la compañía de la alternativa elegida', function () {
+    [$quote] = checkoutReadyQuote();
+    withProviderCompany($quote, 'triunfo');
+
+    $this->cardsBody = [
+        ['id' => 'kadicard', 'description' => 'Kadicard'],
+        ['id' => 'cmr', 'description' => 'C.M.R.'],
+    ];
+
+    $this->get(route('checkout.show', $quote->checkout_token))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Checkout/Show')
+            ->where('cardBrands', [
+                ['ref' => 'kadicard', 'label' => 'Kadicard'],
+                ['ref' => 'cmr', 'label' => 'C.M.R.'],
+            ])
+        );
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'company_id=triunfo'));
+});
+
+it('rechaza una marca que la compañía no acepta', function () {
+    [$quote, $paths] = checkoutReadyQuote();
+    withProviderCompany($quote, 'triunfo');
+
+    $this->cardsBody = [['id' => 'visa', 'description' => 'Visa']];
+
+    // `maestro` es el caso real: lo ofrecía nuestra lista y no existe en Visred.
+    $this->postJson(route('checkout.submit'), checkoutPayload($quote, $paths, ['cc_brand' => 'maestro']))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['cc_brand']);
+
+    expect(CheckoutSession::where('quote_id', $quote->id)->exists())->toBeFalse();
+});
+
+it('acepta una marca del catálogo que la lista vieja no tenía', function () {
+    [$quote, $paths] = checkoutReadyQuote();
+    withProviderCompany($quote, 'triunfo');
+
+    $this->cardsBody = [['id' => 'kadicard', 'description' => 'Kadicard']];
+
+    $this->postJson(route('checkout.submit'), checkoutPayload($quote, $paths, ['cc_brand' => 'kadicard']))
+        ->assertOk();
+
+    expect(CheckoutSession::where('quote_id', $quote->id)->first()->cc_brand)->toBe('kadicard');
+});
+
+it('valida contra el catálogo global cuando la alternativa no tiene compañía', function () {
+    [$quote, $paths] = checkoutReadyQuote(); // sin providerRef
+
+    $this->cardsBody = [['id' => 'visa', 'description' => 'Visa']];
+
+    $this->postJson(route('checkout.submit'), checkoutPayload($quote, $paths, ['cc_brand' => 'maestro']))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['cc_brand']);
+
+    // Sin compañía se pide el catálogo global: la ruta va sin filtro.
+    Http::assertSent(fn ($request) => ! str_contains($request->url(), 'company_id='));
+});
+
+it('no bloquea la venta si el catálogo no está disponible', function () {
+    [$quote, $paths] = checkoutReadyQuote();
+    withProviderCompany($quote, 'triunfo');
+
+    $this->cardsStatus = 500;
+
+    // Sin catálogo (ni de la compañía ni global) se valida solo el formato. Un hipo
+    // del endpoint de Visred no puede cortar un checkout.
+    $this->postJson(route('checkout.submit'), checkoutPayload($quote, $paths, ['cc_brand' => 'visa']))
         ->assertOk();
 });

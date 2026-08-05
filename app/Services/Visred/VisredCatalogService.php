@@ -43,6 +43,57 @@ class VisredCatalogService
     }
 
     /**
+     * Marcas de tarjeta (`credit_card_brand_id`) que acepta la compañía, como `{ref, label}`.
+     *
+     * El catálogo es POR COMPAÑÍA y difiere de verdad (experta 7, triunfo 9, galicia 13):
+     * el checkout ofrece las de la compañía que el cliente eligió. Si ese catálogo no está
+     * disponible cae al global — siguen siendo PKs válidos de Visred, y un select vacío
+     * bloquearía la venta por un hipo del endpoint.
+     *
+     * No se deduplican las descripciones repetidas (`amex` y `american-express` conviven
+     * en varias compañías): son PKs distintos y no está verificado cuál acepta cada una.
+     *
+     * @return list<array{ref: string, label: string}>
+     */
+    public function creditCards(?string $companyId): array
+    {
+        $cards = $companyId !== null && $companyId !== ''
+            ? $this->fetchCreditCards($companyId)
+            : [];
+
+        return $cards !== [] ? $cards : $this->fetchCreditCards(null);
+    }
+
+    /**
+     * Una entrada de caché por compañía, más la del global. `null` = sin filtro.
+     *
+     * @return list<array{ref: string, label: string}>
+     */
+    private function fetchCreditCards(?string $companyId): array
+    {
+        $ttl = (int) config('visred.credit_cards_ttl', 86400);
+        $key = 'visred:credit_cards:'.($companyId ?? '__global__');
+
+        return Cache::remember($key, $ttl, function () use ($companyId): array {
+            try {
+                $rows = $this->client->get(
+                    (string) config('visred.credit_cards_path'),
+                    $companyId !== null ? ['company_id' => $companyId] : [],
+                );
+
+                return $this->normalize($rows);
+            } catch (Throwable $e) {
+                Log::warning('[VisredCatalog] No se pudo traer credit-cards', [
+                    'company_id' => $companyId,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return [];
+            }
+        });
+    }
+
+    /**
      * Normaliza filas heterogéneas del proveedor a `{ref, label}`. Tolera distintos
      * nombres de campo (id/ref/code, name/label/description) porque el shape exacto
      * aún no está verificado live.
