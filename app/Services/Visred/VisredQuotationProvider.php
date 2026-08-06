@@ -481,8 +481,10 @@ class VisredQuotationProvider implements QuotationProvider
         //
         // Solo Triunfo tenía tope > 0 en `visred.max_discount_percent`, así que era la
         // única compañía afectada — y es justo aquella sobre la que hay confirmación.
-        // Si mañana se sube el tope de otra, verificar SU fee antes: que este supuesto
-        // valga para Triunfo no lo hace universal.
+        //
+        // El supuesto es DE TRIUNFO, no del proveedor: cada compañía tiene su esquema
+        // de bonificación y son independientes entre sí. Si mañana se le pone tope a
+        // otra, verificar SU fee antes de dar por hecho que también viene bonificado.
         $precio = round((float) ($coverResult['fee'] ?? 0), 2);
 
         // Las features alimentan tres campos (los tags, el detalle y el grade), así que se

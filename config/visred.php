@@ -181,9 +181,14 @@ return [
     |
     | El máximo descuento que el productor puede otorgar es POR COMPAÑÍA y Visred NO
     | lo expone (el catálogo `/params/discount/` incluso lista % por encima del tope:
-    | Triunfo cataloga hasta 30% pero emitir con >20% da 400). En sandbox solo Triunfo
-    | devuelve catálogo; el resto `[]` (sin descuentos → no se aplica nada).
+    | Triunfo cataloga hasta 30% pero emitir con >20% da 400).
     | `MaxDiscountPolicy` elige el mayor descuento ≤ tope de ESA compañía.
+    |
+    | El 20% es de Triunfo y de nadie más. Cada compañía tiene su propio esquema de
+    | bonificación, independiente del resto: puede tener o no tener. Que en sandbox
+    | (verificado 2026-08-05) solo Triunfo devuelva catálogo y las otras siete `[]`
+    | es un dato DEL SANDBOX, no una afirmación sobre lo que esas compañías ofrecen
+    | comercialmente. No derivar de acá una regla general ni copiarle el tope a otra.
     |
     | Mapa `company_id → %` + `default` (fallback). Default 0 = sin bonificar (siempre
     | válido). ⚠️ Los topes deberían CONFIRMARSE con Visred (no hay endpoint que los dé).
