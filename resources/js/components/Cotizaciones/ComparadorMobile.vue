@@ -15,6 +15,7 @@
       </p>
       <div class="flex items-center gap-2 mt-1.5">
         <span
+          v-if="vista.cobertura.label"
           class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
           :style="{ background: 'var(--mg-mango-tint)', color: 'var(--mg-mango)' }"
         >
@@ -133,7 +134,7 @@
         :style="{ background: 'var(--mg-surface-2)', borderStyle: 'dashed' }"
         @click="sheet = 'compare'"
       >
-        <span class="text-[13px] font-semibold">Qué cambia entre las dos</span>
+        <span class="text-[13px] font-semibold">{{ tituloComparacion }}</span>
         <span class="flex items-center gap-1.5 text-[12px]" style="color: var(--mg-mango)">
           Comparar
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -149,8 +150,9 @@
       <p class="text-[12px] mb-3" style="color: var(--mg-fg-dim)">
         {{ vista.totalOpciones }} {{ vista.totalOpciones === 1 ? 'plan' : 'planes' }} de
         {{ vista.companias.length }}
-        {{ vista.companias.length === 1 ? 'compañía' : 'compañías' }}, todos
-        {{ vista.cobertura.label.toLowerCase() }}.
+        {{ vista.companias.length === 1 ? 'compañía' : 'compañías' }}<template
+          v-if="vista.cobertura.label"
+        >, todos {{ vista.cobertura.label.toLowerCase() }}</template>.
       </p>
 
       <button
@@ -346,8 +348,9 @@
             <p class="mg-display text-[19px] leading-tight">{{ companiaActiva.nombre }}</p>
             <p class="text-[12px]" style="color: var(--mg-fg-dim)">
               {{ companiaActiva.planes.length }}
-              {{ companiaActiva.planes.length === 1 ? 'plan' : 'planes' }} de
-              {{ vista.cobertura.label.toLowerCase() }}
+              {{ companiaActiva.planes.length === 1 ? 'plan' : 'planes' }}<template
+                v-if="vista.cobertura.label"
+              > de {{ vista.cobertura.label.toLowerCase() }}</template>
             </p>
           </div>
         </div>
@@ -391,7 +394,139 @@
 
     <!-- ══════════════ SHEET: comparación de las dos ══════════════ -->
     <BottomSheet :open="sheet === 'compare'" @close="cerrar">
-      <div v-if="vista.comparacion && destacadas.length === 2" class="px-4 pb-5">
+      <!-- Escalón: niveles distintos y la cara contiene a la barata -->
+      <div v-if="escalon && planArriba && planAbajo" class="px-4 pb-5">
+        <p class="mg-display text-[19px] pt-1">Qué suma la más completa</p>
+        <p class="text-[12.5px] mt-1.5" style="color: var(--mg-fg-dim)">
+          Las dos que te recomendé son de niveles distintos. Esto es lo que las separa.
+        </p>
+
+        <!-- La más completa -->
+        <div
+          class="mt-4 p-3.5 rounded-xl"
+          :style="{ background: 'var(--mg-surface-2)', border: '1.5px solid var(--mg-mango)' }"
+        >
+          <div class="flex items-start gap-2.5">
+            <div class="min-w-0 flex-1">
+              <p class="text-[13px] font-semibold leading-tight">{{ planArriba.aseguradora }}</p>
+              <p class="text-[11.5px] leading-tight mt-0.5" style="color: var(--mg-fg-dim)">
+                {{ planArriba.titulo }}
+              </p>
+            </div>
+            <span
+              v-if="esPrincipal(planArriba.id)"
+              class="flex-shrink-0 text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+              :style="{ background: 'var(--mg-mango)', color: '#fff' }"
+            >Recomendada</span>
+          </div>
+          <p class="mg-display text-[22px] mt-2.5 leading-none">${{ formatPrecio(planArriba.precio) }}</p>
+          <p class="text-[10px] mt-1" style="color: var(--mg-fg-faint)">
+            por mes · suma {{ formatSuma(planArriba.sumaAsegurada) }}
+            <template v-if="planArriba.franquicia"> · franquicia {{ planArriba.franquicia }}</template>
+          </p>
+
+          <button
+            v-if="!vista.vigente"
+            type="button"
+            disabled
+            class="mt-3 w-full py-2.5 rounded-full text-[11.5px] font-semibold uppercase tracking-wider opacity-50"
+            :style="{ border: '1px solid var(--mg-hairline-strong)', color: 'var(--mg-fg)' }"
+          >Precio vencido</button>
+          <button
+            v-else
+            type="button"
+            :disabled="estadoContratacion === 'enviando'"
+            class="mt-3 w-full py-2.5 rounded-full text-[11.5px] font-semibold uppercase tracking-wider"
+            :style="{ background: 'var(--mg-mango)', color: '#fff' }"
+            @click="contratar(planArriba.id)"
+          >Quiero esta</button>
+        </div>
+
+        <!-- El escalón -->
+        <div class="mt-3.5 p-3.5 rounded-xl" :style="{ background: 'var(--mg-mango-tint)' }">
+          <p class="text-[12.5px] leading-relaxed font-semibold">{{ leyendaEscalon(escalon) }}</p>
+
+          <div
+            v-for="f in escalon.sumaCoberturas"
+            :key="f.label"
+            class="flex items-start gap-2.5 py-2"
+          >
+            <span
+              class="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-1.5"
+              :style="{ background: 'var(--mg-mango)' }"
+            />
+            <span>
+              <span class="block text-[13px] font-semibold leading-tight">{{ f.label }}</span>
+              <span v-if="f.nota" class="block text-[11.5px] leading-snug" style="color: var(--mg-fg-dim)">
+                {{ f.nota }}
+              </span>
+            </span>
+          </div>
+
+          <template v-if="escalon.sumaExtras.length">
+            <p class="mg-overline mt-3 mb-1">Además</p>
+            <div v-for="f in escalon.sumaExtras" :key="f.label" class="py-1.5">
+              <span class="block text-[13px] font-semibold leading-tight">{{ f.label }}</span>
+              <span v-if="f.nota" class="block text-[11.5px] leading-snug" style="color: var(--mg-fg-dim)">
+                {{ f.nota }}
+              </span>
+            </div>
+          </template>
+        </div>
+
+        <!-- La más económica -->
+        <div
+          class="mt-3.5 p-3.5 rounded-xl"
+          :style="{ background: 'var(--mg-surface-2)', border: '1px solid var(--mg-hairline)' }"
+        >
+          <div class="flex items-start gap-2.5">
+            <div class="min-w-0 flex-1">
+              <p class="text-[13px] font-semibold leading-tight">{{ planAbajo.aseguradora }}</p>
+              <p class="text-[11.5px] leading-tight mt-0.5" style="color: var(--mg-fg-dim)">
+                {{ planAbajo.titulo }}
+              </p>
+            </div>
+            <span
+              v-if="esPrincipal(planAbajo.id)"
+              class="flex-shrink-0 text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+              :style="{ background: 'var(--mg-mango)', color: '#fff' }"
+            >Recomendada</span>
+          </div>
+          <p class="mg-display text-[22px] mt-2.5 leading-none">${{ formatPrecio(planAbajo.precio) }}</p>
+          <p class="text-[10px] mt-1" style="color: var(--mg-fg-faint)">
+            por mes · suma {{ formatSuma(planAbajo.sumaAsegurada) }}
+            <template v-if="planAbajo.franquicia"> · franquicia {{ planAbajo.franquicia }}</template>
+          </p>
+
+          <p class="mg-overline mt-3.5 mb-1">
+            Cubre {{ pluralizar(coberturasComunes.length, 'cobertura', 'coberturas') }}
+          </p>
+          <p class="text-[11.5px] leading-relaxed" style="color: var(--mg-fg-dim)">
+            {{ coberturasComunes.map((f) => f.label).join(' · ') }}
+          </p>
+          <p class="text-[11px] mt-1.5" style="color: var(--mg-fg-faint)">
+            Todas incluidas también en la de arriba.
+          </p>
+
+          <button
+            v-if="!vista.vigente"
+            type="button"
+            disabled
+            class="mt-3 w-full py-2.5 rounded-full text-[11.5px] font-semibold uppercase tracking-wider opacity-50"
+            :style="{ border: '1px solid var(--mg-hairline-strong)', color: 'var(--mg-fg)' }"
+          >Precio vencido</button>
+          <button
+            v-else
+            type="button"
+            :disabled="estadoContratacion === 'enviando'"
+            class="mt-3 w-full py-2.5 rounded-full text-[11.5px] font-semibold uppercase tracking-wider"
+            :style="{ border: '1px solid var(--mg-hairline-strong)', color: 'var(--mg-fg)' }"
+            @click="contratar(planAbajo.id)"
+          >Quiero esta</button>
+        </div>
+      </div>
+
+      <div v-else-if="vista.comparacion && destacadas.length === 2" class="px-4 pb-5">
         <p class="mg-display text-[19px] pt-1">Qué cambia entre las dos</p>
 
         <div class="grid grid-cols-2 gap-2.5 mt-4">
@@ -424,13 +559,26 @@
           </div>
         </div>
 
+        <!--
+          Solo con el mismo grado esto es un ahorro: mismo nivel por menos plata. Entre grados
+          distintos la diferencia compra menos cobertura — el caso con contención lo toma el escalón.
+        -->
         <p
+          v-if="!vista.comparacion.cruzada"
           class="mt-3 p-3 rounded-xl text-[12.5px] leading-relaxed"
           :style="{ background: 'var(--mg-ok-tint)', color: 'var(--mg-fg)' }"
         >
           <strong>{{ masBarata(destacadas[0].plan, destacadas[1].plan).aseguradora }} sale
             ${{ formatPrecio(vista.comparacion.diferenciaPrecio) }} menos por mes.</strong>
           Vas a ahorrar aproximadamente ${{ formatPrecio(vista.comparacion.ahorroAnual) }} al año.
+        </p>
+        <p
+          v-else
+          class="mt-3 p-3 rounded-xl text-[12.5px] leading-relaxed"
+          :style="{ background: 'var(--mg-surface-2)', color: 'var(--mg-fg)' }"
+        >
+          <strong>Diferencia: ${{ formatPrecio(vista.comparacion.diferenciaPrecio) }} por mes.</strong>
+          Son dos niveles de cobertura distintos, así que cada una cubre cosas que la otra no.
         </p>
 
         <div class="mt-5">
@@ -521,6 +669,7 @@ import {
   companiaDe,
   formatPrecio,
   formatSuma,
+  leyendaEscalon,
   masBarata,
   planPorId,
   pluralizar,
@@ -558,6 +707,28 @@ const destacadas = computed(() => {
     { plan: planPorId(props.vista.companias, r.segunda.planId), razon: r.segunda.razon },
   ].filter((d): d is { plan: Plan; razon: string | null } => d.plan !== null)
 })
+
+/**
+ * El par como escalón: null salvo que sean de grados distintos y la cara contenga a la barata.
+ * Cuando existe, el sheet deja de ser dos columnas simétricas.
+ */
+const escalon = computed(() => props.vista.comparacion?.escalon ?? null)
+
+const planArriba = computed(() =>
+  escalon.value === null ? null : planPorId(props.vista.companias, escalon.value.arribaPlanId),
+)
+const planAbajo = computed(() =>
+  escalon.value === null ? null : planPorId(props.vista.companias, escalon.value.abajoPlanId),
+)
+
+/** Con contención, las comunes son exactamente todo lo que cubre la barata. */
+const coberturasComunes = computed(() =>
+  (props.vista.comparacion?.comunes ?? []).filter((f) => f.esCobertura),
+)
+
+const tituloComparacion = computed(() =>
+  escalon.value === null ? 'Qué cambia entre las dos' : 'Qué suma la más completa',
+)
 
 const planActivo = computed(() =>
   planActivoId.value === null ? null : planPorId(props.vista.companias, planActivoId.value),
@@ -613,6 +784,14 @@ function preguntaSobre(plan: Plan): string {
 
 function esRecomendada(id: number): boolean {
   return destacadas.value.some((d) => d.plan.id === id)
+}
+
+/**
+ * La que el agente eligió, no simplemente una de las dos presentadas. En el escalón las dos
+ * tarjetas son presentadas, así que `esRecomendada()` marcaría las dos.
+ */
+function esPrincipal(id: number): boolean {
+  return props.vista.recomendadas?.principal.planId === id
 }
 
 function abrirPlan(id: number, desdeCompania?: string): void {

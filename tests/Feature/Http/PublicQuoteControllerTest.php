@@ -7,6 +7,7 @@ use App\Models\QuoteAlternative;
 use App\Models\RiskSnapshot;
 use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Queue;
 
 uses(RefreshDatabase::class);
@@ -69,6 +70,85 @@ it('404 con un token que no existe', function (): void {
     cotizacionPublica();
 
     $this->get('/cotizaciones/qqqqqqqqqqqqqqqq')->assertNotFound();
+});
+
+/**
+ * El par cross-grade de producción: el agente presenta "una de cada nivel" y la vista tiene que
+ * mostrar las dos, sin afirmar un grado único.
+ */
+function cotizacionCrossGrade(): Quote
+{
+    $quote = cotizacionPublica();
+
+    $barata = QuoteAlternative::factory()->create([
+        'quote_id' => $quote->id,
+        'aseguradora' => 'Galicia',
+        'titulo' => 'C80',
+        'precio' => 73106.22,
+        'normalized_grade' => 'basic',
+        'features_tags' => ['Responsabilidad Civil', 'Robo Total'],
+        'full_details' => [
+            'Responsabilidad Civil' => 'Daños a terceros.',
+            'Robo Total' => 'Desaparición del vehículo.',
+        ],
+    ]);
+
+    $cara = $quote->alternatives->firstWhere('normalized_grade', 'all_risk');
+
+    $quote->update([
+        'recommended_alternative_id' => $cara->id,
+        'presented_alternative_ids' => [$cara->id, $barata->id],
+        'presentation_reasons' => [
+            (string) $cara->id => 'Por más al mes cubrís los daños a tu propio auto.',
+            (string) $barata->id => 'Es la más económica.',
+        ],
+    ]);
+
+    return $quote->fresh();
+}
+
+it('con dos grados presentados muestra los dos y no afirma una cobertura única', function (): void {
+    cotizacionCrossGrade();
+
+    $this->get('/cotizaciones/abcdefghijklmnop')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('cobertura.label', null)
+            ->where('cobertura.grade', null)
+            ->where('totalOpciones', 3)
+            ->has('comparacion.escalon')
+            ->where('comparacion.cruzada', true));
+});
+
+it('la vista anterior en /B muestra un solo grado y sin comparación', function (): void {
+    cotizacionCrossGrade();
+
+    $this->get('/cotizaciones/abcdefghijklmnop/B')
+        ->assertOk()
+        ->assertHeader('X-Robots-Tag', 'noindex, nofollow, noarchive')
+        ->assertInertia(fn ($page) => $page
+            ->component('Cotizaciones/Comparador')
+            ->where('cobertura.label', 'Todo Riesgo')
+            ->where('totalOpciones', 2)
+            ->where('recomendadas', null)
+            ->where('comparacion', null));
+});
+
+it('con un solo grado la vista anterior es igual a la canónica', function (): void {
+    cotizacionPublica();
+
+    // Solo las props de la cotización: `errors` y `auth` los comparte el middleware de Inertia y
+    // traen objetos distintos en cada request.
+    $propsDeLaVista = function (string $url): array {
+        $props = $this->get($url)->assertOk()->viewData('page')['props'];
+
+        return Arr::only($props, [
+            'cobertura', 'totalOpciones', 'companias', 'recomendadas', 'comparacion', 'glosario',
+        ]);
+    };
+
+    expect($propsDeLaVista('/cotizaciones/abcdefghijklmnop/B'))
+        ->toBe($propsDeLaVista('/cotizaciones/abcdefghijklmnop'));
 });
 
 it('404 cuando el token no tiene el formato esperado', function (): void {

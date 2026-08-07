@@ -63,6 +63,12 @@ Todo lo que quedaba en este doc está cerrado o convertido en issue:
 mismo que el texto que el agente escribe en el chat, y nada las sincroniza. Ya no quedan viejas al
 recotizar (`saveResults` las invalida), pero siguen siendo dos escrituras del mismo contenido.
 
+**`/cotizaciones/{token}/B` es temporal.** Sirve la vista anterior (un solo grado) para poder mostrar
+las dos lado a lado. En una cotización de mismo grado renderiza igual que la canónica: solo se
+diferencian en las cross-grade. Para sacarla: borrar la ruta `cotizaciones.show.legacy`, el método
+`PublicQuoteController::showLegacy()`, el parámetro de `render()` y el `$soloGradoRecomendado` de
+`QuoteComparisonService::buildPublicView()`.
+
 ---
 
 ## Decisiones ya tomadas — no re-litigar
@@ -75,6 +81,22 @@ recotizar (`saveResults` las invalida), pero siguen siendo dos escrituras del mi
 - **El diff es diferencia de conjuntos, sin diccionario ni LLM.** Se evaluó un catálogo canónico de
   coberturas con tabla de mapeo y se descartó: el proveedor ya normaliza. El canario del vocabulario
   es lo que sostiene ese supuesto.
+- **La vista muestra los grados de las DOS presentadas, no uno solo.** El closer tiene una rama que
+  presenta "una de cada nivel" y antes esa segunda opción desaparecía de la página entera. Cuando los
+  grados difieren y la cara contiene a la barata, la comparación se arma como **escalón** en vez de
+  dos columnas simétricas: una sola lista de lo que suma la cara. Sin contención hay un tradeoff real
+  en dos direcciones y vuelve el panel simétrico.
+- **El grado nunca se imprime.** `normalized_grade` es el `default` de un `match` por substring en el
+  adapter, así que `basic` es el cajón de lo que no matcheó: en una sola cotización de producción
+  juntó B reales, siete productos C (`C80`, `C Mega`, `C1`, `C2`, `C8`, `Auto Plus +`, `M PLUS`…) y
+  una A que cayó ahí por un typo del proveedor (`Responsablidad`). El agente, que lee las coberturas
+  reales, llama "Terceros Completos" a la misma C80 que el campo marca `basic`. Sirve para agrupar y
+  ordenar; no para mostrarle una etiqueta al cliente. `cobertura.label` viaja `null` con dos grados.
+- **El bloque de ahorro solo va con el mismo grado.** Ahí "vas a ahorrar $X al año" es cierto: mismo
+  nivel por menos plata. Entre grados distintos la diferencia compra menos cobertura, y llamarla
+  ahorro empuja la decisión por la razón equivocada.
+- **La leyenda del escalón habla desde el precio bajo**, que es la lectura a corregir. No abre con
+  "por $X más" porque eso ya lo dice el agente en `alternative_reason`, a pocos centímetros.
 - **La vista no muestra patente, DNI, nombre ni teléfono.** Los campos se enumeran a mano en el
   controller y hay un test que busca los tres valores en el HTML crudo.
 - **Una cotización vencida renderiza igual**, con `vigente: false`. No es 404: el cliente que abre
