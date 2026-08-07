@@ -142,6 +142,13 @@ Route::get('/cotizaciones/{token}', [PublicQuoteController::class, 'show'])
     ->where('token', '[A-Za-z0-9]{16}')
     ->name('cotizaciones.show');
 
+// TEMPORAL — la vista anterior (un solo grado), para poder mostrar las dos lado a lado. Ver el
+// docblock de PublicQuoteController para qué borrar cuando se saque.
+Route::get('/cotizaciones/{token}/B', [PublicQuoteController::class, 'showLegacy'])
+    ->middleware('noindex')
+    ->where('token', '[A-Za-z0-9]{16}')
+    ->name('cotizaciones.show.legacy');
+
 // El CTA "La quiero": abre el checkout de la alternativa elegida. Sin CSRF a propósito (ver
 // bootstrap/app.php) y con throttle porque es escritura sin autenticación.
 Route::post('/cotizaciones/{token}/checkout', [PublicQuoteController::class, 'checkout'])

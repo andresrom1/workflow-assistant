@@ -22,6 +22,16 @@ use Illuminate\Support\Str;
  *
  * Lo que el dato NO dice son los límites de cada plan (cuántas ruedas, qué tope). Por eso las
  * coberturas compartidas se reportan como "incluidas en las dos" y nunca como "iguales".
+ *
+ * La vista muestra los grados de las DOS alternativas presentadas, que pueden ser distintos: el
+ * closer tiene una rama que presenta "una de cada nivel". Cuando lo son y una contiene a la otra, la
+ * comparación se arma como escalón (`escalon`) en vez de como diff simétrico — ahí no hay dos
+ * columnas de exclusivas, hay una sola lista de lo que suma la más cara.
+ *
+ * El grado nunca sale en el payload público. `normalized_grade` es el `default` de un match por
+ * substring en el adapter, así que `basic` es el cajón de lo que no matcheó: junta B reales con
+ * productos C y hasta alguna A. Sirve para agrupar y ordenar, no para mostrarle una etiqueta al
+ * cliente.
  */
 final class QuoteComparisonService
 {
@@ -44,28 +54,36 @@ final class QuoteComparisonService
     /**
      * Payload completo de la vista pública. Único punto de entrada del controller.
      *
+     * `$soloGradoRecomendado` sirve la vista anterior en `/cotizaciones/{token}/B`, que muestra un
+     * único grado. Es temporal — ver el docblock de PublicQuoteController.
+     *
      * @return array<string, mixed>
      */
-    public function buildPublicView(Quote $quote): array
+    public function buildPublicView(Quote $quote, bool $soloGradoRecomendado = false): array
     {
         $quote->loadMissing('alternatives');
 
-        $grade = $this->gradeAMostrar($quote);
-        $delGrado = $quote->alternatives->filter(
-            fn (QuoteAlternative $a): bool => $a->normalized_grade === $grade
+        $grades = $this->gradesAMostrar($quote);
+
+        if ($soloGradoRecomendado) {
+            $grades = array_slice($grades, 0, 1);
+        }
+
+        $alternativasVisibles = $quote->alternatives->filter(
+            fn (QuoteAlternative $a): bool => in_array($a->normalized_grade, $grades, true)
         );
 
-        $glosario = $this->glossary($delGrado);
-        $planes = $this->visiblePlans($delGrado);
-        $recomendadas = $this->resolverRecomendadas($quote, $delGrado, $planes);
+        $glosario = $this->glossary($alternativasVisibles);
+        $planes = $this->visiblePlans($alternativasVisibles);
+
+        // El reenganche por `claveVariante` busca en TODAS las alternativas, no en las visibles: si
+        // la segunda presentada es de otro grado, buscarla entre las visibles la perdía y se caía
+        // la comparación entera.
+        $recomendadas = $this->resolverRecomendadas($quote, $quote->alternatives, $planes);
 
         $comparacion = $recomendadas === null
             ? null
-            : $this->diff(
-                $this->planPorId($planes, $recomendadas['principal']['planId']),
-                $this->planPorId($planes, $recomendadas['segunda']['planId']),
-                $glosario,
-            );
+            : $this->comparar($quote, $planes, $recomendadas, $glosario);
 
         // `claveVariante` es de uso interno (dedupe y reenganche de la recomendación): no tiene
         // por qué viajar al frontend.
@@ -74,14 +92,88 @@ final class QuoteComparisonService
             $planes,
         );
 
+        // Con dos grados no hay un label único que sea cierto, y `normalized_grade` no está en
+        // condiciones de imprimirse igual: es el `default` del match del adapter, así que el bucket
+        // `basic` junta B reales con productos C y hasta alguna A. La vista se calla el grado.
+        $gradeUnico = count($grades) === 1 ? $grades[0] : null;
+
         return [
-            'grade' => $grade,
-            'gradeLabel' => $this->gradeLabel($grade),
+            'grade' => $gradeUnico,
+            'gradeLabel' => $gradeUnico === null ? null : $this->gradeLabel($gradeUnico),
             'totalOpciones' => count($publicos),
             'glosario' => $glosario,
             'companias' => $this->groupByCompany($publicos),
             'recomendadas' => $recomendadas,
             'comparacion' => $comparacion,
+        ];
+    }
+
+    /**
+     * El diff de las dos recomendadas, más lo que necesita la vista para decidir cómo presentarlo.
+     *
+     * @param  list<array<string, mixed>>  $plans
+     * @param  array<string, mixed>  $recomendadas
+     * @param  array<string, array{nota: string, esCobertura: bool}>  $glossary
+     * @return array<string, mixed>
+     */
+    private function comparar(Quote $quote, array $plans, array $recomendadas, array $glossary): array
+    {
+        $principal = $this->planPorId($plans, $recomendadas['principal']['planId']);
+        $segunda = $this->planPorId($plans, $recomendadas['segunda']['planId']);
+
+        $comparacion = $this->diff($principal, $segunda, $glossary);
+
+        $gradeDe = fn (int $planId): ?string => $quote->alternatives
+            ->firstWhere('id', $planId)?->normalized_grade;
+
+        $comparacion['cruzada'] = $gradeDe($principal['id']) !== $gradeDe($segunda['id']);
+        $comparacion['escalon'] = $comparacion['cruzada']
+            ? $this->escalon($principal, $segunda, $glossary)
+            : null;
+
+        return $comparacion;
+    }
+
+    /**
+     * El par presentado como escalón: una contiene a la otra y la diferencia es lo que suma la cara.
+     *
+     * Solo se arma cuando la más cara **contiene** a la más barata. Si cada una tiene algo que la
+     * otra no, hay un tradeoff real en dos direcciones y la comparación simétrica es el rendering
+     * correcto aunque los grados difieran.
+     *
+     * @param  array<string, mixed>  $planA
+     * @param  array<string, mixed>  $planB
+     * @param  array<string, array{nota: string, esCobertura: bool}>  $glossary
+     * @return array<string, mixed>|null
+     */
+    private function escalon(array $planA, array $planB, array $glossary): ?array
+    {
+        [$arriba, $abajo] = (float) $planA['precio'] >= (float) $planB['precio']
+            ? [$planA, $planB]
+            : [$planB, $planA];
+
+        // Lo que tiene la barata y la cara no: si hay algo, no es un escalón.
+        if (array_diff($abajo['features'], $arriba['features']) !== []) {
+            return null;
+        }
+
+        $suma = $this->ordenarItems(array_map(
+            fn (string $tag): array => $this->item($tag, $glossary),
+            array_values(array_diff($arriba['features'], $abajo['features'])),
+        ));
+
+        // Sin nada que sumar no hay escalón que mostrar: son el mismo producto a distinto precio.
+        if ($suma === []) {
+            return null;
+        }
+
+        return [
+            'arribaPlanId' => $arriba['id'],
+            'abajoPlanId' => $abajo['id'],
+            'abajoTitulo' => $abajo['titulo'],
+            'diferenciaPrecio' => round((float) $arriba['precio'] - (float) $abajo['precio'], 2),
+            'sumaCoberturas' => array_values(array_filter($suma, fn (array $i): bool => $i['esCobertura'])),
+            'sumaExtras' => array_values(array_filter($suma, fn (array $i): bool => ! $i['esCobertura'])),
         ];
     }
 
@@ -219,32 +311,50 @@ final class QuoteComparisonService
     }
 
     /**
-     * Grado de cobertura que se muestra: el de la alternativa recomendada, o el que más
-     * alternativas tiene. Nunca uno fijo — `normalized_grade` viene inconsistente entre versiones
+     * Grados de cobertura que se muestran: los de las dos alternativas presentadas.
+     *
+     * Son dos cuando el agente presentó "una de cada nivel" (la rama cross-grade del closer), y uno
+     * en el caso normal. Nunca uno fijo — `normalized_grade` viene inconsistente entre versiones
      * del adapter.
+     *
+     * El primero es siempre el de la recomendada, porque `presentedPair()` la devuelve primero. De
+     * eso depende `$soloGradoRecomendado`.
+     *
+     * @return list<string>
      */
-    private function gradeAMostrar(Quote $quote): ?string
+    private function gradesAMostrar(Quote $quote): array
     {
+        $par = $quote->presentedPair();
+
+        if ($par !== null) {
+            $grades = array_values(array_unique(array_filter([
+                $quote->alternatives->firstWhere('id', $par['principal']['id'])?->normalized_grade,
+                $quote->alternatives->firstWhere('id', $par['segunda']['id'])?->normalized_grade,
+            ])));
+
+            if ($grades !== []) {
+                return $grades;
+            }
+        }
+
         $recomendada = $quote->alternatives
             ->firstWhere('id', $quote->recommended_alternative_id);
 
-        if ($recomendada !== null) {
-            return $recomendada->normalized_grade;
+        if ($recomendada?->normalized_grade !== null) {
+            return [$recomendada->normalized_grade];
         }
 
-        return $quote->alternatives
+        $mayoritario = $quote->alternatives
             ->groupBy('normalized_grade')
             ->sortByDesc(fn (Collection $grupo): int => $grupo->count())
             ->keys()
             ->first();
+
+        return $mayoritario === null ? [] : [(string) $mayoritario];
     }
 
-    private function gradeLabel(?string $grade): string
+    private function gradeLabel(string $grade): string
     {
-        if ($grade === null) {
-            return 'Cobertura';
-        }
-
         return self::GRADE_LABELS[$grade] ?? Str::headline($grade);
     }
 
@@ -254,22 +364,22 @@ final class QuoteComparisonService
      * Si el agente recomendó una alternativa que resultó ser la cara de un par idéntico, la
      * recomendación apunta a la barata en vez de perderse.
      *
-     * @param  Collection<int, QuoteAlternative>  $alternatives
+     * @param  Collection<int, QuoteAlternative>  $todasLasAlternativas  Sin filtrar por grado
      * @param  list<array<string, mixed>>  $plans
      * @return array<string, mixed>|null
      */
-    private function resolverRecomendadas(Quote $quote, Collection $alternatives, array $plans): ?array
+    private function resolverRecomendadas(Quote $quote, Collection $todasLasAlternativas, array $plans): ?array
     {
         $par = $quote->presentedPair();
         if ($par === null || $plans === []) {
             return null;
         }
 
-        $principal = $this->planDeAlternativa($par['principal']['id'], $alternatives, $plans);
-        $segunda = $this->planDeAlternativa($par['segunda']['id'], $alternatives, $plans);
+        $principal = $this->planDeAlternativa($par['principal']['id'], $todasLasAlternativas, $plans);
+        $segunda = $this->planDeAlternativa($par['segunda']['id'], $todasLasAlternativas, $plans);
 
-        // Si alguna no está en el grado que se muestra, o las dos colapsaron en el mismo plan,
-        // no hay comparación que hacer.
+        // Si alguna no sobrevivió al dedupe, o las dos colapsaron en el mismo plan, no hay
+        // comparación que hacer.
         if ($principal === null || $segunda === null || $principal === $segunda) {
             return null;
         }
@@ -283,10 +393,10 @@ final class QuoteComparisonService
     /**
      * Id del plan visible que representa a una alternativa presentada.
      *
-     * @param  Collection<int, QuoteAlternative>  $alternatives
+     * @param  Collection<int, QuoteAlternative>  $todasLasAlternativas  Sin filtrar por grado
      * @param  list<array<string, mixed>>  $plans
      */
-    private function planDeAlternativa(int $alternativeId, Collection $alternatives, array $plans): ?int
+    private function planDeAlternativa(int $alternativeId, Collection $todasLasAlternativas, array $plans): ?int
     {
         foreach ($plans as $plan) {
             if ($plan['id'] === $alternativeId) {
@@ -294,7 +404,7 @@ final class QuoteComparisonService
             }
         }
 
-        $original = $alternatives->firstWhere('id', $alternativeId);
+        $original = $todasLasAlternativas->firstWhere('id', $alternativeId);
         if ($original === null) {
             return null;
         }

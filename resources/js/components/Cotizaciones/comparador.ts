@@ -38,12 +38,29 @@ export type Recomendadas = {
   segunda: { planId: number; razon: string | null }
 }
 
+/**
+ * El par presentado cuando son de grados distintos y una contiene a la otra: no hay dos columnas
+ * de exclusivas, hay una sola lista de lo que suma la más cara.
+ */
+export type Escalon = {
+  arribaPlanId: number
+  abajoPlanId: number
+  abajoTitulo: string
+  diferenciaPrecio: number
+  sumaCoberturas: ItemDiff[]
+  sumaExtras: ItemDiff[]
+}
+
 export type Comparacion = {
   comunes: ItemDiff[]
   soloA: ItemDiff[]
   soloB: ItemDiff[]
   diferenciaPrecio: number
   ahorroAnual: number
+  /** Las dos presentadas son de grados distintos. */
+  cruzada: boolean
+  /** Presente solo si además una contiene a la otra. */
+  escalon: Escalon | null
 }
 
 export type Vehiculo = {
@@ -63,7 +80,8 @@ export type Vista = {
   expiresAt: string | null
   cotizadoEl: string | null
   vehiculo: Vehiculo
-  cobertura: { grade: string | null; label: string }
+  /** `label` es null cuando se muestran dos grados: no hay uno solo que sea cierto. */
+  cobertura: { grade: string | null; label: string | null }
   totalOpciones: number
   glosario: Glosario
   companias: Compania[]
@@ -98,6 +116,25 @@ export function masBarata(a: Plan, b: Plan): Plan {
 
 export function pluralizar(n: number, singular: string, plural: string): string {
   return `${n} ${n === 1 ? singular : plural}`
+}
+
+/**
+ * La única frase que escribe la vista en el escalón.
+ *
+ * Habla desde el precio bajo a propósito: es la lectura que hay que corregir. Las otras dos frases
+ * de la comparación las escribe el agente (`presentation_reasons`), y la de la opción cara ya dice
+ * "por $X más al mes" — abrir con lo mismo la duplicaría a pocos centímetros.
+ */
+export function leyendaEscalon(e: Escalon): string {
+  const coberturas =
+    e.sumaCoberturas.length === 1
+      ? 'esta cobertura menos'
+      : `estas ${e.sumaCoberturas.length} coberturas menos`
+
+  return (
+    `Si bien la ${e.abajoTitulo} sale $${formatPrecio(e.diferenciaPrecio)} menos por mes, ` +
+    `no lo veas como un ahorro: son ${coberturas}.`
+  )
 }
 
 export function planPorId(companias: Compania[], id: number): Plan | null {

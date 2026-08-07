@@ -1,5 +1,5 @@
 <template>
-  <Head :title="`${vista.cobertura.label} — ${vista.vehiculo.descripcion}`" />
+  <Head :title="titulo" />
 
   <MangoLayout hide-header>
     <ComparadorMobile v-if="esMovil" :vista="vista" />
@@ -8,7 +8,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Head } from '@inertiajs/vue3'
 import MangoLayout from '@/layouts/MangoLayout.vue'
 import ComparadorDesktop from '@/components/Cotizaciones/ComparadorDesktop.vue'
@@ -16,6 +16,13 @@ import ComparadorMobile from '@/components/Cotizaciones/ComparadorMobile.vue'
 import type { Vista } from '@/components/Cotizaciones/comparador'
 
 const vista = defineProps<Vista>()
+
+// `cobertura.label` es null cuando se muestran dos grados: sin el guard el título sale "null — …".
+const titulo = computed(() =>
+  vista.cobertura.label
+    ? `${vista.cobertura.label} — ${vista.vehiculo.descripcion}`
+    : `Tus opciones — ${vista.vehiculo.descripcion}`,
+)
 
 // El corte es de layout, no de dispositivo: abajo de 900px la vista de dos columnas no entra.
 // Con matchMedia también acompaña el giro de pantalla y el redimensionado en escritorio.

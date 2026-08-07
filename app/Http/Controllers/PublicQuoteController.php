@@ -22,15 +22,36 @@ use Inertia\Response;
  * Contraste con CheckoutController::show(), que sí manda la patente: ese link va a un cliente ya
  * identificado que a continuación carga su DNI; este es de lectura y lo puede abrir cualquiera
  * que tenga la URL.
+ *
+ * TEMPORAL — `/cotizaciones/{token}/B` sirve la vista anterior, que mostraba un solo grado, para
+ * poder mostrar las dos lado a lado. Para sacarla: borrar la ruta `cotizaciones.show.legacy`, el
+ * método `showLegacy()`, el parámetro de `render()` y el `$soloGradoRecomendado` de
+ * QuoteComparisonService::buildPublicView().
  */
 class PublicQuoteController extends Controller
 {
     public function show(string $token, QuoteComparisonService $comparison): Response
     {
+        return $this->render($token, $comparison, soloGradoRecomendado: false);
+    }
+
+    /**
+     * La vista anterior: un solo grado, sin comparación cuando el par presentado es cross-grade.
+     *
+     * En una cotización de mismo grado renderiza igual que la canónica — el único caso donde se
+     * diferencian es el cross-grade.
+     */
+    public function showLegacy(string $token, QuoteComparisonService $comparison): Response
+    {
+        return $this->render($token, $comparison, soloGradoRecomendado: true);
+    }
+
+    private function render(string $token, QuoteComparisonService $comparison, bool $soloGradoRecomendado): Response
+    {
         $quote = Quote::where('public_token', $token)->firstOrFail();
         $quote->load(['riskSnapshot', 'alternatives']);
 
-        $vista = $comparison->buildPublicView($quote);
+        $vista = $comparison->buildPublicView($quote, $soloGradoRecomendado);
 
         abort_if($vista['totalOpciones'] === 0, 404, 'Esta cotización no tiene opciones para mostrar.');
 

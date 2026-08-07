@@ -3,6 +3,7 @@
 use App\Models\Quote;
 use App\Models\QuoteAlternative;
 use App\Services\Quote\QuoteComparisonService;
+use Database\Factories\QuoteAlternativeFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -25,6 +26,67 @@ function alternativa(Quote $quote, string $aseguradora, string $titulo, float $p
             'precio' => $precio,
             'normalized_grade' => 'all_risk',
         ]);
+}
+
+/**
+ * Alternativa con un grado y unas coberturas exactas. Hace falta para armar contención: el estado
+ * `conCoberturas()` siempre suma sobre COBERTURAS_BASE y nunca da un subconjunto.
+ *
+ * @param  list<string>  $tags
+ */
+function alternativaConTags(
+    Quote $quote,
+    string $aseguradora,
+    string $titulo,
+    float $precio,
+    string $grade,
+    array $tags,
+): QuoteAlternative {
+    $glosario = array_merge(
+        QuoteAlternativeFactory::COBERTURAS_BASE,
+        QuoteAlternativeFactory::COBERTURAS_EXTRA,
+    );
+
+    return QuoteAlternative::factory()->create([
+        'quote_id' => $quote->id,
+        'aseguradora' => $aseguradora,
+        'titulo' => $titulo,
+        'precio' => $precio,
+        'normalized_grade' => $grade,
+        'features_tags' => $tags,
+        'full_details' => array_intersect_key($glosario, array_flip($tags)),
+    ]);
+}
+
+/** Marca el par presentado, con la recomendada primero. */
+function presentar(Quote $quote, QuoteAlternative $recomendada, QuoteAlternative $otra): Quote
+{
+    $quote->update([
+        'recommended_alternative_id' => $recomendada->id,
+        'presented_alternative_ids' => [$recomendada->id, $otra->id],
+        'presentation_reasons' => [
+            (string) $recomendada->id => 'Te la recomiendo.',
+            (string) $otra->id => 'La alternativa.',
+        ],
+    ]);
+
+    return $quote->fresh();
+}
+
+/** El par real de producción: C80 (`basic`) contenida en Todo Riesgo (`all_risk`). */
+function parCrossGrade(Quote $quote): array
+{
+    $barata = alternativaConTags($quote, 'Galicia', 'C80', 73106.22, 'basic', [
+        'Responsabilidad Civil', 'Robo Total', 'Robo Parcial', 'Incendio Total',
+        'Incendio Parcial', 'Destrucción Total por accidente', 'Ruedas', 'Cristales Laterales',
+    ]);
+
+    $cara = alternativaConTags($quote, 'Galicia', 'Todo Riesgo Franquicia 4%', 109655.29, 'all_risk', [
+        ...array_keys(QuoteAlternativeFactory::COBERTURAS_BASE),
+        'Reposición 0KM',
+    ]);
+
+    return [$barata, $cara];
 }
 
 // ── Glosario ────────────────────────────────────────────────────────────────
@@ -303,6 +365,132 @@ it('reengancha la recomendación con el plan que sobrevivió al dedupe', functio
 
     expect($vista['recomendadas']['principal']['planId'])->toBe($barata->id)
         ->and($vista['recomendadas']['principal']['razon'])->toBe('Recomendada');
+});
+
+// ── Par de grados distintos ─────────────────────────────────────────────────
+
+// La regresión: el reenganche buscaba la segunda presentada entre las alternativas ya filtradas
+// por grado. Si era de otro grado no la encontraba y se caía la comparación entera.
+it('no pierde la recomendación cuando las dos presentadas son de grados distintos', function (): void {
+    [$barata, $cara] = parCrossGrade($this->quote);
+
+    $vista = $this->service->buildPublicView(presentar($this->quote, $cara, $barata));
+
+    expect($vista['recomendadas']['principal']['planId'])->toBe($cara->id)
+        ->and($vista['recomendadas']['segunda']['planId'])->toBe($barata->id)
+        ->and($vista['comparacion'])->not->toBeNull();
+});
+
+it('muestra los planes de los dos grados presentados', function (): void {
+    [$barata, $cara] = parCrossGrade($this->quote);
+    // Del grado de la barata, y no presentada: tiene que aparecer igual en el listado.
+    alternativaConTags($this->quote, 'Triunfo', 'C2', 68000.00, 'basic', ['Responsabilidad Civil', 'Robo Total']);
+
+    $vista = $this->service->buildPublicView(presentar($this->quote, $cara, $barata));
+
+    $ids = collect($vista['companias'])->pluck('planes')->flatten(1)->pluck('id');
+
+    expect($ids)->toContain($cara->id, $barata->id)
+        ->and($vista['totalOpciones'])->toBe(3);
+});
+
+it('no imprime un grado cuando se muestran dos', function (): void {
+    [$barata, $cara] = parCrossGrade($this->quote);
+
+    $vista = $this->service->buildPublicView(presentar($this->quote, $cara, $barata));
+
+    expect($vista['grade'])->toBeNull()
+        ->and($vista['gradeLabel'])->toBeNull();
+});
+
+it('arma el escalón con la más cara arriba y lo que suma sobre la barata', function (): void {
+    [$barata, $cara] = parCrossGrade($this->quote);
+
+    $vista = $this->service->buildPublicView(presentar($this->quote, $cara, $barata));
+    $escalon = $vista['comparacion']['escalon'];
+
+    expect($vista['comparacion']['cruzada'])->toBeTrue()
+        ->and($escalon['arribaPlanId'])->toBe($cara->id)
+        ->and($escalon['abajoPlanId'])->toBe($barata->id)
+        ->and($escalon['abajoTitulo'])->toBe('C80')
+        ->and($escalon['diferenciaPrecio'])->toBe(36549.07)
+        ->and(array_column($escalon['sumaCoberturas'], 'label'))->toBe([
+            'Auxilio mecánico y/o Grúa', 'Cerraduras', 'Daños Parciales',
+            'Extensión Mercosur', 'Granizo', 'Luneta', 'Parabrisas',
+        ])
+        // Beneficio comercial, no cobertura: va aparte y no entra en el conteo de la leyenda.
+        ->and(array_column($escalon['sumaExtras'], 'label'))->toBe(['Reposición 0KM']);
+});
+
+// El orden lo da el precio, no la recomendación: el agente puede recomendar la cara (y lo hace).
+it('pone arriba la más cara aunque la recomendada sea la barata', function (): void {
+    [$barata, $cara] = parCrossGrade($this->quote);
+
+    $vista = $this->service->buildPublicView(presentar($this->quote, $barata, $cara));
+
+    expect($vista['comparacion']['escalon']['arribaPlanId'])->toBe($cara->id);
+});
+
+// Sin contención hay un tradeoff en dos direcciones y la comparación simétrica es lo correcto.
+it('no arma escalón cuando cada una cubre algo que la otra no', function (): void {
+    $barata = alternativaConTags($this->quote, 'Galicia', 'C80', 73106.22, 'basic', [
+        'Responsabilidad Civil', 'Robo Total', 'Extensión Mercosur',
+    ]);
+    $cara = alternativaConTags($this->quote, 'Sancor', 'Todo Riesgo', 109655.29, 'all_risk', [
+        'Responsabilidad Civil', 'Robo Total', 'Granizo',
+    ]);
+
+    $vista = $this->service->buildPublicView(presentar($this->quote, $cara, $barata));
+
+    expect($vista['comparacion']['cruzada'])->toBeTrue()
+        ->and($vista['comparacion']['escalon'])->toBeNull();
+});
+
+// Protege la vista de mismo grado, que ya funciona bien y no se toca.
+it('no arma escalón con el mismo grado aunque una contenga a la otra', function (): void {
+    $chica = alternativaConTags($this->quote, 'Triunfo', 'A - Responsabilidad Civil', 24660.00, 'liability', [
+        'Responsabilidad Civil',
+    ]);
+    $grande = alternativaConTags($this->quote, 'San Cristobal', 'A - Responsabilidad Civil', 34564.00, 'liability', [
+        'Responsabilidad Civil', 'Sistema Cleas',
+    ]);
+
+    $vista = $this->service->buildPublicView(presentar($this->quote, $chica, $grande));
+
+    expect($vista['comparacion']['cruzada'])->toBeFalse()
+        ->and($vista['comparacion']['escalon'])->toBeNull()
+        // El bloque de ahorro sigue teniendo con qué renderizarse.
+        ->and($vista['comparacion']['ahorroAnual'])->toBe(118848.0)
+        ->and($vista['gradeLabel'])->toBe('Responsabilidad Civil');
+});
+
+// ── Vista anterior en /cotizaciones/{token}/B ───────────────────────────────
+
+it('con soloGradoRecomendado vuelve al comportamiento de un solo grado', function (): void {
+    [$barata, $cara] = parCrossGrade($this->quote);
+
+    $vista = $this->service->buildPublicView(presentar($this->quote, $cara, $barata), true);
+
+    $ids = collect($vista['companias'])->pluck('planes')->flatten(1)->pluck('id');
+
+    expect($vista['grade'])->toBe('all_risk')
+        ->and($vista['gradeLabel'])->toBe('Todo Riesgo')
+        ->and($ids)->toContain($cara->id)
+        ->and($ids)->not->toContain($barata->id)
+        ->and($vista['recomendadas'])->toBeNull()
+        ->and($vista['comparacion'])->toBeNull();
+});
+
+it('con el mismo grado la vista anterior es idéntica a la canónica', function (): void {
+    $triunfo = alternativaConTags($this->quote, 'Triunfo', 'A - RC', 24660.00, 'liability', ['Responsabilidad Civil']);
+    $sc = alternativaConTags($this->quote, 'San Cristobal', 'A - RC', 34564.00, 'liability', [
+        'Responsabilidad Civil', 'Sistema Cleas',
+    ]);
+
+    $quote = presentar($this->quote, $triunfo, $sc);
+
+    expect($this->service->buildPublicView($quote, true))
+        ->toBe($this->service->buildPublicView($quote));
 });
 
 it('extrae la franquicia de cada plan', function (): void {
