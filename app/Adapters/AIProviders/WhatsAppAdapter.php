@@ -5,6 +5,7 @@ namespace App\Adapters\AIProviders;
 use App\Contracts\AIProviderAdapterInterface;
 use App\Contracts\Quotability;
 use App\Models\Conversation;
+use App\Models\CoveragePreference;
 use App\Models\Customer;
 use App\Models\Quote;
 use App\Models\QuoteAlternative;
@@ -309,6 +310,11 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         $data = $this->validatePayload($data, [
             'patente' => 'required|string',
             'preference' => 'required|string',
+            // El nivel solo no alcanza: "terceros completo" y "terceros completo con granizo"
+            // se guardaban idénticos. Sin estas reglas `validated()` las descarta en silencio.
+            'coberturas_requeridas' => 'sometimes|array',
+            'coberturas_requeridas.*' => 'string',
+            'reasoning' => 'sometimes|string',
         ]);
 
         $data['patente'] = $this->plate->normalize($data['patente']);
@@ -328,12 +334,18 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
 
         $quoteId = null;
 
+        $metadata = array_filter([
+            'coberturas_requeridas' => array_values($data['coberturas_requeridas'] ?? []),
+            'reasoning' => $data['reasoning'] ?? null,
+        ], fn (mixed $valor): bool => $valor !== null && $valor !== []);
+
         try {
-            DB::transaction(function () use ($conversation, $vehicle, $data, &$quoteId): void {
+            DB::transaction(function () use ($conversation, $vehicle, $data, $metadata, &$quoteId): void {
                 $this->coverageService->saveCoveragePreference(
                     $conversation->id,
                     $vehicle->id,
-                    $data['preference']
+                    $data['preference'],
+                    $metadata === [] ? null : $metadata
                 );
 
                 $quote = $conversation->quotes()
@@ -430,9 +442,40 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         ]);
 
         return $this->formatSuccess(
-            "Cotización #{$quote->id} obtenida. Usá quote_id={$quote->id} para el checkout.",
+            "Cotización #{$quote->id} obtenida. Usá quote_id={$quote->id} para el checkout."
+                .$this->recordatorioDelPedido($quote),
             ['quotes' => json_encode(['quote_id' => $quote->id, 'alternatives' => $alternatives])]
         );
+    }
+
+    /**
+     * Le recuerda al closer qué pidió el cliente, en el mismo turno en que elige las alternativas.
+     *
+     * Sin esto tiene que re-derivarlo del historial cada vez, y cuando el cliente nombró el nivel
+     * sin enumerar coberturas ("terceros completo") se quedaba con la más barata del nivel — que
+     * es justo la que no trae granizo ni cristales.
+     */
+    private function recordatorioDelPedido(Quote $quote): string
+    {
+        $preferencia = CoveragePreference::query()
+            ->where('conversation_id', $quote->conversation_id)
+            ->latest('updated_at')
+            ->first();
+
+        if (! $preferencia instanceof CoveragePreference) {
+            return '';
+        }
+
+        $recordatorio = " El cliente pidió cobertura {$preferencia->preference}.";
+
+        $requeridas = $preferencia->metadata['coberturas_requeridas'] ?? [];
+
+        if (is_array($requeridas) && $requeridas !== []) {
+            $recordatorio .= ' Coberturas requeridas: '.implode(', ', $requeridas)
+                .'. Descartá las alternativas que no las incluyan, por más baratas que sean.';
+        }
+
+        return $recordatorio;
     }
 
     /**

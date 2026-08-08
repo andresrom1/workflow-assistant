@@ -3,7 +3,6 @@
 namespace App\Repositories;
 
 use App\Models\Conversation;
-use App\Models\CoveragePreference;
 use App\Traits\ConditionalLogger;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
@@ -160,18 +159,5 @@ class ConversationRepository
         }
 
         return $query;
-    }
-
-    public function saveCoveragePreference(int $conversationId, int $vehicleId, string $preference): void
-    {
-        CoveragePreference::updateOrCreate(
-            [
-                'conversation_id' => $conversationId,
-                'vehicle_id' => $vehicleId,
-            ],
-            [
-                'preference' => $preference,
-            ]
-        );
     }
 }

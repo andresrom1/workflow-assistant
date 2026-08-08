@@ -26,6 +26,7 @@ class QuoteAlternative extends Model
         'precio',
         'sum_asegurada',  // Suma asegurada numérica (insured_amount, vía adapter)
         'moneda',
+        'payment_method_id', // Medio de pago del proveedor ("cbu" | "tarjeta" | "cupon")
         'marketing_title',   // Título comercial
         'sum_insured_text',  // Texto del Suma Asegurada
         'features_tags',     // JSON: Array simple de strings (["Granizo", "Ruedas"])
