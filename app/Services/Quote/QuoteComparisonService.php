@@ -28,10 +28,13 @@ use Illuminate\Support\Str;
  * comparación se arma como escalón (`escalon`) en vez de como diff simétrico — ahí no hay dos
  * columnas de exclusivas, hay una sola lista de lo que suma la más cara.
  *
- * El grado nunca sale en el payload público. `normalized_grade` es el `default` de un match por
- * substring en el adapter, así que `basic` es el cajón de lo que no matcheó: junta B reales con
- * productos C y hasta alguna A. Sirve para agrupar y ordenar, no para mostrarle una etiqueta al
- * cliente.
+ * El grado nunca sale en el payload público. Se usa para agrupar y ordenar, no para mostrarle una
+ * etiqueta al cliente: aunque el adapter ahora lo deriva de las coberturas y no del nombre del
+ * plan, sigue siendo una simplificación de cuatro casilleros sobre un catálogo mucho más variado.
+ *
+ * Ojo con las cotizaciones anteriores al 2026-08-08: se guardaron con el clasificador viejo, que
+ * matcheaba por substring del nombre y dejó `third_party_complete` en cero. No se migraron, así
+ * que en las históricas `basic` sigue siendo el cajón de lo que no matcheó.
  */
 final class QuoteComparisonService
 {
@@ -92,9 +95,10 @@ final class QuoteComparisonService
             $planes,
         );
 
-        // Con dos grados no hay un label único que sea cierto, y `normalized_grade` no está en
-        // condiciones de imprimirse igual: es el `default` del match del adapter, así que el bucket
-        // `basic` junta B reales con productos C y hasta alguna A. La vista se calla el grado.
+        // Con dos grados no hay un label único que sea cierto. Y en las cotizaciones anteriores al
+        // 2026-08-08 el grado tampoco está en condiciones de imprimirse: las guardó el clasificador
+        // por nombre, cuyo bucket `basic` junta B reales con productos C y hasta alguna A. La vista
+        // se calla el grado.
         $gradeUnico = count($grades) === 1 ? $grades[0] : null;
 
         return [

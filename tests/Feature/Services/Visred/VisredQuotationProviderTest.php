@@ -45,7 +45,53 @@ function snapshotWithToken(string $token = 'AAallure', array $attrs = []): RiskS
     return $snapshot;
 }
 
-function coverResult(int $id, string $coverId, string $coverName, float $fee, bool $active = true): array
+/**
+ * Conjuntos de coberturas del proveedor, en orden creciente de nivel. El grade se deriva de
+ * acá y NO del nombre del plan, así que un fixture con el nombre "Todo Riesgo" y features de
+ * RC clasifica como `liability` — igual que en producción.
+ *
+ * @return list<array{id: string, name: string, description: string}>
+ */
+function coberturasRc(): array
+{
+    return [
+        ['id' => 'responsabilidad-civil', 'name' => 'Responsabilidad Civil', 'description' => 'Daños a terceros.'],
+    ];
+}
+
+/** @return list<array{id: string, name: string, description: string}> */
+function coberturasBasico(): array
+{
+    return [
+        ...coberturasRc(),
+        ['id' => 'robo-total', 'name' => 'Robo Total', 'description' => 'Robo del vehículo completo.'],
+        ['id' => 'incendio-total', 'name' => 'Incendio Total', 'description' => 'Incendio del vehículo completo.'],
+    ];
+}
+
+/** @return list<array{id: string, name: string, description: string}> */
+function coberturasTercerosCompletos(): array
+{
+    return [
+        ...coberturasBasico(),
+        ['id' => 'robo-parcial', 'name' => 'Robo Parcial', 'description' => 'Robo de partes.'],
+        ['id' => 'granizo', 'name' => 'Granizo', 'description' => 'Daños parciales consecuencia del granizo.'],
+    ];
+}
+
+/** @return list<array{id: string, name: string, description: string}> */
+function coberturasTodoRiesgo(): array
+{
+    return [
+        ...coberturasTercerosCompletos(),
+        ['id' => 'danos-parciales', 'name' => 'Daños Parciales', 'description' => 'Daños al propio vehículo.'],
+    ];
+}
+
+/**
+ * @param  list<array{id: string, name: string, description: string}>|null  $features
+ */
+function coverResult(int $id, string $coverId, string $coverName, float $fee, bool $active = true, ?array $features = null, string $paymentMethodId = 'tarjeta'): array
 {
     return [
         'quotation_result_id' => $id,
@@ -55,8 +101,8 @@ function coverResult(int $id, string $coverId, string $coverName, float $fee, bo
         'installments' => 12,
         'franchise' => null,
         'insured_amount' => 14_200_000,
-        'payment_method_id' => 'todos',
-        'features' => [['id' => 'granizo', 'name' => 'Granizo', 'description' => 'Cubierto.']],
+        'payment_method_id' => $paymentMethodId,
+        'features' => $features ?? coberturasRc(),
         'require_inspection_before_emission' => false,
         'requires_gnc_details' => false,
     ];
@@ -100,11 +146,11 @@ it('cotiza, hace polling y aplana company→covers a alternativas neutras', func
             ['task_id' => 't-sancor', 'company_id' => 'sancor'],
         ]]),
         'https://visred.test/v1/tasks/t-sc/' => taskSuccess('san-cristobal', [
-            coverResult(7386, 'todo-riesgo-c', 'Todo Riesgo C', 78450.0),
-            coverResult(7387, 'terceros-completo', 'Terceros Completo', 42000.0),
+            coverResult(7386, 'todo-riesgo-c', 'Todo Riesgo C', 78450.0, features: coberturasTodoRiesgo()),
+            coverResult(7387, 'terceros-completo', 'Terceros Completo', 42000.0, features: coberturasTercerosCompletos()),
         ]),
         'https://visred.test/v1/tasks/t-sancor/' => taskSuccess('sancor', [
-            coverResult(9001, 'rc', 'Responsabilidad Civil', 12000.0),
+            coverResult(9001, 'rc', 'Responsabilidad Civil', 12000.0, features: coberturasRc()),
         ]),
     ]);
 
@@ -122,6 +168,112 @@ it('cotiza, hace polling y aplana company→covers a alternativas neutras', func
 
     $grades = array_column($result['parsed_alternatives'], 'normalized_grade');
     expect($grades)->toBe(['all_risk', 'third_party_complete', 'liability']);
+});
+
+/**
+ * El grade sale de las coberturas, no del nombre del plan. Los casos son los reales de la
+ * cotización #10 de producción, donde el match por nombre dejaba `third_party_complete` en 0:
+ * ningún proveedor emite el string "terceros completo", y el fallback matcheaba `rc` como
+ * substring de pa*rc*ial y te*rc*ero.
+ */
+it('clasifica el grade por las coberturas y no por el nombre del plan', function (
+    string $coverId,
+    string $coverName,
+    array $features,
+    string $esperado,
+) {
+    Http::fake([
+        COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
+        COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't1', 'company_id' => 'sancor']]]),
+        'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [
+            coverResult(1, $coverId, $coverName, 1000.0, features: $features),
+        ]),
+    ]);
+
+    $result = app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken());
+
+    expect($result['parsed_alternatives'][0]['normalized_grade'])->toBe($esperado);
+})->with([
+    // Nombres que no dicen nada: antes caían todos al default `basic`.
+    'c80 sin granizo es un terceros completo' => [
+        'c80', 'C80',
+        [
+            ...coberturasBasico(),
+            ['id' => 'robo-parcial', 'name' => 'Robo Parcial', 'description' => 'Robo de partes.'],
+            ['id' => 'cristales-laterales', 'name' => 'Cristales Laterales', 'description' => 'Cristales.'],
+        ],
+        'third_party_complete',
+    ],
+    'c-clima con granizo es un terceros completo' => [
+        'c-clima', 'C Clima', coberturasTercerosCompletos(), 'third_party_complete',
+    ],
+
+    // Antes caían a `liability` por el substring `rc` dentro de "te[rc]ero" y "pa[rc]ial".
+    'tercero-completo-xl no es responsabilidad civil' => [
+        't-completo-xl-granizo-fullextra-large', 'Tercero Completo XL + Granizo Full',
+        coberturasTercerosCompletos(), 'third_party_complete',
+    ],
+    'un cover id que enumera "parcial" no es responsabilidad civil' => [
+        'c1-robo-e-incendio-total-y-parcial', 'C1 - Robo e Incendio Total y Parcial',
+        [
+            ...coberturasBasico(),
+            ['id' => 'robo-parcial', 'name' => 'Robo Parcial', 'description' => 'Robo de partes.'],
+        ],
+        'third_party_complete',
+    ],
+
+    // Robo/incendio total sin parcial: es un B aunque el nombre diga otra cosa.
+    'robo total sin parcial es basico' => [
+        'b3-robo-total', 'B3 - Robo Total', coberturasBasico(), 'basic',
+    ],
+
+    // Sin robo ni incendio es responsabilidad civil, aunque el nombre venga con un typo.
+    'solo responsabilidad civil' => [
+        'a-responsabilidad-civil', 'A - Responsablidad Civil', coberturasRc(), 'liability',
+    ],
+
+    // `Daños Parciales` exacto marca Todo Riesgo...
+    'danos parciales marca todo riesgo' => [
+        'todo-riesgo-franquicia-4', 'Todo Riesgo Franquicia 4%', coberturasTodoRiesgo(), 'all_risk',
+    ],
+    // ...pero las variantes "por Robo" y "al Amparo del Robo Total" son nivel C, no D.
+    'danos parciales al amparo del robo no es todo riesgo' => [
+        'c8', 'C8',
+        [
+            ...coberturasBasico(),
+            ['id' => 'danos-parciales-amparo-robo', 'name' => 'Daños Parciales al Amparo del Robo Total', 'description' => 'Daños durante el robo.'],
+        ],
+        'third_party_complete',
+    ],
+
+    // Sancor manda "Auto Max 15" y "Garage" sin ninguna feature. Se conserva el default
+    // histórico: sin datos no se puede afirmar que no cubren robo.
+    'sin features conserva basic' => [
+        'garage', 'Garage', [], 'basic',
+    ],
+]);
+
+/**
+ * Visred cotiza el mismo cover una vez por medio de pago y el cupón sale más caro. Sin este
+ * campo las filas quedan indistinguibles y el cupón entra como si fuera otro producto.
+ */
+it('conserva el medio de pago de cada alternativa', function () {
+    Http::fake([
+        COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
+        COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't1', 'company_id' => 'san-cristobal']]]),
+        'https://visred.test/v1/tasks/t1/' => taskSuccess('san-cristobal', [
+            coverResult(1, 'c-mega', 'C Mega', 100308.0, paymentMethodId: 'cbu'),
+            coverResult(2, 'c-mega', 'C Mega', 100308.0, paymentMethodId: 'tarjeta'),
+            coverResult(3, 'c-mega', 'C Mega', 122971.0, paymentMethodId: 'cupon'),
+        ]),
+    ]);
+
+    $result = app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken());
+
+    expect(array_column($result['parsed_alternatives'], 'payment_method_id'))
+        ->toBe(['cbu', 'tarjeta', 'cupon']);
 });
 
 it('manda el request con el version_id resuelto y los datos del snapshot', function () {

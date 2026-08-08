@@ -44,6 +44,13 @@ class CoveragePreferenceTool implements Mockable, Tool
             'reasoning' => $schema->string()
                 ->description("Razón de la elección. Ej: 'Cliente eligió C porque no quiere pagar franquicia'.")
                 ->required(),
+            'coberturas_requeridas' => $schema->array()
+                ->items($schema->string())
+                ->description('Coberturas concretas que el cliente pidió por su nombre, además del nivel. '
+                    ."Usá el vocabulario del proveedor: 'Granizo', 'Cristales', 'Ruedas', 'Cerraduras', "
+                    ."'Inundación', 'Auxilio mecánico y/o Grúa'. Vacío si solo nombró el nivel de cobertura. "
+                    .'El agente que presenta las cotizaciones descarta las alternativas que no las incluyan, '
+                    .'así que no agregues nada que el cliente no haya pedido.'),
         ];
     }
 

@@ -478,6 +478,10 @@ class VisredQuotationProvider implements QuotationProvider
         $percent = $discount['percent'] ?? 0.0;
         $precio = $percent > 0 ? round($baseFee * (1 - $percent / 100), 2) : $baseFee;
 
+        // Las features alimentan tres campos (los tags, el detalle y el grade), así que se
+        // extraen una sola vez.
+        $featureTags = $this->featureNames($coverResult['features'] ?? []);
+
         return [
             // external_*, company_id, discount_id y requires_inspection_* los stripea
             // saveResults hacia quote_alternative_provider_refs (ADR-001): tokens del
@@ -490,29 +494,71 @@ class VisredQuotationProvider implements QuotationProvider
             'aseguradora' => $companyName,
             'titulo' => $coverName,
             'descripcion' => is_scalar($cover['description'] ?? null) ? (string) $cover['description'] : $coverName,
-            'normalized_grade' => $this->normalizedGrade($coverId, $coverName),
+            'normalized_grade' => $this->normalizedGrade($featureTags),
             'precio' => $precio,
             'sum_asegurada' => $insuredAmount > 0 ? $insuredAmount : null,
             'moneda' => 'ARS',
+            // Visred cotiza el MISMO cover una vez por medio de pago (San Cristóbal manda tres:
+            // cbu, tarjeta y cupon, y el cupón sale más caro). Sin este campo las filas quedan
+            // indistinguibles y el cupón entra a la presentación como si fuera otro producto.
+            'payment_method_id' => is_scalar($coverResult['payment_method_id'] ?? null)
+                ? (string) $coverResult['payment_method_id']
+                : null,
             'marketing_title' => "{$companyName} - {$coverName}",
             'sum_insured_text' => $insuredAmount > 0 ? '$ '.number_format($insuredAmount, 0, ',', '.') : '',
-            'features_tags' => $this->featureNames($coverResult['features'] ?? []),
+            'features_tags' => $featureTags,
             'full_details' => $this->featureDetails($coverResult['features'] ?? []),
         ];
     }
 
     /**
      * Mapeo cover → grade normalizado de MANGO (SOLO en el adapter).
+     *
+     * Se clasifica por las coberturas, NO por el nombre del plan. El match por nombre que
+     * había antes tenía `third_party_complete` en **0 filas sobre las 813 de producción**, y
+     * ~345 mal clasificadas en total. Dos defectos que se potenciaban:
+     *
+     *   - Buscaba el literal `terceros completo`, que **ninguna** de las 7 compañías emite.
+     *     Los planes se llaman `c80`, `c-clima`, `c2`, `c-mega`, `sigma`, `premium-max`; la
+     *     única que lo nombra es Experta y lo escribe en singular (`tercero-completo-xl`).
+     *   - La rama de abajo matcheaba `rc`, substring de pa**rc**ial, te**rc**ero,
+     *     me**rc**antil y Me**rc**osur. Estaba pensada para la sigla "RC", y se llevaba puestos
+     *     los covers cuyo id enumera las coberturas
+     *     (`c1-robo-e-incendio-total-y-parcial` → `liability`).
+     *
+     * Las features, en cambio, son vocabulario cerrado del proveedor y están auditadas
+     * (`config/quotes.php` + QuoteService::auditarVocabulario). Calibrado contra la cotización
+     * de producción #10: 47 de 137 cambian, `third_party_complete` pasa de 0 a 43 y ninguna
+     * `all_risk` se mueve.
+     *
+     * @param  list<string>  $featureTags  Nombres de cobertura ya extraídos por featureNames().
      */
-    private function normalizedGrade(string $coverId, string $coverName): string
+    private function normalizedGrade(array $featureTags): string
     {
-        $haystack = strtolower($coverId.' '.$coverName);
+        // Sin features no hay nada que clasificar. Pasa de verdad: Sancor manda "Auto Max 15"
+        // y "Garage" con la lista vacía. Se conserva el default histórico en vez de mandarlas
+        // a `liability`, que sería afirmar que no cubren robo sin tener el dato.
+        if ($featureTags === []) {
+            return 'basic';
+        }
+
+        $tags = array_map(mb_strtolower(...), $featureTags);
 
         return match (true) {
-            str_contains($haystack, 'todo riesgo'), str_contains($haystack, 'todo-riesgo'), str_contains($haystack, 'all-risk') => 'all_risk',
-            str_contains($haystack, 'terceros completo'), str_contains($haystack, 'terceros-completo') => 'third_party_complete',
-            str_contains($haystack, 'rc'), str_contains($haystack, 'responsabilidad civil'), str_contains($haystack, 'tercero') => 'liability',
-            default => 'basic',
+            // Daños al propio auto por accidente. Comparación EXACTA: `Daños Parciales por Robo`
+            // y `Daños Parciales al Amparo del Robo Total` son nivel C, no Todo Riesgo.
+            in_array('daños parciales', $tags, true),
+            in_array('todo riesgo', $tags, true),
+            in_array('todo riesgo sin franquicia', $tags, true) => 'all_risk',
+
+            // Robo parcial es la línea que separa B de C. Por substrings y no por igualdad:
+            // el vocabulario trae `Robo Parcial`, `Robo Total y Parcial`, `Robo o Hurto Total
+            // y Parcial`, `Daños Parciales por Robo` y `Daños Parciales al Amparo del Robo Total`.
+            array_any($tags, fn (string $tag): bool => str_contains($tag, 'robo') && str_contains($tag, 'parcial')) => 'third_party_complete',
+
+            array_any($tags, fn (string $tag): bool => str_contains($tag, 'robo') || str_contains($tag, 'incendio')) => 'basic',
+
+            default => 'liability',
         };
     }
 
