@@ -278,7 +278,7 @@
           <article v-else-if="escalon && planArriba && planAbajo" class="mg-card p-6">
             <p class="mg-display text-[26px]">Qué suma la más completa</p>
             <p class="text-[13px] mt-1.5" style="color: var(--mg-fg-dim)">
-              {{ leyendaEscalon }}
+              {{ introEscalon }}
             </p>
 
             <!-- La más completa -->
@@ -723,7 +723,7 @@ const escalon = computed(() => props.vista.comparacion?.escalon ?? null)
  * completo pelado y el que trae adicionales comparten nombre comercial y se le presentan como
  * el mismo producto. Cuando `cobertura.label` viene, es que comparten nombre.
  */
-const leyendaEscalon = computed(() =>
+const introEscalon = computed(() =>
   props.vista.cobertura.label === null
     ? 'Las dos que te recomendé son de niveles distintos. Esto es lo que las separa.'
     : 'Las dos son la misma cobertura, pero una cubre más. Esto es lo que las separa.',
