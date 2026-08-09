@@ -80,7 +80,11 @@ export type Vista = {
   expiresAt: string | null
   cotizadoEl: string | null
   vehiculo: Vehiculo
-  /** `label` es null cuando se muestran dos grados: no hay uno solo que sea cierto. */
+  /**
+   * `label` es null cuando los dos grados tienen nombres comerciales distintos. Con dos grados
+   * que comparten nombre —terceros completo pelado y con adicionales— sigue viniendo: para el
+   * cliente son el mismo producto y lo que cambia son las coberturas.
+   */
   cobertura: { grade: string | null; label: string | null }
   totalOpciones: number
   glosario: Glosario

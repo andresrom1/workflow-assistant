@@ -36,8 +36,16 @@ class CoveragePreferenceTool implements Mockable, Tool
         return [
             'coverage_code' => $schema->string()
                 ->enum(['A', 'B', 'C', 'D'])
-                ->description('Código de cobertura elegida: A=Responsabilidad Civil, B=Robo/Incendio Total, C=Terceros Completos, D=Todo Riesgo.')
+                ->description('Código de cobertura elegida: A=Responsabilidad Civil, B=Robo/Incendio Total, C=Terceros Completos, D=Todo Riesgo. '
+                    .'Si el cliente pidió varios niveles, poné acá el principal y la lista completa en coverage_codes.')
                 ->required(),
+            'coverage_codes' => $schema->array()
+                ->items($schema->string())
+                ->description('TODOS los niveles que el cliente pidió, cuando nombró más de uno: '
+                    .'"terceros completo y todo riesgo para comparar" son ["C","D"]. '
+                    .'Llamá la tool UNA sola vez con la lista completa, no una vez por nivel. '
+                    .'Si cambió de opinión, volvé a llamarla con la lista nueva: reemplaza a la anterior. '
+                    .'Podés omitirlo cuando pidió un solo nivel.'),
             'patente' => $schema->string()
                 ->description('Patente del vehículo para el que se registra la preferencia.')
                 ->required(),

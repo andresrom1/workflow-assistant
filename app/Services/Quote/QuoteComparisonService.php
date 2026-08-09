@@ -50,7 +50,10 @@ final class QuoteComparisonService
     private const GRADE_LABELS = [
         'liability' => 'Responsabilidad Civil',
         'basic' => 'Terceros Básico',
+        // C y C+A comparten label a propósito: la distinción sirve para elegir, no para
+        // mostrarle al cliente una categoría que ninguna aseguradora nombra así.
         'third_party_complete' => 'Terceros Completo',
+        'third_party_complete_plus' => 'Terceros Completo',
         'all_risk' => 'Todo Riesgo',
     ];
 
@@ -72,8 +75,12 @@ final class QuoteComparisonService
             $grades = array_slice($grades, 0, 1);
         }
 
+        // `esOfrecible()` saca las variantes que el checkout no puede cobrar. Además de no
+        // ofrecer lo impagable, deja una sola fila por producto: el dedupe de `visiblePlans()`
+        // colapsaba esas repeticiones a la más barata, pero por coincidencia — la variante de
+        // cupón es más cara, no un producto distinto.
         $alternativasVisibles = $quote->alternatives->filter(
-            fn (QuoteAlternative $a): bool => in_array($a->normalized_grade, $grades, true)
+            fn (QuoteAlternative $a): bool => $a->esOfrecible() && in_array($a->normalized_grade, $grades, true)
         );
 
         $glosario = $this->glossary($alternativasVisibles);
@@ -101,9 +108,14 @@ final class QuoteComparisonService
         // se calla el grado.
         $gradeUnico = count($grades) === 1 ? $grades[0] : null;
 
+        // Pero el label sí puede ser único con dos grados: C y C+A son el mismo producto comercial
+        // partido para poder elegir mejor, y al cliente los dos se le nombran "Terceros Completo".
+        // Sin esto, partir el bucket C dejaba sin título una página que antes lo tenía.
+        $labels = array_unique(array_map($this->gradeLabel(...), $grades));
+
         return [
             'grade' => $gradeUnico,
-            'gradeLabel' => $gradeUnico === null ? null : $this->gradeLabel($gradeUnico),
+            'gradeLabel' => count($labels) === 1 ? reset($labels) : null,
             'totalOpciones' => count($publicos),
             'glosario' => $glosario,
             'companias' => $this->groupByCompany($publicos),

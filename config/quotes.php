@@ -61,4 +61,30 @@ return [
         'Todo Riesgo Sin Franquicia',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Medios de pago ofrecibles
+    |--------------------------------------------------------------------------
+    |
+    | Visred cotiza el MISMO cover una vez por medio de pago: San Cristóbal manda tres
+    | (`cbu`, `tarjeta`, `cupon`) y el cupón sale hasta 22% más caro. Sin filtrar, el mismo
+    | plan aparece varias veces con precios distintos y el cupón entra como si fuera otro
+    | producto.
+    |
+    | El checkout solo procesa tarjeta de crédito, así que una alternativa que no se puede
+    | pagar tampoco se puede ofrecer. `cbu` queda afuera por eso, y no por precio: donde
+    | convive con `tarjeta` vale exactamente lo mismo.
+    |
+    | Efecto medido sobre la cotización de producción #12: 137 alternativas → 71, exactamente
+    | una por producto, sin perder ninguna compañía (las siete tienen variante con tarjeta).
+    |
+    | Cuando se habilite débito por CBU en el checkout, se suma `cbu` acá. `cupon` no va a
+    | entrar.
+    |
+    | opcion-de-configuracion
+    |
+    */
+
+    'medios_de_pago_ofrecibles' => ['tarjeta', 'tarjeta-cbu', 'todos'],
+
 ];

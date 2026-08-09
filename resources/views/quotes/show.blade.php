@@ -114,12 +114,16 @@
                                     'liability' => 'bg-gray-100 text-gray-600',
                                     'basic' => 'bg-orange-100 text-orange-700',
                                     'third_party_complete' => 'bg-blue-100 text-blue-700',
+                                    'third_party_complete_plus' => 'bg-blue-100 text-blue-700',
                                     'all_risk' => 'bg-purple-100 text-purple-700',
                                 ];
+                                // Acá se distingue C de C+A para poder auditar cuál se eligió;
+                                // al cliente se le muestran con el mismo nombre.
                                 $gradeLabel = [
                                     'liability' => 'Resp. Civil',
                                     'basic' => 'Básico',
                                     'third_party_complete' => 'Terceros Comp.',
+                                    'third_party_complete_plus' => 'Terceros Comp. +',
                                     'all_risk' => 'Todo Riesgo',
                                 ];
                             @endphp

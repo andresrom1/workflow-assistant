@@ -398,7 +398,7 @@
       <div v-if="escalon && planArriba && planAbajo" class="px-4 pb-5">
         <p class="mg-display text-[19px] pt-1">Qué suma la más completa</p>
         <p class="text-[12.5px] mt-1.5" style="color: var(--mg-fg-dim)">
-          Las dos que te recomendé son de niveles distintos. Esto es lo que las separa.
+          {{ leyendaEscalon }}
         </p>
 
         <!-- La más completa -->
@@ -713,6 +713,17 @@ const destacadas = computed(() => {
  * Cuando existe, el sheet deja de ser dos columnas simétricas.
  */
 const escalon = computed(() => props.vista.comparacion?.escalon ?? null)
+
+/**
+ * Dos grados distintos no siempre son dos niveles distintos para el cliente: el terceros
+ * completo pelado y el que trae adicionales comparten nombre comercial y se le presentan como
+ * el mismo producto. Cuando `cobertura.label` viene, es que comparten nombre.
+ */
+const leyendaEscalon = computed(() =>
+  props.vista.cobertura.label === null
+    ? 'Las dos que te recomendé son de niveles distintos. Esto es lo que las separa.'
+    : 'Las dos son la misma cobertura, pero una cubre más. Esto es lo que las separa.',
+)
 
 const planArriba = computed(() =>
   escalon.value === null ? null : planPorId(props.vista.companias, escalon.value.arribaPlanId),

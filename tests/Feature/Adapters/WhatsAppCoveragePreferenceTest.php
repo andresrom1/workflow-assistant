@@ -117,3 +117,164 @@ it('get_quote no inventa un pedido cuando no hay preferencia registrada', functi
     expect($result['success'])->toBeTrue()
         ->and($result['tool_output'])->not->toContain('El cliente pidió');
 });
+
+/**
+ * Visred cotiza el mismo cover una vez por medio de pago y el checkout solo procesa tarjeta.
+ * Sin filtrar, al closer le llega el mismo plan repetido —con el precio de cupón, más caro—
+ * como si fueran opciones distintas.
+ */
+it('get_quote solo ofrece alternativas que el checkout puede cobrar', function () {
+    $conversation = conversacionConVehiculo();
+
+    $quote = Quote::create([
+        'session_uuid' => (string) Str::uuid(),
+        'risk_snapshot_id' => RiskSnapshot::factory()->create()->id,
+        'conversation_id' => $conversation->id,
+        'status' => 'processed',
+    ]);
+
+    // El mismo producto, tal como lo manda San Cristóbal.
+    foreach ([['cbu', 100308], ['tarjeta', 100308], ['cupon', 122971]] as [$medio, $precio]) {
+        QuoteAlternative::create([
+            'quote_id' => $quote->id,
+            'aseguradora' => 'San Cristobal',
+            'titulo' => 'C Mega',
+            'normalized_grade' => 'third_party_complete_plus',
+            'precio' => $precio,
+            'moneda' => 'ARS',
+            'payment_method_id' => $medio,
+        ]);
+    }
+
+    $result = app(WhatsAppAdapter::class)->handleToolCall(
+        ['quoteId' => $quote->id],
+        'get_quote',
+        $conversation
+    );
+
+    $alternativas = json_decode($result['quotes'], true)['alternatives'];
+
+    expect($alternativas)->toHaveCount(1)
+        ->and($alternativas[0]['precio'])->toBe('100308.00');
+});
+
+/** Las cotizaciones anteriores a la columna no tienen medio de pago: sus links siguen abriendo. */
+it('get_quote conserva las alternativas sin medio de pago', function () {
+    $conversation = conversacionConVehiculo();
+
+    $quote = Quote::create([
+        'session_uuid' => (string) Str::uuid(),
+        'risk_snapshot_id' => RiskSnapshot::factory()->create()->id,
+        'conversation_id' => $conversation->id,
+        'status' => 'processed',
+    ]);
+    QuoteAlternative::create([
+        'quote_id' => $quote->id,
+        'aseguradora' => 'Galicia',
+        'titulo' => 'C80',
+        'normalized_grade' => 'third_party_complete',
+        'precio' => 73106.22,
+        'moneda' => 'ARS',
+        'payment_method_id' => null,
+    ]);
+
+    $result = app(WhatsAppAdapter::class)->handleToolCall(
+        ['quoteId' => $quote->id],
+        'get_quote',
+        $conversation
+    );
+
+    expect(json_decode($result['quotes'], true)['alternatives'])->toHaveCount(1);
+});
+
+/** Crea una cotización procesada para la conversación, vigente o vencida. */
+function cotizacionProcesada(Conversation $conversation, bool $vigente): Quote
+{
+    return Quote::create([
+        'session_uuid' => (string) Str::uuid(),
+        'risk_snapshot_id' => RiskSnapshot::factory()->create()->id,
+        'conversation_id' => $conversation->id,
+        'status' => 'processed',
+        'expires_at' => $vigente ? Quote::endOfBusinessDay() : now()->subDays(2),
+    ]);
+}
+
+/**
+ * El cliente puede pedir dos niveles en un mensaje, y entonces la tool se llama dos veces en el
+ * mismo turno: la primera resuelve la cotización y la segunda ya no encuentra ninguna pendiente.
+ * Eso le hacía decir al agente que no se pudo cotizar ese nivel — falso, y llegó a un cliente.
+ */
+it('no dice que no se pudo cotizar cuando ya hay una cotización lista', function () {
+    $conversation = conversacionConVehiculo();
+    cotizacionProcesada($conversation, vigente: true);
+
+    $result = app(WhatsAppAdapter::class)->handleToolCall([
+        'coverage_code' => 'D',
+        'patente' => 'AB123CD',
+    ], 'coverage_preference', $conversation);
+
+    expect($result['success'])->toBeTrue()
+        ->and($result['tool_output'])->toContain('Ya hay una cotización lista')
+        ->and($result['tool_output'])->not->toContain('no hay una cotización en marcha')
+        ->and($result['tool_output'])->not->toContain('derivar a un asesor');
+});
+
+/** Los precios valen por el día en que se cotizaron: una vencida no habilita seguir presentando. */
+it('una cotización vencida no cuenta como cotización lista', function () {
+    $conversation = conversacionConVehiculo();
+    cotizacionProcesada($conversation, vigente: false);
+
+    $result = app(WhatsAppAdapter::class)->handleToolCall([
+        'coverage_code' => 'D',
+        'patente' => 'AB123CD',
+    ], 'coverage_preference', $conversation);
+
+    expect($result['tool_output'])->toContain('no hay una cotización en marcha');
+});
+
+it('persiste los dos niveles cuando el cliente pide comparar', function () {
+    $conversation = conversacionConVehiculo();
+
+    app(WhatsAppAdapter::class)->handleToolCall([
+        'coverage_code' => 'D',
+        'coverage_codes' => ['C', 'D'],
+        'patente' => 'AB123CD',
+        'reasoning' => 'Quiere comparar el costo de los dos',
+    ], 'coverage_preference', $conversation);
+
+    expect(CoveragePreference::where('conversation_id', $conversation->id)->sole()->metadata['niveles_solicitados'])
+        ->toBe(['C', 'D']);
+});
+
+it('no guarda la lista de niveles cuando pidió uno solo', function () {
+    $conversation = conversacionConVehiculo();
+
+    app(WhatsAppAdapter::class)->handleToolCall([
+        'coverage_code' => 'C',
+        'coverage_codes' => ['C'],
+        'patente' => 'AB123CD',
+    ], 'coverage_preference', $conversation);
+
+    expect(CoveragePreference::where('conversation_id', $conversation->id)->sole()->metadata)->toBeNull();
+});
+
+it('get_quote le avisa al closer que el cliente pidió comparar dos niveles', function () {
+    $conversation = conversacionConVehiculo();
+
+    app(WhatsAppAdapter::class)->handleToolCall([
+        'coverage_code' => 'D',
+        'coverage_codes' => ['C', 'D'],
+        'patente' => 'AB123CD',
+    ], 'coverage_preference', $conversation);
+
+    $quote = cotizacionProcesada($conversation, vigente: true);
+
+    $result = app(WhatsAppAdapter::class)->handleToolCall(
+        ['quoteId' => $quote->id],
+        'get_quote',
+        $conversation
+    );
+
+    expect($result['tool_output'])->toContain('comparar las coberturas C y D')
+        ->and($result['tool_output'])->toContain('una de cada nivel');
+});

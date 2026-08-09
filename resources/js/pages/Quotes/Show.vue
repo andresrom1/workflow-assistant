@@ -202,15 +202,19 @@ const dotStyle = (s: string) => ({
 }[s] ?? 'background:var(--text-3);')
 
 const gradeStyle = (g: string) => ({
-  liability:            'background:var(--border-sub); color:var(--text-2);',
-  basic:                'background:#ffedd5; color:#9a3412;',
-  third_party_complete: 'background:var(--accent-100); color:var(--accent-600);',
-  all_risk:             'background:#f5f3ff; color:#6d28d9;',
+  liability:                 'background:var(--border-sub); color:var(--text-2);',
+  basic:                     'background:#ffedd5; color:#9a3412;',
+  third_party_complete:      'background:var(--accent-100); color:var(--accent-600);',
+  third_party_complete_plus: 'background:var(--accent-100); color:var(--accent-600);',
+  all_risk:                  'background:#f5f3ff; color:#6d28d9;',
 }[g] ?? 'background:var(--border-sub); color:var(--text-2);')
 
+// El admin sí distingue C de C+A — al cliente se le muestran con el mismo nombre, pero acá
+// hace falta para auditar cuál se eligió.
 const gradeLabel = (g: string) => ({
   liability: 'RC', basic: 'Básico',
-  third_party_complete: 'Terceros', all_risk: 'Todo Riesgo',
+  third_party_complete: 'Terceros', third_party_complete_plus: 'Terceros +',
+  all_risk: 'Todo Riesgo',
 }[g] ?? g)
 
 const formatPrice = (n: number) =>
