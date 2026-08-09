@@ -464,6 +464,30 @@ it('no arma escalón con el mismo grado aunque una contenga a la otra', function
         ->and($vista['gradeLabel'])->toBe('Responsabilidad Civil');
 });
 
+/**
+ * C y C+A son grados distintos pero el mismo producto comercial. Del lado del cliente tienen
+ * que seguir llamándose igual: el label se imprime, y lo que cambia es la lista de coberturas.
+ */
+it('un par C / C+A se compara como escalón sin nombrarle dos niveles al cliente', function (): void {
+    $pelada = alternativaConTags($this->quote, 'Galicia', 'C80', 71118.90, 'third_party_complete', [
+        'Responsabilidad Civil', 'Robo Total', 'Robo Parcial', 'Incendio Total', 'Cristales Laterales',
+    ]);
+    $conAdicionales = alternativaConTags($this->quote, 'Galicia', 'C Clima', 80984.16, 'third_party_complete_plus', [
+        'Responsabilidad Civil', 'Robo Total', 'Robo Parcial', 'Incendio Total', 'Cristales Laterales',
+        'Granizo', 'Parabrisas', 'Luneta',
+    ]);
+
+    $vista = $this->service->buildPublicView(presentar($this->quote, $conAdicionales, $pelada));
+
+    expect($vista['comparacion']['cruzada'])->toBeTrue()
+        ->and($vista['comparacion']['escalon']['arribaPlanId'])->toBe($conAdicionales->id)
+        ->and($vista['comparacion']['escalon']['abajoTitulo'])->toBe('C80')
+        ->and(array_column($vista['comparacion']['escalon']['sumaCoberturas'], 'label'))
+        ->toBe(['Granizo', 'Luneta', 'Parabrisas'])
+        // Los dos grados comparten label, así que el copy no se calla y no inventa categorías.
+        ->and($vista['gradeLabel'])->toBe('Terceros Completo');
+});
+
 // ── Vista anterior en /cotizaciones/{token}/B ───────────────────────────────
 
 it('con soloGradoRecomendado vuelve al comportamiento de un solo grado', function (): void {

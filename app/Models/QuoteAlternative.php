@@ -63,4 +63,24 @@ class QuoteAlternative extends Model
     {
         $query->where('normalized_grade', $grade);
     }
+
+    /**
+     * ¿Se le puede ofrecer al cliente?
+     *
+     * Visred cotiza el mismo cover una vez por medio de pago, y el checkout solo procesa
+     * tarjeta de crédito: ofrecer una variante que después no se puede pagar es venderle algo
+     * inexistente. Filtrando por esto la cotización queda además con una sola fila por
+     * producto — sin el filtro el mismo plan aparece hasta tres veces con precios distintos.
+     *
+     * Las alternativas anteriores al 2026-08-08 no tienen `payment_method_id` (la columna es
+     * nueva) y se conservan: los links de cotización ya enviados tienen que seguir abriendo.
+     */
+    public function esOfrecible(): bool
+    {
+        if ($this->payment_method_id === null) {
+            return true;
+        }
+
+        return in_array($this->payment_method_id, (array) config('quotes.medios_de_pago_ofrecibles', []), true);
+    }
 }

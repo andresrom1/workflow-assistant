@@ -69,13 +69,29 @@ function coberturasBasico(): array
     ];
 }
 
-/** @return list<array{id: string, name: string, description: string}> */
+/**
+ * Terceros completo pelado. Trae cristales laterales y cerraduras a propósito: **no** cuentan
+ * como adicional, y es justo lo que separa la Tercero Completo L de Experta de la XL.
+ *
+ * @return list<array{id: string, name: string, description: string}>
+ */
 function coberturasTercerosCompletos(): array
 {
     return [
         ...coberturasBasico(),
         ['id' => 'robo-parcial', 'name' => 'Robo Parcial', 'description' => 'Robo de partes.'],
+        ['id' => 'cristales-laterales', 'name' => 'Cristales Laterales', 'description' => 'Cristales de las puertas.'],
+        ['id' => 'cerraduras', 'name' => 'Cerraduras', 'description' => 'Cerraduras forzadas.'],
+    ];
+}
+
+/** @return list<array{id: string, name: string, description: string}> */
+function coberturasTercerosCompletosConAdicionales(): array
+{
+    return [
+        ...coberturasTercerosCompletos(),
         ['id' => 'granizo', 'name' => 'Granizo', 'description' => 'Daños parciales consecuencia del granizo.'],
+        ['id' => 'parabrisas', 'name' => 'Parabrisas', 'description' => 'Rotura del parabrisas.'],
     ];
 }
 
@@ -83,7 +99,7 @@ function coberturasTercerosCompletos(): array
 function coberturasTodoRiesgo(): array
 {
     return [
-        ...coberturasTercerosCompletos(),
+        ...coberturasTercerosCompletosConAdicionales(),
         ['id' => 'danos-parciales', 'name' => 'Daños Parciales', 'description' => 'Daños al propio vehículo.'],
     ];
 }
@@ -196,31 +212,9 @@ it('clasifica el grade por las coberturas y no por el nombre del plan', function
     expect($result['parsed_alternatives'][0]['normalized_grade'])->toBe($esperado);
 })->with([
     // Nombres que no dicen nada: antes caían todos al default `basic`.
-    'c80 sin granizo es un terceros completo' => [
-        'c80', 'C80',
-        [
-            ...coberturasBasico(),
-            ['id' => 'robo-parcial', 'name' => 'Robo Parcial', 'description' => 'Robo de partes.'],
-            ['id' => 'cristales-laterales', 'name' => 'Cristales Laterales', 'description' => 'Cristales.'],
-        ],
-        'third_party_complete',
-    ],
-    'c-clima con granizo es un terceros completo' => [
-        'c-clima', 'C Clima', coberturasTercerosCompletos(), 'third_party_complete',
-    ],
-
-    // Antes caían a `liability` por el substring `rc` dentro de "te[rc]ero" y "pa[rc]ial".
-    'tercero-completo-xl no es responsabilidad civil' => [
-        't-completo-xl-granizo-fullextra-large', 'Tercero Completo XL + Granizo Full',
-        coberturasTercerosCompletos(), 'third_party_complete',
-    ],
     'un cover id que enumera "parcial" no es responsabilidad civil' => [
         'c1-robo-e-incendio-total-y-parcial', 'C1 - Robo e Incendio Total y Parcial',
-        [
-            ...coberturasBasico(),
-            ['id' => 'robo-parcial', 'name' => 'Robo Parcial', 'description' => 'Robo de partes.'],
-        ],
-        'third_party_complete',
+        coberturasTercerosCompletos(), 'third_party_complete',
     ],
 
     // Robo/incendio total sin parcial: es un B aunque el nombre diga otra cosa.
@@ -239,7 +233,7 @@ it('clasifica el grade por las coberturas y no por el nombre del plan', function
     ],
     // ...pero las variantes "por Robo" y "al Amparo del Robo Total" son nivel C, no D.
     'danos parciales al amparo del robo no es todo riesgo' => [
-        'c8', 'C8',
+        'c-robo-e-incendio-total-y-parcial-dest-total', 'C - Auto Plus',
         [
             ...coberturasBasico(),
             ['id' => 'danos-parciales-amparo-robo', 'name' => 'Daños Parciales al Amparo del Robo Total', 'description' => 'Daños durante el robo.'],
@@ -251,6 +245,74 @@ it('clasifica el grade por las coberturas y no por el nombre del plan', function
     // histórico: sin datos no se puede afirmar que no cubren robo.
     'sin features conserva basic' => [
         'garage', 'Garage', [], 'basic',
+    ],
+]);
+
+/**
+ * El escalón C / C+A, con los pares reales de la cotización de producción #12. Cada compañía
+ * tiene los dos y los nombra: L contra XL, BASICA contra PLUS, Auto Max 3 contra Auto Max 6.
+ */
+it('separa el terceros completo pelado del que trae adicionales', function (
+    string $coverId,
+    string $coverName,
+    array $features,
+    string $esperado,
+) {
+    Http::fake([
+        COMPANIES_URL => companiesResponse(),
+        DISCOUNT_URL => Http::response([]),
+        COTIZAR_URL => Http::response(['tasks_list' => [['task_id' => 't1', 'company_id' => 'sancor']]]),
+        'https://visred.test/v1/tasks/t1/' => taskSuccess('sancor', [
+            coverResult(1, $coverId, $coverName, 1000.0, features: $features),
+        ]),
+    ]);
+
+    $result = app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken());
+
+    expect($result['parsed_alternatives'][0]['normalized_grade'])->toBe($esperado);
+})->with([
+    'Galicia C80 no trae adicionales' => [
+        'c80', 'C80', coberturasTercerosCompletos(), 'third_party_complete',
+    ],
+    'Galicia C Clima trae granizo' => [
+        'c-clima', 'C Clima', coberturasTercerosCompletosConAdicionales(), 'third_party_complete_plus',
+    ],
+    'Experta Tercero Completo L no trae adicionales' => [
+        'tercero-completo-l', 'Tercero Completo L', coberturasTercerosCompletos(), 'third_party_complete',
+    ],
+    'Experta Tercero Completo XL trae adicionales' => [
+        'tercero-completo-xl', 'Tercero Completo XL', coberturasTercerosCompletosConAdicionales(), 'third_party_complete_plus',
+    ],
+    'Sancor Auto Max 3 no trae adicionales' => [
+        'auto-max-3', 'Auto Max 3', coberturasTercerosCompletos(), 'third_party_complete',
+    ],
+    'Sancor Auto Max 6 trae adicionales' => [
+        'auto-max-6', 'Auto Max 6', coberturasTercerosCompletosConAdicionales(), 'third_party_complete_plus',
+    ],
+
+    // Cada adicional alcanza por sí solo. Inundación va por prefijo porque el vocabulario
+    // trae también `Inundación o Desbordamiento`.
+    'la luneta sola alcanza' => [
+        'c8', 'C8',
+        [...coberturasTercerosCompletos(), ['id' => 'luneta', 'name' => 'Luneta', 'description' => 'Luneta trasera.']],
+        'third_party_complete_plus',
+    ],
+    'inundacion o desbordamiento alcanza' => [
+        'c2-full', 'C2 FUll',
+        [...coberturasTercerosCompletos(), ['id' => 'inundacion', 'name' => 'Inundación o Desbordamiento', 'description' => 'Inundación.']],
+        'third_party_complete_plus',
+    ],
+    'caida de arboles alcanza' => [
+        'c-clima', 'C Clima',
+        [...coberturasTercerosCompletos(), ['id' => 'caida-arboles', 'name' => 'Caída de árboles', 'description' => 'Caída de árboles.']],
+        'third_party_complete_plus',
+    ],
+
+    // El escalón vive SOLO dentro de C: sin robo parcial no hay C+A por más granizo que traiga.
+    'granizo sin robo parcial sigue siendo basico' => [
+        'auto-max-15', 'Auto Max 15',
+        [...coberturasBasico(), ['id' => 'granizo', 'name' => 'Granizo', 'description' => 'Granizo.']],
+        'basic',
     ],
 ]);
 

@@ -531,6 +531,9 @@ class VisredQuotationProvider implements QuotationProvider
      * de producción #10: 47 de 137 cambian, `third_party_complete` pasa de 0 a 43 y ninguna
      * `all_risk` se mueve.
      *
+     * El nivel C se parte en dos porque agrupa dos intenciones de compra distintas — ver
+     * {@see self::tieneAdicionales()}.
+     *
      * @param  list<string>  $featureTags  Nombres de cobertura ya extraídos por featureNames().
      */
     private function normalizedGrade(array $featureTags): string
@@ -554,12 +557,51 @@ class VisredQuotationProvider implements QuotationProvider
             // Robo parcial es la línea que separa B de C. Por substrings y no por igualdad:
             // el vocabulario trae `Robo Parcial`, `Robo Total y Parcial`, `Robo o Hurto Total
             // y Parcial`, `Daños Parciales por Robo` y `Daños Parciales al Amparo del Robo Total`.
-            array_any($tags, fn (string $tag): bool => str_contains($tag, 'robo') && str_contains($tag, 'parcial')) => 'third_party_complete',
+            $this->tieneRoboParcial($tags) => $this->tieneAdicionales($tags)
+                ? 'third_party_complete_plus'
+                : 'third_party_complete',
 
             array_any($tags, fn (string $tag): bool => str_contains($tag, 'robo') || str_contains($tag, 'incendio')) => 'basic',
 
             default => 'liability',
         };
+    }
+
+    /**
+     * Robo parcial: la línea que separa B de C.
+     *
+     * @param  list<string>  $tags  Ya en minúsculas.
+     */
+    private function tieneRoboParcial(array $tags): bool
+    {
+        return array_any($tags, fn (string $tag): bool => str_contains($tag, 'robo') && str_contains($tag, 'parcial'));
+    }
+
+    /**
+     * Los adicionales que separan un terceros completo pelado de uno con adicionales.
+     *
+     * El nivel C agrupa dos productos que se venden distinto, y no es una distinción nuestra:
+     * las siete compañías tienen los dos escalones y los nombran — Experta **L** contra **XL**,
+     * Mercantil **M BASICA** contra **M PLUS**, San Cristóbal **C - Auto Plus** contra
+     * **Auto Plus +**, Sancor **Auto Max 3** contra **Auto Max 6**, Galicia **C80** contra
+     * **C Clima**, Triunfo **C1** contra **C2**. Sin partirlo, un cliente que pide "terceros
+     * completo" se lleva el más pelado del lote por ser el más barato del nivel.
+     *
+     * `Cristales Laterales` y `Cerraduras` **no** cuentan como adicional: es justo lo que trae
+     * la Tercero Completo L de Experta, que es el escalón base de esa compañía. Los cristales
+     * que marcan el salto son el parabrisas, la luneta y el techo.
+     *
+     * Calibrado contra la cotización de producción #12: de 43 terceros completos, 19 quedan en
+     * C y 24 en C+A, y el corte reproduce la escalera comercial de las siete compañías.
+     *
+     * @param  list<string>  $tags  Ya en minúsculas.
+     */
+    private function tieneAdicionales(array $tags): bool
+    {
+        return array_any($tags, fn (string $tag): bool => in_array($tag, ['luneta', 'parabrisas', 'granizo', 'cristal de techo'], true)
+            // Por prefijo: el vocabulario trae `Inundación` y `Inundación o Desbordamiento`.
+            || str_starts_with($tag, 'inundación')
+            || str_starts_with($tag, 'caída de árboles'));
     }
 
     /**

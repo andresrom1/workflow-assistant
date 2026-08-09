@@ -315,6 +315,10 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             'coberturas_requeridas' => 'sometimes|array',
             'coberturas_requeridas.*' => 'string',
             'reasoning' => 'sometimes|string',
+            // Un cliente puede pedir dos niveles para comparar. `preference` guarda uno solo,
+            // así que sin esto el pedido se perdía a la mitad.
+            'coverage_codes' => 'sometimes|array',
+            'coverage_codes.*' => 'string|in:A,B,C,D',
         ]);
 
         $data['patente'] = $this->plate->normalize($data['patente']);
@@ -334,8 +338,12 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
 
         $quoteId = null;
 
+        // Un solo nivel pedido no necesita la lista: `preference` ya lo dice.
+        $niveles = array_values(array_unique($data['coverage_codes'] ?? []));
+
         $metadata = array_filter([
             'coberturas_requeridas' => array_values($data['coberturas_requeridas'] ?? []),
+            'niveles_solicitados' => count($niveles) > 1 ? $niveles : [],
             'reasoning' => $data['reasoning'] ?? null,
         ], fn (mixed $valor): bool => $valor !== null && $valor !== []);
 
@@ -375,14 +383,40 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         $resolved = $this->tryResolveQuoteById($quoteId);
         $pendingFact = data_get($conversation->metadata, 'pending_vehicle_fact');
 
+        $guardada = "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}.";
+
         $message = match (true) {
-            $resolved => "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}. Cotización procesada; preparando las alternativas para presentártelas.",
-            $quoteId !== null => "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}. La oferta será procesada en breve.",
-            $pendingFact !== null => "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}, pero falta un dato del vehículo para poder cotizar: {$pendingFact['fact']}. Preguntáselo al cliente y registralo con provide_vehicle_fact.",
-            default => "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}, pero no hay una cotización en marcha para este vehículo. Explicáselo al cliente con honestidad y ofrecé derivar a un asesor.",
+            $resolved => "{$guardada} Cotización procesada; preparando las alternativas para presentártelas.",
+            $quoteId !== null => "{$guardada} La oferta será procesada en breve.",
+
+            // El cliente puede pedir dos niveles en un mensaje, y entonces esta tool se llama dos
+            // veces en el mismo turno: la primera resuelve la cotización y la segunda ya no
+            // encuentra ninguna pendiente. Sin este caso el mensaje de abajo le hacía decir al
+            // agente que no se pudo cotizar ese nivel y ofrecer derivar a un humano — falso, la
+            // cotización trae todos los niveles que la compañía tenga y la preferencia no decide
+            // qué se cotiza. Ver ROADMAP, bitácora 2026-08-09.
+            $this->cotizacionVigenteDe($conversation) !== null => "{$guardada} Ya hay una cotización lista para este vehículo y la preferencia quedó registrada sobre ella. Seguí presentando las alternativas: NO le digas al cliente que no se pudo cotizar ni le ofrezcas derivarlo a un asesor.",
+
+            $pendingFact !== null => "{$guardada} Falta un dato del vehículo para poder cotizar: {$pendingFact['fact']}. Preguntáselo al cliente y registralo con provide_vehicle_fact.",
+            default => "{$guardada} Pero no hay una cotización en marcha para este vehículo. Explicáselo al cliente con honestidad y ofrecé derivar a un asesor.",
         };
 
         return $this->formatSuccess($message, ['vehicle_id' => $vehicle->id]);
+    }
+
+    /**
+     * La cotización ya resuelta de la conversación, si sigue siendo usable hoy.
+     *
+     * Exige vigencia y no solo existencia: los precios valen por el día en que se cotizaron,
+     * así que una de anteayer no habilita decirle al agente que siga presentando alternativas.
+     */
+    private function cotizacionVigenteDe(Conversation $conversation): ?Quote
+    {
+        return $conversation->quotes()
+            ->where('status', 'processed')
+            ->vigente()
+            ->latest()
+            ->first();
     }
 
     /**
@@ -426,20 +460,26 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             );
         }
 
-        $alternatives = $quote->alternatives->map(fn (QuoteAlternative $alt): array => [
-            'quote_id' => $quote->id,
-            'quote_alternative_id' => $alt->id,
-            'aseguradora' => $alt->aseguradora,
-            'titulo' => $alt->titulo,
-            'descripcion' => $alt->descripcion,
-            'normalized_grade' => $alt->normalized_grade,
-            'precio' => $alt->precio,
-            'moneda' => $alt->moneda,
-            'marketing_title' => $alt->marketing_title,
-            'sum_insured_text' => $alt->sum_insured_text,
-            'features_tags' => $alt->features_tags,
-            'full_details' => $alt->full_details,
-        ]);
+        // El closer solo puede ofrecer lo que el checkout puede cobrar. De paso deja una sola
+        // fila por producto: sin esto el mismo plan le llega repetido con el precio de cupón,
+        // que es más caro, como si fueran opciones distintas.
+        $alternatives = $quote->alternatives
+            ->filter(fn (QuoteAlternative $alt): bool => $alt->esOfrecible())
+            ->values()
+            ->map(fn (QuoteAlternative $alt): array => [
+                'quote_id' => $quote->id,
+                'quote_alternative_id' => $alt->id,
+                'aseguradora' => $alt->aseguradora,
+                'titulo' => $alt->titulo,
+                'descripcion' => $alt->descripcion,
+                'normalized_grade' => $alt->normalized_grade,
+                'precio' => $alt->precio,
+                'moneda' => $alt->moneda,
+                'marketing_title' => $alt->marketing_title,
+                'sum_insured_text' => $alt->sum_insured_text,
+                'features_tags' => $alt->features_tags,
+                'full_details' => $alt->full_details,
+            ]);
 
         return $this->formatSuccess(
             "Cotización #{$quote->id} obtenida. Usá quote_id={$quote->id} para el checkout."
@@ -466,7 +506,11 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             return '';
         }
 
-        $recordatorio = " El cliente pidió cobertura {$preferencia->preference}.";
+        $niveles = $preferencia->metadata['niveles_solicitados'] ?? [];
+
+        $recordatorio = is_array($niveles) && count($niveles) > 1
+            ? ' El cliente pidió comparar las coberturas '.implode(' y ', $niveles).'. Presentá una de cada nivel.'
+            : " El cliente pidió cobertura {$preferencia->preference}.";
 
         $requeridas = $preferencia->metadata['coberturas_requeridas'] ?? [];
 
