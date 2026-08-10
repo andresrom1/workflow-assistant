@@ -58,6 +58,21 @@ return [
 
         // Conexión dedicada para procesamiento de media (descarga + STT).
         // retry_after debe superar el --timeout del worker (120s).
+        /*
+         * Cotización contra el proveedor. Es la operación más larga del sistema: el POST a
+         * Visred más el polling de una task por compañía llegó a medirse en 174s en prod.
+         * `retry_after` tiene que quedar POR ENCIMA del timeout del job (360s), si no la cola
+         * lo re-reserva mientras sigue corriendo y quedan dos consultas en paralelo.
+         */
+        'database_quotes' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'quotes',
+            'retry_after' => 420,
+            'after_commit' => false,
+        ],
+
         'database_media' => [
             'driver' => 'database',
             'connection' => env('DB_QUEUE_CONNECTION'),

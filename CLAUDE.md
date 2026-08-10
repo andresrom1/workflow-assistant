@@ -226,19 +226,60 @@ inservible para la espera de la cotización (30-60s): no se puede rearmar porque
 mensaje nuevo al cual anclarlo, y un "escribiendo…" de un minuto se lee como que el bot se colgó.
 Esa espera la cubre el aviso de texto fijo, ver abajo.
 
-### El aviso de espera de la cotización sale ANTES de la espera
+### La cotización corre en paralelo, fuera del turno
 
-`WhatsAppAdapter::coveragePreference()` resuelve la cotización **sincrónicamente dentro del tool**
-(`tryResolveQuoteById`), y esa llamada a las compañías tarda 25-60s — es la razón de que
-`CoveragePreferenceAgent` mida p50 de 25s contra 2,5s del identificador.
+**`ResolveQuote` (cola `quotes`) se despacha en `WhatsAppAdapter::onQuotable()`**, o sea al
+identificar el vehículo — no al elegir la cobertura. `buildRequest()` manda vehículo, año y CP:
+**no manda la preferencia de cobertura**, así que no hay nada que esperar y los 30-174s de las
+compañías transcurren mientras el agente indaga.
 
-Por eso el aviso ("estoy consultando…") es **texto fijo despachado por el adapter antes** de esa
-llamada, no algo que redacte el LLM: el texto del LLM se genera al final del turno, o sea que el
-anuncio de la espera llegaba cuando la espera ya había terminado. El `tool_output` posterior le
-instruye al agente que **no lo repita**.
+Historia, para que no se repita: hasta el 2026-08-10 `coveragePreference()` llamaba a
+`tryResolveQuoteById()` **inline**. El polling contra Visred (un `while` con sleep de 4s por task)
+dormía el proceso del turno hasta 174s medidos, contra un techo de 180s del worker `whatsapp-ai`.
+Al pasarse, el proceso moría después de que las compañías respondieran y antes de que
+`saveResults()` las guardara: se perdía la cotización entera. Y el turno retenía el lock
+`inbox:{id}` todo ese rato, así que el bot quedaba sordo. Ver ROADMAP, bitácora 2026-08-10.
 
-Si algún día la resolución pasa a ser asíncrona, se libera además el lock `inbox:{id}` — hoy el bot
-queda sordo durante esa espera.
+**El job no lleva el lock `inbox:{id}`** — es el punto: mientras corre, la conversación sigue.
+
+#### Las dos precondiciones para presentar
+
+Presentar depende de **quote `processed`** y **`coverage_set` en true**, y desde que la consulta se
+adelantó pueden cumplirse en cualquier orden.
+
+**Regla: el que completa la segunda de las dos despacha `NotifyClientQuoteReady`.**
+
+| Situación | Quién dispara |
+|---|---|
+| Termina la cotización, cobertura ya elegida | `ApiQuoteResolution` |
+| Termina la cotización, cobertura **no** elegida | nadie — el guard de `coverage_set` lo hace salir limpio |
+| El cliente elige cobertura, quote ya `processed` | `coveragePreference()` |
+
+Sin el guard, una cotización rápida presenta las alternativas **salteándose la pregunta de
+cobertura**.
+
+`coveragePreference()` despacha el job en vez de presentar directo porque
+**`CoveragePreferenceAgent` no tiene `get_quote`** (la tiene solo `QuoteAgent`). El job abre un
+turno nuevo, y para ese turno `coverage_set` ya está en true → el orquestador entrega QuoteAgent.
+
+#### El aviso de espera es condicional
+
+Si al elegir cobertura la consulta sigue en vuelo, sale un **texto fijo** despachado por el adapter
+(`whatsapp.quote_wait_notice`). No lo redacta el LLM: el texto del LLM se genera al final del turno.
+Si la cotización ya está lista, **no sale ningún aviso** — se presenta y listo.
+
+#### Camino de fallo
+
+`QuoteService::resolveQuote()` **atrapa sus excepciones y devuelve `false`**, así que un fallo del
+proveedor NO llega por `ResolveQuote::failed()`. El aviso al cliente
+(`NotifyClientQuoteFailed`, texto fijo, sin LLM) se despacha desde los dos lados —el retorno `false`
+y `failed()`— y es idempotente por `quote_id`.
+
+#### Presupuestos
+
+`poll_budget` (240s) < `ResolveQuote::$timeout` (360s) < `retry_after` de `database_quotes` (420s).
+El worker de la cola `quotes` vive en `.docker/start.sh`: **si no está, los jobs se encolan y no los
+corre nadie**, y el síntoma es idéntico al bug viejo (aviso y después silencio).
 
 ### Idempotencia
 Use the `wamid` (WhatsApp message ID) as cache key: `processed_wamid_{wamid}`.

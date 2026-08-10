@@ -34,11 +34,16 @@ return [
     |
     | `cotizar/` es asíncrono: devuelve una task por compañía y se hace polling
     | hasta terminal o hasta agotar el budget. Presupuesto total (segundos) e
-    | intervalo entre polls. Invariante: poll_budget + overhead_LLM < timeout del
-    | job de IA (ProcessConversationInbox = 180s). Ver PLAN §"Contrato de polling".
+    | intervalo entre polls.
+    |
+    | Invariante: poll_budget < timeout de ResolveQuote (360s), que es el job que
+    | corre la consulta. Antes el techo era el del turno de IA
+    | (ProcessConversationInbox = 180s) porque la consulta corría adentro del turno;
+    | con 120s de budget una cotización de 174s reales moría sin guardar nada. Ver
+    | ROADMAP, bitácora 2026-08-10.
     |
     */
-    'poll_budget' => (int) env('VISRED_POLL_BUDGET', 120),
+    'poll_budget' => (int) env('VISRED_POLL_BUDGET', 240),
     'poll_interval' => (int) env('VISRED_POLL_INTERVAL', 4),
 
     /*

@@ -56,7 +56,8 @@ grep -rn "opcion-de-configuracion" workflow-assistant/
 | Tope duro de espera del inbox | `config/whatsapp.php` (`inbox_max_wait_seconds`) | env `WHATSAPP_INBOX_MAX_WAIT_SECONDS`; default **15s** | **A** — techo de la ventana deslizante |
 | Intercepciones máximas por turno | `config/whatsapp.php` (`inbox_max_intercepts`) | env `WHATSAPP_INBOX_MAX_INTERCEPTS`; default **2** | **A** — cuántas respuestas ya generadas se pueden descartar por seguidilla |
 | Typing indicator on/off | `config/whatsapp.php` (`typing_indicator_enabled`) | env `WHATSAPP_TYPING_INDICATOR_ENABLED`; default **true** | **A** |
-| Aviso de espera de la cotización | `config/whatsapp.php` (`quote_wait_notice`) | env `WHATSAPP_QUOTE_WAIT_NOTICE` | **A** — copy de cara al cliente; hoy requiere deploy |
+| Aviso de espera de la cotización | `config/whatsapp.php` (`quote_wait_notice`) | env `WHATSAPP_QUOTE_WAIT_NOTICE` | **A** — copy de cara al cliente; hoy requiere deploy. Solo sale si al elegir cobertura la consulta sigue en vuelo |
+| Presupuesto de polling a Visred | `config/visred.php` (`poll_budget`) | env `VISRED_POLL_BUDGET`; default **240s** | **B** — atado al timeout de `ResolveQuote` (360s), no se toca por separado |
 | Número público wa.me (landing) | `config/whatsapp.php` (`public_number`) | env `WHATSAPP_PUBLIC_NUMBER` | **A** — marketing editable; hoy requiere deploy |
 | URL de descarga de la app (landing) | `config/whatsapp.php` (`app_download_url`) | env `MANGO_APP_DOWNLOAD_URL` | **A** — idem |
 | Nombres de templates Meta (3) | `config/whatsapp.php` (`templates.*`) | env `WHATSAPP_TEMPLATE_*`; defaults placeholder | **B** — atados a aprobación de Meta |

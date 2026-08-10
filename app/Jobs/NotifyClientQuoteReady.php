@@ -19,7 +19,16 @@ class NotifyClientQuoteReady implements ShouldQueue
     use DespachaRespuestaDelAgente;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries = 2;
+    /**
+     * Alto a propósito, igual que en {@see ProcessConversationInbox}: este job espera el lock
+     * `inbox:{id}` y cada `release()` del middleware consume un intento. Con la cotización
+     * corriendo en paralelo al turno (ver {@see ResolveQuote}), puede terminar justo mientras el
+     * cliente escribe — y con `tries = 2` moría contra el lock y la cotización no se entregaba
+     * nunca. Los fallos reales los sigue acotando `maxExceptions`.
+     */
+    public int $tries = 10;
+
+    public int $maxExceptions = 3;
 
     public int $backoff = 30;
 
@@ -51,6 +60,19 @@ class NotifyClientQuoteReady implements ShouldQueue
 
         if ($conversation->aiState()['quote_ready']) {
             Log::info('NotifyClientQuoteReady: cotización ya enviada, saliendo', ['conversation_id' => $this->conversationId]);
+
+            return;
+        }
+
+        // La cotización arranca al identificar el vehículo, así que puede terminar ANTES de que el
+        // cliente elija cobertura. Presentar acá se saltearía esa pregunta. Los resultados ya
+        // quedaron guardados: cuando el cliente elija, `coveragePreference()` vuelve a despachar
+        // este job. Regla: presenta el que completa la segunda de las dos condiciones.
+        if (! $conversation->aiState()['coverage_set']) {
+            Log::info('NotifyClientQuoteReady: cobertura todavía sin elegir, no se presenta', [
+                'conversation_id' => $this->conversationId,
+                'quote_id' => $this->quoteId,
+            ]);
 
             return;
         }

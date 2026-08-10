@@ -4,6 +4,8 @@ namespace App\Adapters\AIProviders;
 
 use App\Contracts\AIProviderAdapterInterface;
 use App\Contracts\Quotability;
+use App\Jobs\NotifyClientQuoteReady;
+use App\Jobs\ResolveQuote;
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\Conversation;
 use App\Models\CoveragePreference;
@@ -230,7 +232,12 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
 
     /**
      * Quotable: crea la cotización pendiente, persiste el token opaco del
-     * proveedor (genérico, en risk_provider_refs) y promete la oferta.
+     * proveedor (genérico, en risk_provider_refs) y dispara la consulta.
+     *
+     * La consulta arranca ACÁ y no al elegir la cobertura: la request a Visred no incluye la
+     * preferencia de cobertura (`buildRequest()` manda vehículo, año y CP), así que no hay nada que
+     * esperar. Los 30-174s de las compañías transcurren mientras el agente indaga la cobertura, en
+     * vez de dejar al cliente mirando una pantalla quieta. Ver ROADMAP, bitácora 2026-08-10.
      */
     private function onQuotable(Conversation $conversation, Customer $customer, Vehicle $vehicle, string $sessionUuid, QuotabilityResult $result): array
     {
@@ -243,9 +250,11 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
 
         $this->clearPendingVehicleFact($conversation);
 
+        ResolveQuote::dispatch($quote->id);
+
         return $this->formatSuccess(
-            "Vehículo registrado correctamente. Cotización #{$quote->id} iniciada. "
-            .'Indagá al cliente sobre la cobertura deseada para proceder con la oferta.',
+            "Vehículo registrado correctamente. Cotización #{$quote->id} iniciada y ya en consulta "
+            .'con las compañías. Indagá al cliente sobre la cobertura deseada mientras tanto.',
             ['quote_id' => $quote->id]
         );
     }
@@ -337,7 +346,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             );
         }
 
-        $quoteId = null;
+        $quoteEnCurso = null;
 
         // Un solo nivel pedido no necesita la lista: `preference` ya lo dice.
         $niveles = array_values(array_unique($data['coverage_codes'] ?? []));
@@ -349,7 +358,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         ], fn (mixed $valor): bool => $valor !== null && $valor !== []);
 
         try {
-            DB::transaction(function () use ($conversation, $vehicle, $data, $metadata, &$quoteId): void {
+            DB::transaction(function () use ($conversation, $vehicle, $data, $metadata, &$quoteEnCurso): void {
                 $this->coverageService->saveCoveragePreference(
                     $conversation->id,
                     $vehicle->id,
@@ -357,14 +366,17 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
                     $metadata === [] ? null : $metadata
                 );
 
-                $quote = $conversation->quotes()
+                // La quote pendiente es la consulta en vuelo; si ya no hay ninguna, la vigente es
+                // la que terminó mientras el agente indagaba la cobertura. La preferencia se
+                // registra sobre la que corresponda: desde que la consulta se adelantó al paso
+                // del vehículo, el caso normal es que ya esté resuelta.
+                $quoteEnCurso = $conversation->quotes()
                     ->where('status', 'pending')
                     ->latest()
-                    ->first();
+                    ->first() ?? $this->cotizacionVigenteDe($conversation);
 
-                if ($quote) {
-                    $this->quoteService->updateSnapshotPreference($quote, $data['preference']);
-                    $quoteId = $quote->id;
+                if ($quoteEnCurso instanceof Quote) {
+                    $this->quoteService->updateSnapshotPreference($quoteEnCurso, $data['preference']);
                 }
             });
         } catch (\Throwable $e) {
@@ -381,29 +393,36 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             );
         }
 
-        // El aviso sale ANTES de consultar a las compañías, no después: la consulta es
-        // sincrónica y tarda 25-60s, así que si el cliente esperara al texto del LLM se
-        // enteraría de la espera recién cuando ya terminó. Ver ROADMAP, bitácora 2026-08-10.
-        $this->avisarEsperaDeCotizacion($conversation, $quoteId);
-
-        $resolved = $this->tryResolveQuoteById($quoteId);
+        $enVuelo = $quoteEnCurso instanceof Quote && $quoteEnCurso->status === 'pending';
+        $lista = $quoteEnCurso instanceof Quote && ! $enVuelo;
         $pendingFact = data_get($conversation->metadata, 'pending_vehicle_fact');
+
+        if ($enVuelo) {
+            // Todavía no volvieron las compañías: el aviso de espera es texto fijo y sale ya, no
+            // al final del turno, para que el cliente sepa que arrancó.
+            $this->avisarEsperaDeCotizacion($conversation, $quoteEnCurso->id);
+        }
+
+        if ($lista) {
+            // Las alternativas ya están, pero CoveragePreferenceAgent no tiene `get_quote`: no
+            // puede presentarlas en este turno. Este job abre uno nuevo, y para ese turno
+            // `coverage_set` ya está en true, así que el orquestador entrega QuoteAgent.
+            NotifyClientQuoteReady::dispatch($conversation->id, $quoteEnCurso->id)
+                ->onConnection('database_ai')
+                ->onQueue('whatsapp-ai');
+        }
 
         $guardada = "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}.";
 
         $message = match (true) {
-            // Al cliente YA se le avisó que estás consultando (mensaje automático, antes de
-            // esta línea). Si el agente lo repite, el cliente lee dos veces el mismo anuncio.
-            $resolved => "{$guardada} Cotización procesada. Al cliente ya se le avisó que estabas consultando: NO se lo repitas ni le digas que vas a consultar. Pasá directo a presentar las alternativas.",
-            $quoteId !== null => "{$guardada} La oferta será procesada en breve.",
+            $enVuelo => "{$guardada} La consulta a las compañías está en marcha desde que registraste el vehículo. Al cliente ya se le avisó que estás consultando: NO se lo repitas. Confirmá la preferencia en una frase y esperá — NO inventes alternativas, te avisan cuando lleguen.",
 
-            // El cliente puede pedir dos niveles en un mensaje, y entonces esta tool se llama dos
-            // veces en el mismo turno: la primera resuelve la cotización y la segunda ya no
-            // encuentra ninguna pendiente. Sin este caso el mensaje de abajo le hacía decir al
-            // agente que no se pudo cotizar ese nivel y ofrecer derivar a un humano — falso, la
-            // cotización trae todos los niveles que la compañía tenga y la preferencia no decide
-            // qué se cotiza. Ver ROADMAP, bitácora 2026-08-09.
-            $this->cotizacionVigenteDe($conversation) !== null => "{$guardada} Ya hay una cotización lista para este vehículo y la preferencia quedó registrada sobre ella. Seguí presentando las alternativas: NO le digas al cliente que no se pudo cotizar ni le ofrezcas derivarlo a un asesor.",
+            // Cubre dos casos que terminan igual: la consulta terminó mientras indagabas la
+            // cobertura (el normal desde que se adelantó al paso del vehículo), y el cliente que
+            // pide dos niveles en un mensaje y dispara esta tool dos veces en el mismo turno.
+            // Sin esto, el mensaje de abajo le hacía decir al agente que no se pudo cotizar y
+            // ofrecer derivar a un humano — falso. Ver ROADMAP, bitácora 2026-08-09.
+            $lista => "{$guardada} Las alternativas ya están listas y se van a presentar enseguida. NO le digas al cliente que no se pudo cotizar ni le ofrezcas derivarlo a un asesor.",
 
             $pendingFact !== null => "{$guardada} Falta un dato del vehículo para poder cotizar: {$pendingFact['fact']}. Preguntáselo al cliente y registralo con provide_vehicle_fact.",
             default => "{$guardada} Pero no hay una cotización en marcha para este vehículo. Explicáselo al cliente con honestidad y ofrecé derivar a un asesor.",
@@ -674,41 +693,6 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             $conversation->id,
             'quote_wait_notice',
         )->onQueue('whatsapp-outbound');
-    }
-
-    /**
-     * Intenta disparar la resolución de una quote pendiente.
-     * Devuelve true si tuvo éxito, false si la quote ya no estaba pendiente o falló.
-     */
-    private function tryResolveQuoteById(?int $quoteId): bool
-    {
-        if (! $quoteId) {
-            return false;
-        }
-
-        try {
-            $quote = Quote::where('id', $quoteId)
-                ->where('status', 'pending')
-                ->first();
-
-            if (! $quote) {
-                $this->logAdapter('WhatsApp: quote ya no está pendiente, se omite resolución.', ['quote_id' => $quoteId]);
-
-                return false;
-            }
-
-            $this->quoteService->resolveQuote($quote, $quote->riskSnapshot);
-
-            return true;
-        } catch (\Throwable $e) {
-            Log::error('WhatsApp: error en resolución de quote', [
-                'quote_id' => $quoteId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            return false;
-        }
     }
 
     /**

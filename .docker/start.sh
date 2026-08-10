@@ -36,6 +36,16 @@ stdout_logfile=/var/log/supervisor/worker-whatsapp-outbound-out.log
 stdout_logfile_maxbytes=1MB
 stderr_logfile_maxbytes=1MB
 
+[program:worker-quotes]
+command=php artisan queue:work --queue=quotes --sleep=3 --tries=2 --timeout=360 --max-time=3600
+autostart=true
+autorestart=true
+stopwaitsecs=3600
+stderr_logfile=/var/log/supervisor/worker-quotes-err.log
+stdout_logfile=/var/log/supervisor/worker-quotes-out.log
+stdout_logfile_maxbytes=1MB
+stderr_logfile_maxbytes=1MB
+
 [program:worker-media]
 command=php artisan queue:work --queue=media --sleep=3 --tries=3 --timeout=120 --max-time=3600
 autostart=true
