@@ -153,13 +153,14 @@ el modelo) es `Error` y con `\Exception` se escapaba.
 ```
 Webhook → ProcessWhatsAppMessage (default)
                ↓ persiste mensaje con processed_at=null
-               ↓ dispatch con delay = config('whatsapp.inbox_debounce_seconds') (8s)
+               ↓ dispatch con delay = config('whatsapp.inbox_quiet_seconds') (3s)
           ProcessConversationInbox (whatsapp-ai)
-               ↓ agrupa todos los mensajes pendientes
-               ↓ concatena con \n → una sola llamada al AI
+               ↓ ¿el cliente sigue escribiendo? → release() y salir (ventana deslizante)
                ↓ marca processed_at ANTES de llamar al AI
+               ↓ typing indicator anclado al wamid del último entrante
+               ↓ agrupa los pendientes, concatena con \n → una llamada al AI
           InsuranceOrchestrator::handle($combinedBody)
-               ↓
+               ↓ ¿llegaron mensajes durante la generación? → descartar y rehacer el turno
           SendWhatsAppMessage (whatsapp-outbound)
                ↓
           WhatsAppOutboundService::sendMessage()
@@ -172,7 +173,72 @@ Webhook → ProcessWhatsAppMessage (default)
 
 **Regla crítica:** `processed_at` se setea ANTES de llamar al AI. Si el job falla y reintenta, encuentra el inbox vacío y sale limpiamente — evita doble llamada al LLM con los mismos mensajes.
 
-**Debounce:** El inbox processor se despacha con `->delay(now()->addSeconds(config('whatsapp.inbox_debounce_seconds')))` (8s por defecto, tuneable por `WHATSAPP_INBOX_DEBOUNCE_SECONDS`). Si llegan varios mensajes dentro de la ventana, los jobs de ingesta terminan antes de que el primer inbox processor corra, y este los agrupa todos. Muy corto → dos mensajes tipeados con pocos segundos de diferencia disparan dos llamadas al LLM y respuestas que se pisan.
+### Agrupar la seguidilla: dos mecanismos, dos momentos
+
+El cliente manda tres burbujas y espera **una** respuesta. Se agrupa en dos puntos distintos de
+la línea de tiempo del turno, y ninguno reemplaza al otro:
+
+```
+msg1 llega
+   ├── ventana de silencio (3s) ──────┐ lo que llega acá se agrupa gratis, sin gastar LLM
+   ├── generación del LLM ────────────┤ lo que llega acá se intercepta: la respuesta ya
+   │                                  │ generada se descarta y el turno se rehace
+   └── envío ─────────────────────────┘ lo que llega después: van dos respuestas
+```
+
+**1. Ventana de silencio deslizante** (`inbox_quiet_seconds`, 3s). El job, al correr, mira si el
+mensaje **más nuevo** tiene menos de esa antigüedad; si sí, se re-libera con `release()` sin tocar
+el LLM. Cada mensaje nuevo corre la ventana. Tope duro en `inbox_max_wait_seconds` (15s), medido
+contra el **más viejo**, para que alguien que escribe sin parar no difiera el turno para siempre.
+
+> Por eso `$tries = 10` + `maxExceptions = 3`: cada `release()` consume un intento, y con `tries = 3`
+> el job se mataba solo esperando. Los fallos reales los sigue acotando `maxExceptions`.
+
+> La versión anterior era una ventana **fija** de 8s desde cada mensaje: el primer job que vencía
+> barría lo que hubiera y arrancaba, estuviera el cliente escribiendo o no. Le cobraba 8s al 100%
+> de los turnos (p50 real del LLM: 4,5s) y aun así partía las seguidillas.
+
+**2. Intercepción en el envío** (`inbox_max_intercepts`, 2). Antes de despachar la respuesta se
+re-consulta el inbox. Si llegó algo mientras el LLM generaba, la respuesta **no sale**: se marca la
+fila del assistant en `agent_conversation_messages` como no entregada y se rehace el turno con lo
+nuevo. No agrega latencia — la ventana es el tiempo de generación que se gasta igual.
+
+- **Se marca, no se borra.** Esa fila carga también `tool_calls` y `tool_results`, y el contexto del
+  modelo se reconstruye desde ahí (`DatabaseConversationStore::getLatestConversationMessages()`).
+  Borrarla le sacaría el registro de que la tool ya corrió, y el redo tendería a re-ejecutarla. La
+  marca va en `content` porque `meta` no se reconstruye en el contexto.
+- **No se intercepta** un turno que llamó `coverage_preference` o `checkout` (dispararon algo
+  irreversible hacia afuera; descartar el texto no lo deshace), ni un turno encadenado.
+- **Hay que arrastrar `buttons` y `public_link`.** `pullPending()` los LEE Y BORRA de la metadata al
+  armar la respuesta: si se descarta esa respuesta sin arrastrarlos, el redo ya no los encuentra.
+- Los efectos de dominio (Customer, Vehicle, `ai_state`) **no se tocan**: son datos válidos que el
+  cliente dio. Se descarta el texto, no los hechos.
+
+### Typing indicator
+
+`WhatsAppOutboundService::sendTypingIndicator($wamid, $phoneNumberId)` se ancla al id del mensaje
+**entrante** (la Cloud API lo empaqueta con el acuse de lectura, así que también deja tildes azules)
+y lo llama `ProcessConversationInbox` al **empezar** el turno. En `SendWhatsAppMessage` no va: ahí la
+respuesta ya está generada y se vería medio segundo.
+
+Meta lo sostiene **25 segundos** como máximo, o hasta que mandemos la respuesta. Eso lo vuelve
+inservible para la espera de la cotización (30-60s): no se puede rearmar porque no entra ningún
+mensaje nuevo al cual anclarlo, y un "escribiendo…" de un minuto se lee como que el bot se colgó.
+Esa espera la cubre el aviso de texto fijo, ver abajo.
+
+### El aviso de espera de la cotización sale ANTES de la espera
+
+`WhatsAppAdapter::coveragePreference()` resuelve la cotización **sincrónicamente dentro del tool**
+(`tryResolveQuoteById`), y esa llamada a las compañías tarda 25-60s — es la razón de que
+`CoveragePreferenceAgent` mida p50 de 25s contra 2,5s del identificador.
+
+Por eso el aviso ("estoy consultando…") es **texto fijo despachado por el adapter antes** de esa
+llamada, no algo que redacte el LLM: el texto del LLM se genera al final del turno, o sea que el
+anuncio de la espera llegaba cuando la espera ya había terminado. El `tool_output` posterior le
+instruye al agente que **no lo repita**.
+
+Si algún día la resolución pasa a ser asíncrona, se libera además el lock `inbox:{id}` — hoy el bot
+queda sordo durante esa espera.
 
 ### Idempotencia
 Use the `wamid` (WhatsApp message ID) as cache key: `processed_wamid_{wamid}`.

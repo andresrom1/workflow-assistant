@@ -6,6 +6,7 @@ use App\Jobs\SendWhatsAppMessage;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Message;
+use App\Services\WhatsApp\WhatsAppOutboundService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -357,4 +358,127 @@ it('sin link presentado sigue saliendo un solo mensaje', function () {
 
     Bus::assertDispatchedTimes(SendWhatsAppMessage::class, 1);
     Bus::assertDispatched(SendWhatsAppMessage::class, fn ($job): bool => $job->chained === []);
+});
+
+// ---------------------------------------------------------------------------
+// Ventana de silencio deslizante
+// ---------------------------------------------------------------------------
+
+/**
+ * La versión anterior era una ventana FIJA desde cada mensaje: el primer job que vencía
+ * barría lo que hubiera y arrancaba, estuviera el cliente escribiendo o no. Ahora la ventana
+ * se mide contra el mensaje MÁS NUEVO, así que cada mensaje la corre.
+ */
+it('difiere el turno cuando el cliente sigue escribiendo', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
+    config()->set('whatsapp.inbox_quiet_seconds', 10);
+
+    // El orquestador no se debe tocar: la gracia es no gastar una llamada al LLM.
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldNotReceive('handle');
+
+    $conversation = Conversation::factory()->create(['external_conversation_id' => $this->waId]);
+
+    $message = Message::create([
+        'conversation_id' => $conversation->id,
+        'direction' => 'inbound',
+        'content' => 'el codigo postal es 5000',
+        'external_message_id' => 'wamid.quiet001',
+        'sender_phone' => $this->waId,
+    ]);
+
+    ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
+
+    expect($message->fresh()->processed_at)->toBeNull();
+    Bus::assertNotDispatched(SendWhatsAppMessage::class);
+});
+
+it('procesa igual cuando se supera el tope duro de espera', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
+    config()->set('whatsapp.inbox_quiet_seconds', 30);
+    config()->set('whatsapp.inbox_max_wait_seconds', 5);
+
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldReceive('handle')
+        ->once()
+        ->andReturn(['text' => 'Listo', 'agent' => 'CustomerIdentifierAgent', 'execution_log_ids' => []]);
+
+    $conversation = Conversation::factory()->create(['external_conversation_id' => $this->waId]);
+
+    // Más viejo que el tope: aunque el cliente siguiera escribiendo, ya no se difiere más.
+    $message = Message::create([
+        'conversation_id' => $conversation->id,
+        'direction' => 'inbound',
+        'content' => 'sigo escribiendo sin parar',
+        'external_message_id' => 'wamid.quiet002',
+        'sender_phone' => $this->waId,
+    ]);
+    $message->forceFill(['created_at' => now()->subSeconds(60)])->save();
+
+    ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
+
+    expect($message->fresh()->processed_at)->not->toBeNull();
+    Bus::assertDispatched(SendWhatsAppMessage::class);
+});
+
+// ---------------------------------------------------------------------------
+// Typing indicator
+// ---------------------------------------------------------------------------
+
+/**
+ * Se ancla al wamid del ÚLTIMO mensaje entrante y sale al empezar el turno, no al enviar:
+ * en el envío la respuesta ya está lista y el indicador se vería medio segundo.
+ */
+it('muestra el typing indicator anclado al último mensaje entrante', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
+    config()->set('whatsapp.typing_indicator_enabled', true);
+
+    $waService = $this->mock(WhatsAppOutboundService::class);
+    $waService->shouldReceive('sendTypingIndicator')
+        ->once()
+        ->with('wamid.ultimo', $this->phoneNumberId);
+
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldReceive('handle')
+        ->once()
+        ->andReturn(['text' => 'Listo', 'agent' => 'CustomerIdentifierAgent', 'execution_log_ids' => []]);
+
+    $conversation = Conversation::factory()->create(['external_conversation_id' => $this->waId]);
+
+    foreach (['wamid.primero' => 'hola', 'wamid.ultimo' => 'quiero cotizar'] as $wamid => $texto) {
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'inbound',
+            'content' => $texto,
+            'external_message_id' => $wamid,
+            'sender_phone' => $this->waId,
+        ]);
+    }
+
+    ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
+});
+
+it('no muestra el typing indicator cuando está apagado por config', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
+    config()->set('whatsapp.typing_indicator_enabled', false);
+
+    $waService = $this->mock(WhatsAppOutboundService::class);
+    $waService->shouldNotReceive('sendTypingIndicator');
+
+    $orchestrator = $this->mock(InsuranceOrchestrator::class);
+    $orchestrator->shouldReceive('handle')
+        ->once()
+        ->andReturn(['text' => 'Listo', 'agent' => 'CustomerIdentifierAgent', 'execution_log_ids' => []]);
+
+    $conversation = Conversation::factory()->create(['external_conversation_id' => $this->waId]);
+
+    Message::create([
+        'conversation_id' => $conversation->id,
+        'direction' => 'inbound',
+        'content' => 'hola',
+        'external_message_id' => 'wamid.sinindicador',
+        'sender_phone' => $this->waId,
+    ]);
+
+    ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
 });

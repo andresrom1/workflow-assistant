@@ -133,10 +133,11 @@ class ProcessWhatsAppMessage implements ShouldQueue
                 'attachment_id' => $attachment->id,
             ]);
         } else {
-            // 6b. Texto: despachar el inbox processor con la ventana de debounce.
+            // 6b. Texto: despachar el inbox processor con la ventana de silencio. El job
+            //     vuelve a evaluarla al correr y se re-libera si el cliente sigue escribiendo.
             ProcessConversationInbox::dispatch($conversation->id, $this->waId, $this->phoneNumberId)
                 ->onQueue('whatsapp-ai')
-                ->delay(now()->addSeconds((int) config('whatsapp.inbox_debounce_seconds', 8)));
+                ->delay(now()->addSeconds((int) config('whatsapp.inbox_quiet_seconds', 3)));
 
             Log::info('WhatsApp: mensaje ingestado', [
                 'wamid' => $this->messageId,

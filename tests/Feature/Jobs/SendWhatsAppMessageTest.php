@@ -24,13 +24,13 @@ beforeEach(function () {
 // Typing indicator
 // ---------------------------------------------------------------------------
 
-it('always sends typing indicator before delivering any message', function () {
+// El typing indicator se mudó a ProcessConversationInbox: acá la respuesta ya está generada
+// y mostrarlo en este punto se vería medio segundo. Ver ProcessConversationInboxTest.
+it('does not send a typing indicator — that belongs to the start of the turn', function () {
     $conversation = Conversation::factory()->create();
 
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')
-        ->once()
-        ->with($this->waId, $this->bsuid, $this->phoneNumberId);
+    $waService->shouldNotReceive('sendTypingIndicator');
     $waService->shouldReceive('sendMessage')
         ->once()
         ->andReturn(['messages' => [['id' => 'wamid.out001']]]);
@@ -51,7 +51,6 @@ it('sends text and persists message with eligible flag', function () {
     $conversation = Conversation::factory()->create();
 
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendMessage')
         ->once()
         ->with($this->waId, $this->bsuid, $this->text, $this->phoneNumberId, $conversation->id, 'CustomerIdentifierAgent', true, config('ai.default'))
@@ -73,7 +72,6 @@ it('generates TTS, stores in R2, uploads to Meta and sends audio message', funct
     $conversation = Conversation::factory()->create();
 
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('uploadMedia')
         ->once()
         ->with('binary-audio-data', 'audio/mpeg', $this->phoneNumberId)
@@ -128,7 +126,6 @@ it('falls back silently to text when TTS generation fails', function () {
     $conversation = Conversation::factory()->create();
 
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendMessage')
         ->once()
         ->andReturn(['messages' => [['id' => 'wamid.fallback001']]]);
@@ -154,7 +151,6 @@ it('does not retry on WhatsApp spam limit exception', function () {
     $conversation = Conversation::factory()->create();
 
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendMessage')
         ->once()
         ->andThrow(new WhatsAppSpamLimitException('Rate limit'));
@@ -173,7 +169,6 @@ it('does not retry on WhatsApp spam limit exception', function () {
 
 it('sends text without modality decision when conversation id is null', function () {
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendMessage')
         ->once()
         ->andReturn([]);
@@ -198,7 +193,6 @@ it('sends interactive buttons and bypasses the modality decider entirely', funct
     ];
 
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendInteractiveButtons')
         ->once()
         ->with($this->waId, $this->bsuid, $this->text, $buttons, $this->phoneNumberId, $conversation->id, 'CheckoutAgent', config('ai.default'))
@@ -223,7 +217,6 @@ it('splits the recommendation into a full-width text bubble and a compact button
     ];
 
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendMessage')
         ->once()
         ->with($this->waId, $this->bsuid, $body, $this->phoneNumberId, $conversation->id, 'CheckoutAgent', false, config('ai.default'))
@@ -245,7 +238,6 @@ it('falls back to plain text when the body exceeds 1024 chars with pending butto
     $buttons = [['id' => 'alt:1', 'title' => 'Opción']];
 
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldNotReceive('sendInteractiveButtons');
     $waService->shouldReceive('sendMessage')->once()->andReturn(['messages' => [['id' => 'wamid.fallbacklong']]]);
 
@@ -259,7 +251,6 @@ it('ignores an empty buttons array and follows the normal text/audio flow', func
     $conversation = Conversation::factory()->create();
 
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldNotReceive('sendInteractiveButtons');
     $waService->shouldReceive('sendMessage')->once()->andReturn(['messages' => [['id' => 'wamid.emptybuttons']]]);
 

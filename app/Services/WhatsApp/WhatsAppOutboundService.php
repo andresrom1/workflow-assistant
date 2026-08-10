@@ -100,29 +100,35 @@ class WhatsAppOutboundService
     }
 
     /**
-     * Sends a typing indicator to the recipient.
+     * Marks an inbound message as read and shows the "typing…" bubble to the customer.
      *
-     * Uses the WhatsApp Cloud API typing indicator feature.
+     * Both things happen in the same call: the Cloud API bundles the typing indicator with
+     * the read receipt, so it anchors to the INBOUND message id — not to a recipient. Meta
+     * holds the bubble for 25 seconds at most, or until we send the reply.
      *
-     * @param  string|null  $phone  Recipient wa_id (E.164 without "+"), or null
-     * @param  string|null  $bsuid  Business-Scoped User ID, used when there is no phone
+     * Only display it if a reply is actually coming: an indicator that never resolves reads
+     * worse than no indicator at all.
+     *
+     * @param  string  $wamid  WhatsApp id of the inbound message being answered
      * @param  string  $phoneNumberId  Sender phone number ID
      */
-    public function sendTypingIndicator(?string $phone, ?string $bsuid, string $phoneNumberId): void
+    public function sendTypingIndicator(string $wamid, string $phoneNumberId): void
     {
         try {
             $this->post($phoneNumberId, [
                 'messaging_product' => 'whatsapp',
-                'recipient_type' => 'individual',
-                ...$this->recipientPayload($phone, $bsuid),
-                'type' => 'reaction',
-                'reaction' => [
-                    'message_id' => '',
-                    'emoji' => '',
-                ],
+                'status' => 'read',
+                'message_id' => $wamid,
+                'typing_indicator' => ['type' => 'text'],
             ]);
-        } catch (\Throwable) {
-            // Typing indicator is best-effort — never block the main message send.
+        } catch (\Throwable $e) {
+            // Best-effort: never block the reply. But it does get logged — the previous
+            // version swallowed the error silently, which is why nobody noticed for months
+            // that it was posting an empty reaction Meta rejects.
+            Log::warning('WhatsApp: typing indicator falló', [
+                'wamid' => $wamid,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

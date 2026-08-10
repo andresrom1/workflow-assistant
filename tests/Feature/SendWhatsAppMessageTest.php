@@ -20,7 +20,6 @@ it('calls outbound service with correct parameters', function () {
     $conversation = Conversation::factory()->create();
 
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendMessage')
         ->once()
         ->with($this->waId, $this->bsuid, 'Hola, te ayudo con tu cotización', $this->phoneNumberId, $conversation->id, null, false, config('ai.default'))
@@ -36,7 +35,6 @@ it('calls outbound service with correct parameters', function () {
 
 it('calls outbound service without conversation id', function () {
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')->once();
     $waService->shouldReceive('sendMessage')
         ->once()
         ->withArgs(fn ($phone, $bsuid, $text, $phoneId) => $phone === $this->waId && $text === 'Mensaje de prueba')
@@ -47,7 +45,6 @@ it('calls outbound service without conversation id', function () {
 
 it('does not retry on spam limit exception', function () {
     $waService = $this->mock(WhatsAppOutboundService::class);
-    $waService->shouldReceive('sendTypingIndicator')->once();
 
     // sendMessage se llama exactamente una vez — no hay reintentos
     $waService->shouldReceive('sendMessage')

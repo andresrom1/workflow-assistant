@@ -52,7 +52,11 @@ grep -rn "opcion-de-configuracion" workflow-assistant/
 
 | Valor | Ubicación | Valor actual / fuente | Destino |
 |---|---|---|---|
-| Debounce del inbox | `config/whatsapp.php` (`inbox_debounce_seconds`); consumido en `ProcessWhatsAppMessage:147` y `ProcessMediaAttachment:64` | env `WHATSAPP_INBOX_DEBOUNCE_SECONDS`; default **8s** | **A** — `whatsapp.inbox_debounce_seconds` (afina UX vs costo LLM; ya se tunó en prod, bitácora 2026-07-07) |
+| Ventana de silencio del inbox (deslizante) | `config/whatsapp.php` (`inbox_quiet_seconds`); consumido en `ProcessWhatsAppMessage`, `ProcessMediaAttachment` y `ProcessConversationInbox` | env `WHATSAPP_INBOX_QUIET_SECONDS`; default **3s** | **A** — afina UX vs costo LLM; se tunó en prod (bitácoras 2026-07-07 y 2026-08-10) |
+| Tope duro de espera del inbox | `config/whatsapp.php` (`inbox_max_wait_seconds`) | env `WHATSAPP_INBOX_MAX_WAIT_SECONDS`; default **15s** | **A** — techo de la ventana deslizante |
+| Intercepciones máximas por turno | `config/whatsapp.php` (`inbox_max_intercepts`) | env `WHATSAPP_INBOX_MAX_INTERCEPTS`; default **2** | **A** — cuántas respuestas ya generadas se pueden descartar por seguidilla |
+| Typing indicator on/off | `config/whatsapp.php` (`typing_indicator_enabled`) | env `WHATSAPP_TYPING_INDICATOR_ENABLED`; default **true** | **A** |
+| Aviso de espera de la cotización | `config/whatsapp.php` (`quote_wait_notice`) | env `WHATSAPP_QUOTE_WAIT_NOTICE` | **A** — copy de cara al cliente; hoy requiere deploy |
 | Número público wa.me (landing) | `config/whatsapp.php` (`public_number`) | env `WHATSAPP_PUBLIC_NUMBER` | **A** — marketing editable; hoy requiere deploy |
 | URL de descarga de la app (landing) | `config/whatsapp.php` (`app_download_url`) | env `MANGO_APP_DOWNLOAD_URL` | **A** — idem |
 | Nombres de templates Meta (3) | `config/whatsapp.php` (`templates.*`) | env `WHATSAPP_TEMPLATE_*`; defaults placeholder | **B** — atados a aprobación de Meta |

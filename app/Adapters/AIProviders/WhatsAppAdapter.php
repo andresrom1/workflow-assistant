@@ -4,6 +4,7 @@ namespace App\Adapters\AIProviders;
 
 use App\Contracts\AIProviderAdapterInterface;
 use App\Contracts\Quotability;
+use App\Jobs\SendWhatsAppMessage;
 use App\Models\Conversation;
 use App\Models\CoveragePreference;
 use App\Models\Customer;
@@ -380,13 +381,20 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             );
         }
 
+        // El aviso sale ANTES de consultar a las compañías, no después: la consulta es
+        // sincrónica y tarda 25-60s, así que si el cliente esperara al texto del LLM se
+        // enteraría de la espera recién cuando ya terminó. Ver ROADMAP, bitácora 2026-08-10.
+        $this->avisarEsperaDeCotizacion($conversation, $quoteId);
+
         $resolved = $this->tryResolveQuoteById($quoteId);
         $pendingFact = data_get($conversation->metadata, 'pending_vehicle_fact');
 
         $guardada = "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}.";
 
         $message = match (true) {
-            $resolved => "{$guardada} Cotización procesada; preparando las alternativas para presentártelas.",
+            // Al cliente YA se le avisó que estás consultando (mensaje automático, antes de
+            // esta línea). Si el agente lo repite, el cliente lee dos veces el mismo anuncio.
+            $resolved => "{$guardada} Cotización procesada. Al cliente ya se le avisó que estabas consultando: NO se lo repitas ni le digas que vas a consultar. Pasá directo a presentar las alternativas.",
             $quoteId !== null => "{$guardada} La oferta será procesada en breve.",
 
             // El cliente puede pedir dos niveles en un mensaje, y entonces esta tool se llama dos
@@ -628,6 +636,44 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         }
 
         return $validator->validated();
+    }
+
+    /**
+     * Le avisa al cliente que la consulta a las compañías arranca, antes de que arranque.
+     *
+     * Texto fijo y despacho directo a la cola de salida: hacerlo pasar por el LLM implicaría
+     * esperar a que termine el turno, y el turno incluye la consulta sincrónica de 25-60s —
+     * o sea que el anuncio llegaría al final de la espera que anuncia.
+     *
+     * Best-effort: sin destinatario se loguea y la cotización sigue su curso igual.
+     */
+    private function avisarEsperaDeCotizacion(Conversation $conversation, ?int $quoteId): void
+    {
+        // Sin quote pendiente no hay consulta que anunciar.
+        if ($quoteId === null) {
+            return;
+        }
+
+        $bsuid = $conversation->ext_user_id;
+        $phone = $conversation->recipientPhone();
+        $phoneNumberId = config('services.whatsapp.phone_number_id');
+
+        if ((! $phone && ! $bsuid) || ! is_string($phoneNumberId) || $phoneNumberId === '') {
+            Log::warning('WhatsApp: sin destinatario para el aviso de espera de cotización', [
+                'conversation_id' => $conversation->id,
+            ]);
+
+            return;
+        }
+
+        SendWhatsAppMessage::dispatch(
+            $phone,
+            $bsuid,
+            (string) config('whatsapp.quote_wait_notice'),
+            $phoneNumberId,
+            $conversation->id,
+            'quote_wait_notice',
+        )->onQueue('whatsapp-outbound');
     }
 
     /**

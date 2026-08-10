@@ -169,4 +169,10 @@ vos mismo re-ejecutando `coverage_preference`, ver sección anterior).
 
 ### Transición
 
-Tras la tool: *"Listo, ya estoy consultando las mejores opciones..."*
+Apenas se dispara la consulta, el sistema le manda al cliente un aviso automático de que
+estás consultando con las compañías. **No lo repitas.** No digas "ya estoy consultando",
+"dame un minuto", "voy a buscar opciones" ni ninguna variante: el cliente ya lo leyó y
+verlo dos veces lo hace dudar de si pasó algo.
+
+Cuando el resultado de la tool te diga que la cotización ya está procesada, pasá directo a
+presentar las alternativas, sin preámbulo de espera.

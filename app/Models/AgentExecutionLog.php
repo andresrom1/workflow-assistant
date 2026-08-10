@@ -8,6 +8,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * Un turno de agente ya ejecutado: qué agente respondió, cuánto tardó y qué tools llamó.
+ *
+ * @property bool $chained
+ * @property list<array{name: string, arguments: mixed}>|null $tool_calls
+ * @property list<int>|null $inbound_message_ids
+ */
 class AgentExecutionLog extends Model
 {
     /** @use HasFactory<AgentExecutionLogFactory> */

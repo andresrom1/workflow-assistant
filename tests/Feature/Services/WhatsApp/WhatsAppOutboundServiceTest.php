@@ -1,5 +1,8 @@
 <?php
 
+use App\Enums\MessageType;
+use App\Models\Conversation;
+use App\Models\Message;
 use App\Services\WhatsApp\WhatsAppOutboundService;
 use Illuminate\Support\Facades\Http;
 
@@ -81,7 +84,7 @@ it('sends a document message without a caption key when none is given', function
 });
 
 it('persists an outbound Message with type document when a conversationId is given', function () {
-    $conversation = App\Models\Conversation::factory()->create();
+    $conversation = Conversation::factory()->create();
 
     app(WhatsAppOutboundService::class)->sendDocumentMessage(
         '5491112345678',
@@ -93,9 +96,44 @@ it('persists an outbound Message with type document when a conversationId is giv
         $conversation->id,
     );
 
-    expect(App\Models\Message::where('conversation_id', $conversation->id)->first())
+    expect(Message::where('conversation_id', $conversation->id)->first())
         ->not->toBeNull()
-        ->type->toBe(App\Enums\MessageType::Document)
+        ->type->toBe(MessageType::Document)
         ->content->toBe('Póliza 12345')
         ->external_message_id->toBe('wamid.out001');
 });
+
+// ---------------------------------------------------------------------------
+// Typing indicator
+// ---------------------------------------------------------------------------
+
+/**
+ * La Cloud API empaqueta el indicador con el acuse de lectura, así que se ancla al id del
+ * mensaje ENTRANTE y no a un destinatario. Meta lo sostiene 25s como máximo, o hasta que
+ * mandemos la respuesta.
+ *
+ * La versión anterior mandaba una `reaction` vacía (`message_id: ''`) — un truco de antes de
+ * que Meta sacara la feature. Meta la rechaza, y el `catch` mudo se comía el error: por eso
+ * nadie notó durante meses que el indicador no se mostraba nunca.
+ */
+it('marks the inbound message as read and shows the typing bubble', function () {
+    app(WhatsAppOutboundService::class)->sendTypingIndicator('wamid.entrante001', $this->phoneNumberId);
+
+    Http::assertSent(function ($request) {
+        $body = $request->data();
+
+        return ($body['status'] ?? null) === 'read'
+            && ($body['message_id'] ?? null) === 'wamid.entrante001'
+            && ($body['typing_indicator']['type'] ?? null) === 'text'
+            && ! array_key_exists('type', $body)
+            && ! array_key_exists('reaction', $body);
+    });
+});
+
+it('never lets a failed typing indicator break the turn', function () {
+    Http::fake([
+        'graph.facebook.com/*' => Http::response(['error' => ['code' => 100, 'message' => 'Invalid parameter']], 400),
+    ]);
+
+    app(WhatsAppOutboundService::class)->sendTypingIndicator('wamid.entrante002', $this->phoneNumberId);
+})->throwsNoExceptions();

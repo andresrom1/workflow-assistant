@@ -121,12 +121,6 @@ parameters:
 			path: app/Http/Controllers/ToolsController.php
 
 		-
-			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\Message\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 1
-			path: app/Jobs/ProcessConversationInbox.php
-
-		-
 			message: '#^Access to an undefined property App\\Models\\Conversation\:\:\$thread_id\.$#'
 			identifier: property.notFound
 			count: 1

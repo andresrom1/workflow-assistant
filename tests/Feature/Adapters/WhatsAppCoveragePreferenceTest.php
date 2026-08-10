@@ -1,6 +1,7 @@
 <?php
 
 use App\Adapters\AIProviders\WhatsAppAdapter;
+use App\Jobs\SendWhatsAppMessage;
 use App\Models\Conversation;
 use App\Models\CoveragePreference;
 use App\Models\Customer;
@@ -8,7 +9,9 @@ use App\Models\Quote;
 use App\Models\QuoteAlternative;
 use App\Models\RiskSnapshot;
 use App\Models\Vehicle;
+use App\Services\QuoteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
@@ -277,4 +280,81 @@ it('get_quote le avisa al closer que el cliente pidió comparar dos niveles', fu
 
     expect($result['tool_output'])->toContain('comparar las coberturas C y D')
         ->and($result['tool_output'])->toContain('una de cada nivel');
+});
+
+// ---------------------------------------------------------------------------
+// Aviso de espera — sale ANTES de consultar a las compañías
+// ---------------------------------------------------------------------------
+
+/**
+ * La consulta a las compañías es sincrónica y tarda 25-60s (p50 medido en prod: 25s). Si el
+ * cliente tuviera que esperar al texto del LLM, se enteraría de la espera recién cuando ya
+ * terminó — el anuncio llegaba invertido. Por eso el aviso es texto fijo y sale por su cuenta.
+ */
+it('avisa que está consultando antes de llamar a las compañías', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
+    config()->set('services.whatsapp.phone_number_id', '123456789');
+
+    $conversation = conversacionConVehiculo();
+    $conversation->update(['ext_user_id' => 'US.13491208655302741918']);
+
+    Quote::factory()->create([
+        'conversation_id' => $conversation->id,
+        'status' => 'pending',
+    ]);
+
+    app(WhatsAppAdapter::class)->handleToolCall([
+        'coverage_code' => 'C',
+        'patente' => 'AB123CD',
+    ], 'coverage_preference', $conversation);
+
+    Bus::assertDispatched(
+        SendWhatsAppMessage::class,
+        fn (SendWhatsAppMessage $job): bool => $job->queue === 'whatsapp-outbound'
+    );
+});
+
+it('no avisa nada cuando no hay una cotización pendiente que disparar', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
+    config()->set('services.whatsapp.phone_number_id', '123456789');
+
+    $conversation = conversacionConVehiculo();
+
+    app(WhatsAppAdapter::class)->handleToolCall([
+        'coverage_code' => 'C',
+        'patente' => 'AB123CD',
+    ], 'coverage_preference', $conversation);
+
+    Bus::assertNotDispatched(SendWhatsAppMessage::class);
+});
+
+/**
+ * Con el aviso ya entregado, si el agente vuelve a decir "estoy consultando" el cliente lee
+ * dos veces el mismo anuncio y duda de si algo se rompió.
+ */
+it('le instruye al agente que no repita el anuncio de espera', function () {
+    Bus::fake([SendWhatsAppMessage::class]);
+    config()->set('services.whatsapp.phone_number_id', '123456789');
+
+    $conversation = conversacionConVehiculo();
+
+    $quote = Quote::factory()->create([
+        'conversation_id' => $conversation->id,
+        'status' => 'pending',
+    ]);
+
+    // Resolución exitosa sin salir a la red: lo que se prueba es qué le dice la tool al
+    // agente una vez que la cotización volvió, no el proveedor.
+    $quoteService = $this->mock(QuoteService::class);
+    $quoteService->shouldReceive('updateSnapshotPreference')->andReturnNull();
+    $quoteService->shouldReceive('resolveQuote')->once()->andReturnTrue();
+
+    $result = app(WhatsAppAdapter::class)->handleToolCall([
+        'coverage_code' => 'C',
+        'patente' => 'AB123CD',
+    ], 'coverage_preference', $conversation);
+
+    expect($quote->fresh())->not->toBeNull()
+        ->and($result['tool_output'])->toContain('ya se le avisó')
+        ->and($result['tool_output'])->toContain('NO se lo repitas');
 });

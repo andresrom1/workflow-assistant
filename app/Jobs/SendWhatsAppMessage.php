@@ -47,8 +47,8 @@ class SendWhatsAppMessage implements ShouldQueue
         TextToSpeechService $tts,
         MediaStorageService $storage,
     ): void {
-        // Always send typing indicator before any response.
-        $waService->sendTypingIndicator($this->phone, $this->bsuid, $this->phoneNumberId);
+        // El typing indicator NO va acá: en este punto la respuesta ya está generada y se
+        // vería medio segundo. Lo manda ProcessConversationInbox al empezar el turno.
 
         // Los botones fuerzan texto: sin modality decider ni TTS. WhatsApp renderiza
         // toda burbuja interactiva con un ancho fijo angosto, así que el cuerpo largo

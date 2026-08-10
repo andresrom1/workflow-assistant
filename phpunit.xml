@@ -33,6 +33,11 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <!-- Los tests crean los mensajes en el instante, así que la ventana de silencio
+             deslizante diferiría todos los turnos. Los tests de la ventana en sí la fijan
+             explícitamente con config()->set. -->
+        <env name="WHATSAPP_INBOX_QUIET_SECONDS" value="0"/>
+        <env name="WHATSAPP_TYPING_INDICATOR_ENABLED" value="false"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
