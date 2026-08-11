@@ -426,12 +426,14 @@ it('procesa igual cuando se supera el tope duro de espera', function () {
 // ---------------------------------------------------------------------------
 
 /**
- * Se ancla al wamid del ÚLTIMO mensaje entrante y sale al empezar el turno, no al enviar:
- * en el envío la respuesta ya está lista y el indicador se vería medio segundo.
+ * Se ancla al wamid del ÚLTIMO mensaje entrante y sale al empezar el turno, no al enviar: en el
+ * envío la respuesta ya está lista y el indicador se vería medio segundo.
+ *
+ * Es el segundo de dos: la ingesta ya mandó uno al recibir el mensaje. Este rearma la burbuja
+ * para el tiempo de generación, que puede empezar mucho después si el worker estaba ocupado.
  */
 it('muestra el typing indicator anclado al último mensaje entrante', function () {
     Bus::fake([SendWhatsAppMessage::class]);
-    config()->set('whatsapp.typing_indicator_enabled', true);
 
     $waService = $this->mock(WhatsAppOutboundService::class);
     $waService->shouldReceive('sendTypingIndicator')
@@ -458,9 +460,12 @@ it('muestra el typing indicator anclado al último mensaje entrante', function (
     ProcessConversationInbox::dispatchSync($conversation->id, $this->waId, $this->phoneNumberId);
 });
 
-it('no muestra el typing indicator cuando está apagado por config', function () {
+/**
+ * El flag de config lo aplica el servicio, no este job (ver WhatsAppOutboundServiceTest). Acá el
+ * único guard es tener a qué anclar la burbuja: sin wamid, la Cloud API rechaza la llamada.
+ */
+it('no muestra el typing indicator si el mensaje no trae wamid', function () {
     Bus::fake([SendWhatsAppMessage::class]);
-    config()->set('whatsapp.typing_indicator_enabled', false);
 
     $waService = $this->mock(WhatsAppOutboundService::class);
     $waService->shouldNotReceive('sendTypingIndicator');
@@ -476,7 +481,7 @@ it('no muestra el typing indicator cuando está apagado por config', function ()
         'conversation_id' => $conversation->id,
         'direction' => 'inbound',
         'content' => 'hola',
-        'external_message_id' => 'wamid.sinindicador',
+        'external_message_id' => null,
         'sender_phone' => $this->waId,
     ]);
 

@@ -117,6 +117,8 @@ it('persists an outbound Message with type document when a conversationId is giv
  * nadie notó durante meses que el indicador no se mostraba nunca.
  */
 it('marks the inbound message as read and shows the typing bubble', function () {
+    config()->set('whatsapp.typing_indicator_enabled', true);
+
     app(WhatsAppOutboundService::class)->sendTypingIndicator('wamid.entrante001', $this->phoneNumberId);
 
     Http::assertSent(function ($request) {
@@ -131,9 +133,23 @@ it('marks the inbound message as read and shows the typing bubble', function () 
 });
 
 it('never lets a failed typing indicator break the turn', function () {
+    config()->set('whatsapp.typing_indicator_enabled', true);
+
     Http::fake([
         'graph.facebook.com/*' => Http::response(['error' => ['code' => 100, 'message' => 'Invalid parameter']], 400),
     ]);
 
     app(WhatsAppOutboundService::class)->sendTypingIndicator('wamid.entrante002', $this->phoneNumberId);
 })->throwsNoExceptions();
+
+/**
+ * El flag vive acá y no en los jobs: son dos los que llaman (la ingesta y el turno) y la
+ * política de mostrar o no la burbuja es una sola.
+ */
+it('does not touch the API when the typing indicator is disabled', function () {
+    config()->set('whatsapp.typing_indicator_enabled', false);
+
+    app(WhatsAppOutboundService::class)->sendTypingIndicator('wamid.entrante003', $this->phoneNumberId);
+
+    Http::assertNothingSent();
+});

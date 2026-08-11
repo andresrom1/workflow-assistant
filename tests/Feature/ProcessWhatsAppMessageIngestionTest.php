@@ -3,6 +3,7 @@
 use App\Jobs\ProcessConversationInbox;
 use App\Jobs\ProcessWhatsAppMessage;
 use App\Jobs\SendWhatsAppMessage;
+use App\Services\WhatsApp\WhatsAppOutboundService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
@@ -36,6 +37,24 @@ it('dispatches inbox processor on whatsapp ai queue', function () {
     Bus::assertDispatched(ProcessConversationInbox::class, function ($job) {
         return $job->queue === 'whatsapp-ai';
     });
+});
+
+/**
+ * Tildes azules y "escribiendo…" salen ACÁ, en la cola de ingesta, que no espera a nadie.
+ *
+ * La cola de IA sí puede estar ocupada: en la conversación #19 de prod estuvo ~50s presentando
+ * una cotización, y durante todo ese rato los mensajes del cliente quedaron en gris — escribió
+ * "¿estás bloqueado?". El acuse tiene que ser independiente de cuándo arranca el turno.
+ */
+it('acusa recibo y muestra escribiendo apenas ingesta el mensaje', function () {
+    Bus::fake([ProcessConversationInbox::class]);
+
+    $waService = $this->mock(WhatsAppOutboundService::class);
+    $waService->shouldReceive('sendTypingIndicator')
+        ->once()
+        ->with($this->messageId, $this->phoneNumberId);
+
+    dispatchIngestion($this->waId, $this->messageId, $this->phoneNumberId);
 });
 
 it('does not dispatch send whatsapp message', function () {

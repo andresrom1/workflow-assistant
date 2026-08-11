@@ -343,8 +343,12 @@ it('avisa la espera y manda a esperar cuando la cotización sigue en vuelo', fun
     );
     Bus::assertNotDispatched(NotifyClientQuoteReady::class);
 
-    expect($result['tool_output'])->toContain('NO se lo repitas')
-        ->and($result['tool_output'])->toContain('NO inventes alternativas');
+    // El aviso de espera es texto fijo y ya salió. Si el agente además cierra con "en cuanto
+    // tenga las opciones te las paso", el cliente ve dos mensajes seguidos diciendo lo mismo
+    // (pasó en la conversación #19 de prod, msgs 326 y 327, con un segundo de diferencia).
+    expect($result['tool_output'])->toContain('NO menciones la consulta')
+        ->and($result['tool_output'])->toContain('NO cierres prometiendo avisarle')
+        ->and($result['tool_output'])->toContain('inventes alternativas');
 });
 
 /**

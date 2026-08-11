@@ -106,14 +106,20 @@ class WhatsAppOutboundService
      * the read receipt, so it anchors to the INBOUND message id — not to a recipient. Meta
      * holds the bubble for 25 seconds at most, or until we send the reply.
      *
-     * Only display it if a reply is actually coming: an indicator that never resolves reads
-     * worse than no indicator at all.
+     * Se llama dos veces por mensaje entrante y a propósito: en la INGESTA, que corre en su
+     * propia cola y nunca espera nada, y de nuevo al EMPEZAR el turno, que puede arrancar
+     * mucho después si el worker de IA está ocupado. La primera da el acuse inmediato; la
+     * segunda rearma la burbuja para el tiempo de generación. Repetir el acuse es idempotente.
      *
      * @param  string  $wamid  WhatsApp id of the inbound message being answered
      * @param  string  $phoneNumberId  Sender phone number ID
      */
     public function sendTypingIndicator(string $wamid, string $phoneNumberId): void
     {
+        if (! (bool) config('whatsapp.typing_indicator_enabled', true)) {
+            return;
+        }
+
         try {
             $this->post($phoneNumberId, [
                 'messaging_product' => 'whatsapp',

@@ -27,11 +27,19 @@ class ProcessConversationInbox implements ShouldQueue
     private const MARCA_NO_ENTREGADO = '[NO ENTREGADO al cliente: siguió escribiendo antes de que saliera. El cliente NUNCA leyó esto — no lo des por dicho ni lo cites.]';
 
     /**
-     * Alto a propósito: la ventana deslizante se implementa con `release()`, y cada release
-     * consume un intento. Con `tries = 3` el job se mataba solo esperando a un cliente que
-     * seguía escribiendo. Los fallos reales los acota `maxExceptions`.
+     * Alto a propósito, por dos motivos que suman intentos sin que haya ningún fallo:
+     *
+     * 1. La ventana deslizante se implementa con `release()`, y cada release consume un intento.
+     *    Con `tries = 3` el job se mataba solo esperando a un cliente que seguía escribiendo.
+     * 2. Esperar el lock `inbox:{id}` también gasta intentos, a razón de uno cada
+     *    `releaseAfter(5)`. El lock lo puede retener hasta 180s ({@see $timeout}, y lo mismo
+     *    {@see NotifyClientQuoteReady} presentando una cotización), así que el presupuesto de
+     *    espera tiene que superar eso: 44 × 5s = 220s. Con `tries = 10` daba 45s y el mensaje
+     *    del cliente se descartaba en silencio.
+     *
+     * Los fallos reales los acota `maxExceptions`, no esto.
      */
-    public int $tries = 10;
+    public int $tries = 45;
 
     public int $maxExceptions = 3;
 
@@ -108,8 +116,10 @@ class ProcessConversationInbox implements ShouldQueue
             return;
         }
 
-        // "Escribiendo…" desde acá y no desde el envío: en el envío la respuesta ya está lista
-        // y el indicador se vería medio segundo. Marca de paso el mensaje como leído.
+        // Rearma la burbuja para el tiempo de generación. El acuse inmediato ya lo dio la ingesta
+        // ({@see ProcessWhatsAppMessage}); acá importa porque este job puede haber esperado su
+        // turno un buen rato y Meta sostiene el indicador 25s como máximo. En el envío no va: ahí
+        // la respuesta ya está lista y se vería medio segundo.
         $this->mostrarTypingIndicator($waService, $messages);
 
         $combinedBody = $this->prependCustomerContext(
@@ -369,10 +379,6 @@ class ProcessConversationInbox implements ShouldQueue
      */
     private function mostrarTypingIndicator(WhatsAppOutboundService $waService, Collection $messages): void
     {
-        if (! (bool) config('whatsapp.typing_indicator_enabled', true)) {
-            return;
-        }
-
         $wamid = $messages->last()?->external_message_id;
 
         if (! $wamid) {

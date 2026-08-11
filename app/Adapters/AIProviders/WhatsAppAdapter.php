@@ -415,7 +415,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         $guardada = "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}.";
 
         $message = match (true) {
-            $enVuelo => "{$guardada} La consulta a las compañías está en marcha desde que registraste el vehículo. Al cliente ya se le avisó que estás consultando: NO se lo repitas. Confirmá la preferencia en una frase y esperá — NO inventes alternativas, te avisan cuando lleguen.",
+            $enVuelo => "{$guardada} La consulta a las compañías está en marcha desde que registraste el vehículo. Al cliente ACABA de salirle un mensaje avisándole que estás consultando. Respondé SOLO confirmando la cobertura elegida, en una frase: NO menciones la consulta, NO hables de la espera y NO cierres prometiendo avisarle. Verlo dos veces seguidas se lee como que algo se rompió. Tampoco inventes alternativas ni precios — te avisan cuando lleguen.",
 
             // Cubre dos casos que terminan igual: la consulta terminó mientras indagabas la
             // cobertura (el normal desde que se adelantó al paso del vehículo), y el cliente que

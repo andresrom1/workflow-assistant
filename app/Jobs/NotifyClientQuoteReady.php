@@ -24,13 +24,21 @@ class NotifyClientQuoteReady implements ShouldQueue
      * `inbox:{id}` y cada `release()` del middleware consume un intento. Con la cotización
      * corriendo en paralelo al turno (ver {@see ResolveQuote}), puede terminar justo mientras el
      * cliente escribe — y con `tries = 2` moría contra el lock y la cotización no se entregaba
-     * nunca. Los fallos reales los sigue acotando `maxExceptions`.
+     * nunca. El presupuesto tiene que superar el máximo que otro job puede retener el lock
+     * (180s): 24 × `releaseAfter(10)` = 240s. Los fallos reales los acota `maxExceptions`.
      */
-    public int $tries = 10;
+    public int $tries = 25;
 
     public int $maxExceptions = 3;
 
     public int $backoff = 30;
+
+    /**
+     * Por debajo del `retry_after` de `database_ai` (200s). Este job corre un turno completo del
+     * orquestador —QuoteAgent con el JSON de alternativas, encadenado a CheckoutAgent—, que en
+     * prod se midió en ~50s. Sin declararlo quedaba a merced del `--timeout` del worker.
+     */
+    public int $timeout = 180;
 
     public function __construct(
         private readonly int $conversationId,
@@ -44,7 +52,10 @@ class NotifyClientQuoteReady implements ShouldQueue
         return [
             (new WithoutOverlapping("inbox:{$this->conversationId}"))
                 ->releaseAfter(10)
-                ->expireAfter(120),
+                // Tiene que superar el `timeout` del job: con 120s el lock se soltaba solo
+                // mientras el turno seguía corriendo y otro job entraba en paralelo sobre la
+                // misma conversación.
+                ->expireAfter(300),
         ];
     }
 

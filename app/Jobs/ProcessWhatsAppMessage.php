@@ -10,6 +10,7 @@ use App\Models\MessageAttachment;
 use App\Repositories\ConversationRepository;
 use App\Repositories\CustomerRepository;
 use App\Services\CustomerIdentificationService;
+use App\Services\WhatsApp\WhatsAppOutboundService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -43,6 +44,7 @@ class ProcessWhatsAppMessage implements ShouldQueue
         ConversationRepository $conversationRepo,
         CustomerRepository $customerRepo,
         CustomerIdentificationService $customerService,
+        WhatsAppOutboundService $waService,
     ): void {
         // 1. Idempotencia — evita procesar el mismo mensaje dos veces si Meta reenvía el webhook.
         $cacheKey = 'processed_wamid_'.$this->messageId;
@@ -107,6 +109,13 @@ class ProcessWhatsAppMessage implements ShouldQueue
 
         // 5. Marcar wamid como ingestado para evitar doble ingesta si Meta reenvía.
         Cache::put($cacheKey, true, now()->addDay());
+
+        // 5b. Tildes azules y "escribiendo…" ACÁ, no cuando arranca el turno.
+        //     Esta cola no espera a nadie; la de IA sí puede estar ocupada presentando una
+        //     cotización (~50s medidos en la conversación #19). Mientras tanto el cliente veía
+        //     su mensaje en gris y preguntaba "¿estás bloqueado?". El turno rearma la burbuja
+        //     cuando efectivamente empieza a generar.
+        $waService->sendTypingIndicator($this->messageId, $this->phoneNumberId);
 
         if ($type === MessageType::Audio) {
             // 6a. Crear el attachment y despachar transcripción.

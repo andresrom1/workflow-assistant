@@ -217,14 +217,43 @@ nuevo. No agrega latencia — la ventana es el tiempo de generación que se gast
 ### Typing indicator
 
 `WhatsAppOutboundService::sendTypingIndicator($wamid, $phoneNumberId)` se ancla al id del mensaje
-**entrante** (la Cloud API lo empaqueta con el acuse de lectura, así que también deja tildes azules)
-y lo llama `ProcessConversationInbox` al **empezar** el turno. En `SendWhatsAppMessage` no va: ahí la
-respuesta ya está generada y se vería medio segundo.
+**entrante** (la Cloud API lo empaqueta con el acuse de lectura, así que también deja tildes azules).
+El flag `typing_indicator_enabled` lo aplica el **servicio**, no los jobs.
+
+Se llama **dos veces por mensaje entrante**, a propósito:
+
+1. **`ProcessWhatsAppMessage`** (ingesta, cola `default`) — el acuse inmediato. Esta cola no espera a
+   nadie.
+2. **`ProcessConversationInbox`** al **empezar** el turno — rearma la burbuja para el tiempo de
+   generación.
+
+La primera es la que importa: la cola `whatsapp-ai` **es un solo worker**, y mientras corre un turno
+largo —`NotifyClientQuoteReady` presentando una cotización tardó ~50s en prod— el siguiente turno ni
+siquiera arranca. Con el acuse solo en el punto 2, los mensajes del cliente quedaban en gris todo ese
+rato y el cliente escribía "¿estás bloqueado?". Ver ROADMAP, bitácora 2026-08-11.
+
+En `SendWhatsAppMessage` no va: ahí la respuesta ya está generada y se vería medio segundo.
 
 Meta lo sostiene **25 segundos** como máximo, o hasta que mandemos la respuesta. Eso lo vuelve
 inservible para la espera de la cotización (30-60s): no se puede rearmar porque no entra ningún
 mensaje nuevo al cual anclarlo, y un "escribiendo…" de un minuto se lee como que el bot se colgó.
 Esa espera la cubre el aviso de texto fijo, ver abajo.
+
+### El presupuesto de espera del lock
+
+Dos jobs compiten por `inbox:{id}`: `ProcessConversationInbox` y `NotifyClientQuoteReady`. El que
+llega segundo espera con `release()`, y **cada release consume un intento**. La regla:
+
+> `(tries − 1) × releaseAfter` **>** el máximo que el otro job puede retener el lock.
+
+Ese máximo es el `timeout` del job (180s en los dos, por debajo del `retry_after` de `database_ai`
+que es 200s). De ahí `tries = 45` × 5s = 220s en el inbox y `tries = 25` × 10s = 240s en la
+notificación. Con los valores viejos (10 intentos) el presupuesto era de 45s y 90s: **un turno largo
+hacía que el mensaje del cliente se descartara en silencio**. Los fallos reales los sigue acotando
+`maxExceptions = 3`, que cuenta excepciones, no releases.
+
+El `expireAfter` del lock tiene que superar el `timeout` del job por el mismo motivo — si expira
+antes, otro job entra en paralelo sobre la misma conversación.
 
 ### La cotización corre en paralelo, fuera del turno
 
