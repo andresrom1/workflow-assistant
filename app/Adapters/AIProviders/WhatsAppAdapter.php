@@ -20,6 +20,7 @@ use App\Services\CustomerIdentificationService;
 use App\Services\PlateNormalizerService;
 use App\Services\Quotability\QuotabilityResult;
 use App\Services\Quotability\QuotabilityStatus;
+use App\Services\Quote\QuoteComparisonService;
 use App\Services\QuoteService;
 use App\Services\VehicleIdentificationService;
 use App\Traits\ConditionalLogger;
@@ -42,6 +43,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         private readonly CoveragePreferenceService $coverageService,
         private readonly PlateNormalizerService $plate,
         private readonly Quotability $quotability,
+        private readonly QuoteComparisonService $comparison,
     ) {}
 
     /**
@@ -490,28 +492,43 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         // El closer solo puede ofrecer lo que el checkout puede cobrar. De paso deja una sola
         // fila por producto: sin esto el mismo plan le llega repetido con el precio de cupón,
         // que es más caro, como si fueran opciones distintas.
-        $alternatives = $quote->alternatives
+        $ofrecibles = $quote->alternatives
             ->filter(fn (QuoteAlternative $alt): bool => $alt->esOfrecible())
-            ->values()
-            ->map(fn (QuoteAlternative $alt): array => [
-                'quote_id' => $quote->id,
-                'quote_alternative_id' => $alt->id,
-                'aseguradora' => $alt->aseguradora,
-                'titulo' => $alt->titulo,
-                'descripcion' => $alt->descripcion,
-                'normalized_grade' => $alt->normalized_grade,
-                'precio' => $alt->precio,
-                'moneda' => $alt->moneda,
-                'marketing_title' => $alt->marketing_title,
-                'sum_insured_text' => $alt->sum_insured_text,
-                'features_tags' => $alt->features_tags,
-                'full_details' => $alt->full_details,
-            ]);
+            ->values();
+
+        // El glosario va UNA vez y cada alternativa lleva solo sus tags. Antes la descripción de
+        // cada cobertura viajaba adentro de cada fila: en la cotización #19 eso eran 1.588
+        // entradas —33 definiciones repetidas ~48 veces— y 108.827 de los ~135.700 caracteres del
+        // payload, el 80%. El vocabulario del proveedor es cerrado y cada tag tiene una única
+        // descripción idéntica entre compañías, así que deduplicarlo no pierde nada.
+        // Ver ROADMAP, bitácora 2026-08-13.
+        $glosario = array_map(
+            fn (array $entrada): string => $entrada['nota'],
+            $this->comparison->glossary($ofrecibles),
+        );
+
+        $alternatives = $ofrecibles->map(fn (QuoteAlternative $alt): array => [
+            'quote_id' => $quote->id,
+            'quote_alternative_id' => $alt->id,
+            'aseguradora' => $alt->aseguradora,
+            'titulo' => $alt->titulo,
+            'descripcion' => $alt->descripcion,
+            'normalized_grade' => $alt->normalized_grade,
+            'precio' => $alt->precio,
+            'moneda' => $alt->moneda,
+            'marketing_title' => $alt->marketing_title,
+            'sum_insured_text' => $alt->sum_insured_text,
+            'features_tags' => $alt->features_tags,
+        ]);
 
         return $this->formatSuccess(
             "Cotización #{$quote->id} obtenida. Usá quote_id={$quote->id} para el checkout."
                 .$this->recordatorioDelPedido($quote),
-            ['quotes' => json_encode(['quote_id' => $quote->id, 'alternatives' => $alternatives])]
+            ['quotes' => json_encode([
+                'quote_id' => $quote->id,
+                'glosario' => $glosario,
+                'alternatives' => $alternatives,
+            ])]
         );
     }
 

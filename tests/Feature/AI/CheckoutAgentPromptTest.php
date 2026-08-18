@@ -31,8 +31,19 @@ it('instructs the agent to filter by both grade and features', function () {
     expect($this->prompt)
         ->toContain('doble eje')
         ->toContain('normalized_grade')
-        ->toContain('features_tags')
-        ->toContain('full_details');
+        ->toContain('features_tags');
+});
+
+/**
+ * El payload dejó de repetir la descripción de cada cobertura en cada alternativa: ahora va un
+ * `glosario` único indexado por tag. Si el prompt no explica esa relación, el modelo busca el
+ * detalle adentro de la alternativa, no lo encuentra y presenta features sin saber qué cubren.
+ */
+it('explains that coverage definitions live in the shared glosario', function () {
+    expect($this->prompt)
+        ->toContain('glosario')
+        ->toContain('una sola vez')
+        ->not->toContain('full_details');
 });
 
 it('has the contrasted fallback rule', function () {

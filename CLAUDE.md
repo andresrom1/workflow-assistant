@@ -408,8 +408,26 @@ El formulario de checkout captura 7 fotos desde la cámara del celular. Los nave
 ## RAG — Documentacion de Coberturas (pgvector)
 
 Sistema de dos agentes para responder consultas de coberturas con precision:
-- **Frontal** (los 5 agentes del orquestador) verifica `full_details` primero, luego delega al Experto via `CheckCoverageRuleTool`.
-- **Experto** (`AnonymousAgent` con `SearchCompanyDocumentationTool`) busca en pgvector los chunks relevantes de la documentacion de la compania.
+- **Frontal** (los 5 agentes del orquestador) verifica el `glosario` del payload primero, luego delega al Experto via `CheckCoverageRuleTool`.
+- **Experto** (`AnonymousAgent` con `SearchCompanyDocumentationTool`) busca en pgvector los chunks relevantes de la documentacion de la compania. Carga `full_details` **de la base** por `quote_alternative_id`, asi que ve la redaccion exacta de esa alternativa aunque el payload lleve el glosario deduplicado.
+
+### El glosario: `full_details` va una sola vez, no por alternativa
+
+`WhatsAppAdapter::getQuote()` manda **un** `glosario` (`tag → descripcion`) al mismo nivel que
+`alternatives`, y cada alternativa lleva solo su `features_tags`.
+
+Antes la descripcion de cada cobertura viajaba adentro de cada fila. En la cotizacion de la
+conversacion #19: **1.588 entradas —33 definiciones repetidas ~48 veces— y 108.827 de los ~135.700
+caracteres del payload, el 80%.** Y cada pasada posterior del LLM las reenviaba enteras: el turno de
+`CheckoutAgent` llego a 143.665 tokens de entrada y 54,6 s.
+
+Se puede deduplicar sin perder nada porque **el vocabulario del proveedor es cerrado** (33 tags en
+`config/quotes.php`) y cada tag tiene una unica descripcion, identica entre companias — verificado
+sobre la base entera de produccion. El glosario lo arma `QuoteComparisonService::glossary()`, el
+mismo que ya usaba la vista publica de cotizaciones.
+
+**Si agregas un campo al payload de `get_quote`, preguntate si define el tag o la alternativa.** Si
+define el tag, va en el glosario.
 
 ### Pipeline: PDF → texto → chunks → embeddings → pgvector
 1. Admin sube PDF en `/coverage-documents` (CRUD Inertia)
