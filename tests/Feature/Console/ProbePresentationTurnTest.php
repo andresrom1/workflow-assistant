@@ -2,6 +2,8 @@
 
 use App\Models\AgentPrompt;
 use App\Models\Conversation;
+use App\Models\Quote;
+use App\Models\QuoteAlternative;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -17,6 +19,7 @@ beforeEach(function () {
         'cheapest' => 'deepseek-v4-flash',
         'smartest' => 'deepseek-v4-pro',
     ]);
+    config()->set('quotes.medios_de_pago_ofrecibles', ['tarjeta', 'tarjeta-cbu', 'todos']);
 });
 
 function promptDeCloser(string $key, string $content, bool $activo = true): AgentPrompt
@@ -32,11 +35,41 @@ function promptDeCloser(string $key, string $content, bool $activo = true): Agen
 }
 
 /**
+ * El catálogo contra el que se juzga la elección, con la forma del caso real: el cliente pidió
+ * comparar Terceros Completos y Todo Riesgo, y hay una trampa — una Todo Riesgo más barata pero
+ * pagable solo con cupón, que el checkout no puede cobrar.
+ *
+ * @return array{quote: Quote, c: int, ca: int, d: int, cupon: int}
+ */
+function catalogoDePrueba(int $conversationId): array
+{
+    $quote = Quote::factory()->create(['conversation_id' => $conversationId]);
+
+    $alt = fn (string $titulo, string $grade, float $precio, string $pago): QuoteAlternative => QuoteAlternative::factory()
+        ->create([
+            'quote_id' => $quote->id,
+            'aseguradora' => 'Galicia',
+            'titulo' => $titulo,
+            'normalized_grade' => $grade,
+            'precio' => $precio,
+            'payment_method_id' => $pago,
+        ]);
+
+    return [
+        'quote' => $quote,
+        'c' => $alt('C80', 'third_party_complete', 71119, 'tarjeta')->id,
+        'ca' => $alt('C Clima', 'third_party_complete_plus', 80984, 'tarjeta')->id,
+        'd' => $alt('Todo Riesgo 4%', 'all_risk', 107274, 'tarjeta')->id,
+        'cupon' => $alt('Todo Riesgo Cupón', 'all_risk', 99000, 'cupon')->id,
+    ];
+}
+
+/**
  * Un store con la forma real del turno de presentación: el usuario pide, el agente de cotización
  * llama `get_quote` y recibe el payload, entra el turno sintético del closer, y el closer responde.
  * Esa última fila es la que la sonda tiene que regenerar, así que NO debe viajar.
  */
-function storeDePresentacion(int $conversationId, string $payloadDeQuote = 'PAYLOAD-DEL-GLOSARIO'): void
+function storeDePresentacion(int $conversationId, int $quoteId = 19, string $payloadDeQuote = 'PAYLOAD-DEL-GLOSARIO'): void
 {
     $storeId = (string) Str::uuid();
 
@@ -72,8 +105,8 @@ function storeDePresentacion(int $conversationId, string $payloadDeQuote = 'PAYL
         $fila(
             'assistant',
             'Texto del QuoteAgent que se descarta',
-            [['id' => 'call_1', 'name' => 'GetQuoteTool', 'arguments' => ['quoteId' => 19]]],
-            [['id' => 'call_1', 'name' => 'GetQuoteTool', 'arguments' => ['quoteId' => 19], 'result' => $payloadDeQuote]],
+            [['id' => 'call_1', 'name' => 'GetQuoteTool', 'arguments' => ['quoteId' => $quoteId]]],
+            [['id' => 'call_1', 'name' => 'GetQuoteTool', 'arguments' => ['quoteId' => $quoteId], 'result' => $payloadDeQuote]],
         ),
         $fila('user', 'Cotizaciones listas'),
         $fila('assistant', 'RESPUESTA DEL CLOSER QUE HAY QUE REGENERAR'),
@@ -81,7 +114,7 @@ function storeDePresentacion(int $conversationId, string $payloadDeQuote = 'PAYL
 }
 
 /** Respuesta con forma de DeepSeek. `$tools` son los nombres que el modelo dice querer llamar. */
-function respuestaDeTurno(array $tools = ['PresentQuoteOptionsTool']): array
+function respuestaDeTurno(array $tools = ['PresentQuoteOptionsTool'], array $argumentos = []): array
 {
     return [
         'choices' => [[
@@ -90,12 +123,27 @@ function respuestaDeTurno(array $tools = ['PresentQuoteOptionsTool']): array
                 'tool_calls' => array_map(fn (string $n): array => [
                     'id' => 'call_x',
                     'type' => 'function',
-                    'function' => ['name' => $n, 'arguments' => '{}'],
+                    'function' => [
+                        'name' => $n,
+                        'arguments' => json_encode($n === 'PresentQuoteOptionsTool' ? $argumentos : []),
+                    ],
                 ], $tools),
             ],
             'finish_reason' => $tools === [] ? 'stop' : 'tool_calls',
         ]],
         'usage' => ['prompt_tokens' => 32000, 'completion_tokens' => 4000],
+    ];
+}
+
+/** Una elección con la forma que la tool exige. */
+function eleccion(int $recomendada, int $otra, string $razon1 = 'Cubre lo importante al mejor precio.', string $razon2 = 'Suma daños propios con franquicia.'): array
+{
+    return [
+        'quote_id' => 1,
+        'alternative_ids' => [$recomendada, $otra],
+        'recommended_alternative_id' => $recomendada,
+        'recommended_reason' => $razon1,
+        'alternative_reason' => $razon2,
     ];
 }
 
@@ -107,6 +155,17 @@ function correrSonda(int $conversationId, array $opciones = []): PendingCommand
     ], $opciones));
 }
 
+/** Escenario completo: catálogo, store apuntando a esa quote, y prompt activo. */
+function escenario(): array
+{
+    $conversation = Conversation::factory()->create();
+    $cat = catalogoDePrueba($conversation->id);
+    storeDePresentacion($conversation->id, $cat['quote']->id);
+    promptDeCloser('checkout_closer', 'PROMPT');
+
+    return [$conversation, $cat];
+}
+
 /**
  * Lo que hace útil a la sonda es medir el prompt REAL: el propio más los bloques compartidos, en el
  * mismo orden que `AgentPrompt::compose()`. Midiendo solo el del agente subestimaría 6.491 caracteres.
@@ -115,7 +174,8 @@ it('manda como system el prompt compuesto con sus bloques compartidos', function
     Http::fake(['*/chat/completions' => Http::response(respuestaDeTurno())]);
 
     $conversation = Conversation::factory()->create();
-    storeDePresentacion($conversation->id);
+    $cat = catalogoDePrueba($conversation->id);
+    storeDePresentacion($conversation->id, $cat['quote']->id);
 
     promptDeCloser('shared_style', 'ESTILO');
     promptDeCloser('shared_grounding', 'GROUNDING');
@@ -139,7 +199,8 @@ it('pinea una versión histórica del prompt con --prompt-id', function () {
     Http::fake(['*/chat/completions' => Http::response(respuestaDeTurno())]);
 
     $conversation = Conversation::factory()->create();
-    storeDePresentacion($conversation->id);
+    $cat = catalogoDePrueba($conversation->id);
+    storeDePresentacion($conversation->id, $cat['quote']->id);
 
     promptDeCloser('shared_style', 'ESTILO');
     $vieja = promptDeCloser('checkout_closer', 'PROMPT VIEJO', activo: false);
@@ -164,7 +225,8 @@ it('reconstruye el tool call y su resultado, con el payload de get_quote adentro
     Http::fake(['*/chat/completions' => Http::response(respuestaDeTurno())]);
 
     $conversation = Conversation::factory()->create();
-    storeDePresentacion($conversation->id, 'GLOSARIO-CON-LAS-COBERTURAS');
+    $cat = catalogoDePrueba($conversation->id);
+    storeDePresentacion($conversation->id, $cat['quote']->id, 'GLOSARIO-CON-LAS-COBERTURAS');
     promptDeCloser('checkout_closer', 'PROMPT');
 
     correrSonda($conversation->id)->assertSuccessful();
@@ -185,9 +247,7 @@ it('reconstruye el tool call y su resultado, con el payload de get_quote adentro
 it('corta el contexto en el último mensaje de usuario', function () {
     Http::fake(['*/chat/completions' => Http::response(respuestaDeTurno())]);
 
-    $conversation = Conversation::factory()->create();
-    storeDePresentacion($conversation->id);
-    promptDeCloser('checkout_closer', 'PROMPT');
+    [$conversation] = escenario();
 
     correrSonda($conversation->id)->assertSuccessful();
 
@@ -209,9 +269,7 @@ it('corta el contexto en el último mensaje de usuario', function () {
 it('ofrece las 5 tools del closer con tool_choice auto y sin temperature', function () {
     Http::fake(['*/chat/completions' => Http::response(respuestaDeTurno())]);
 
-    $conversation = Conversation::factory()->create();
-    storeDePresentacion($conversation->id);
-    promptDeCloser('checkout_closer', 'PROMPT');
+    [$conversation] = escenario();
 
     correrSonda($conversation->id)->assertSuccessful();
 
@@ -219,7 +277,6 @@ it('ofrece las 5 tools del closer con tool_choice auto y sin temperature', funct
         $nombres = array_column(array_column($request['tools'], 'function'), 'name');
 
         return $request['tool_choice'] === 'auto'
-            && $request['model'] === 'deepseek-v4-pro'
             && ! array_key_exists('temperature', $request->data())
             && count($nombres) === 5
             && in_array('PresentQuoteOptionsTool', $nombres, true)
@@ -230,21 +287,136 @@ it('ofrece las 5 tools del closer con tool_choice auto y sin temperature', funct
     });
 });
 
+/** Sin `--model` sale el tier `smartest`, que es el que declara CheckoutAgent con #[UseSmartestModel]. */
+it('usa el tier smartest por defecto y lo puede sobreescribir con --model', function (?string $opcion, string $esperado) {
+    Http::fake(['*/chat/completions' => Http::response(respuestaDeTurno())]);
+
+    [$conversation] = escenario();
+
+    correrSonda($conversation->id, $opcion === null ? [] : ['--model' => $opcion])->assertSuccessful();
+
+    Http::assertSent(fn ($request): bool => $request['model'] === $esperado);
+})->with([
+    'por defecto, el smartest' => [null, 'deepseek-v4-pro'],
+    'sobreescrito' => ['deepseek-v4-flash', 'deepseek-v4-flash'],
+]);
+
+/**
+ * Sin resolver los argumentos contra el catálogo, la sonda solo puede decir si llamó la tool — no
+ * si eligió bien, que es la pregunta cuando se compara un modelo que razona menos.
+ */
+it('resuelve las alternativas elegidas contra el catálogo', function () {
+    [$conversation, $cat] = escenario();
+
+    Http::fake(['*/chat/completions' => Http::response(
+        respuestaDeTurno(['PresentQuoteOptionsTool'], eleccion($cat['ca'], $cat['d']))
+    )]);
+
+    // Una sola subcadena por línea: `expectsOutputToContain` consume una por escritura, así que
+    // dos expectativas de la misma línea nunca matchean las dos.
+    correrSonda($conversation->id)
+        ->expectsOutputToContain('★Galicia C Clima $81,0K (C+A) / Galicia Todo Riesgo 4% $107,3K (D)')
+        ->expectsOutputToContain('presentaciones válidas ... 1/1')
+        ->assertSuccessful();
+});
+
+/** El cliente pidió una de cada nivel: dos del mismo grado no es la presentación que se le prometió. */
+it('marca inválida la corrida que eligió dos alternativas del mismo grado', function () {
+    [$conversation, $cat] = escenario();
+
+    Http::fake(['*/chat/completions' => Http::response(
+        respuestaDeTurno(['PresentQuoteOptionsTool'], eleccion($cat['c'], $cat['ca']))
+    )]);
+
+    correrSonda($conversation->id)
+        ->expectsOutputToContain('grades_no_pedidos')
+        ->expectsOutputToContain('presentaciones válidas ... 0/1')
+        ->assertSuccessful();
+});
+
+/** Ofrecer algo que el checkout no puede cobrar es una venta rota, aunque el grado sea el correcto. */
+it('marca inválida la corrida que eligió una alternativa no ofrecible', function () {
+    [$conversation, $cat] = escenario();
+
+    Http::fake(['*/chat/completions' => Http::response(
+        respuestaDeTurno(['PresentQuoteOptionsTool'], eleccion($cat['ca'], $cat['cupon']))
+    )]);
+
+    correrSonda($conversation->id)
+        ->expectsOutputToContain('no_ofrecible')
+        ->expectsOutputToContain('presentaciones válidas ... 0/1')
+        ->assertSuccessful();
+});
+
+/** Las razones son load-bearing en la vista pública: sin ellas la card queda hueca. */
+it('marca inválida la corrida con una razón vacía', function () {
+    [$conversation, $cat] = escenario();
+
+    Http::fake(['*/chat/completions' => Http::response(
+        respuestaDeTurno(['PresentQuoteOptionsTool'], eleccion($cat['ca'], $cat['d'], razon2: '   '))
+    )]);
+
+    correrSonda($conversation->id)
+        ->expectsOutputToContain('razon_vacia')
+        ->assertSuccessful();
+});
+
+/**
+ * El dato central de la comparación entre tiers: un modelo que delibera menos puede llamar la tool
+ * igual y dispersarse en la elección. El par se ordena para que el mismo par en distinto orden
+ * cuente como la misma elección.
+ */
+it('cuenta la distribución de pares elegidos', function () {
+    [$conversation, $cat] = escenario();
+
+    Http::fake([
+        '*/chat/completions' => Http::sequence()
+            ->push(respuestaDeTurno(['PresentQuoteOptionsTool'], eleccion($cat['ca'], $cat['d'])))
+            ->push(respuestaDeTurno(['PresentQuoteOptionsTool'], eleccion($cat['d'], $cat['ca'])))
+            ->push(respuestaDeTurno(['PresentQuoteOptionsTool'], eleccion($cat['c'], $cat['d']))),
+    ]);
+
+    $par = min($cat['ca'], $cat['d']).'+'.max($cat['ca'], $cat['d']);
+
+    correrSonda($conversation->id, ['--runs' => 3])
+        ->expectsOutputToContain("{$par} ×2")
+        ->assertSuccessful();
+});
+
+/** Las razones son prosa y no se pueden contar: el volcado las lleva completas para leerlas. */
+it('vuelca las razones completas al json', function () {
+    [$conversation, $cat] = escenario();
+
+    Http::fake(['*/chat/completions' => Http::response(
+        respuestaDeTurno(['PresentQuoteOptionsTool'], eleccion($cat['ca'], $cat['d'], 'RAZON DE LA RECOMENDADA', 'RAZON DE LA OTRA'))
+    )]);
+
+    $ruta = tempnam(sys_get_temp_dir(), 'probe').'.json';
+
+    correrSonda($conversation->id, ['--json' => $ruta])->assertSuccessful();
+
+    $volcado = (string) file_get_contents($ruta);
+
+    expect($volcado)
+        ->toContain('RAZON DE LA RECOMENDADA')
+        ->toContain('RAZON DE LA OTRA');
+
+    unlink($ruta);
+});
+
 /**
  * Sin esto la sonda no sirve para nada: tiene que distinguir la corrida que tomó el camino correcto
  * de la que llamó otra tool y de la que no llamó ninguna.
  */
 it('cuenta cuántas corridas tomaron el camino correcto', function () {
+    [$conversation, $cat] = escenario();
+
     Http::fake([
         '*/chat/completions' => Http::sequence()
-            ->push(respuestaDeTurno(['PresentQuoteOptionsTool']))
+            ->push(respuestaDeTurno(['PresentQuoteOptionsTool'], eleccion($cat['ca'], $cat['d'])))
             ->push(respuestaDeTurno(['CheckCoverageRuleTool']))
             ->push(respuestaDeTurno([])),
     ]);
-
-    $conversation = Conversation::factory()->create();
-    storeDePresentacion($conversation->id);
-    promptDeCloser('checkout_closer', 'PROMPT');
 
     correrSonda($conversation->id, ['--runs' => 3])
         ->expectsOutputToContain('1/3')
@@ -253,12 +425,12 @@ it('cuenta cuántas corridas tomaron el camino correcto', function () {
         ->assertSuccessful();
 });
 
-it('avisa cuando todas las corridas tomaron el camino correcto', function () {
-    Http::fake(['*/chat/completions' => Http::response(respuestaDeTurno())]);
+it('avisa cuando todas las corridas eligieron bien', function () {
+    [$conversation, $cat] = escenario();
 
-    $conversation = Conversation::factory()->create();
-    storeDePresentacion($conversation->id);
-    promptDeCloser('checkout_closer', 'PROMPT');
+    Http::fake(['*/chat/completions' => Http::response(
+        respuestaDeTurno(['PresentQuoteOptionsTool'], eleccion($cat['ca'], $cat['d']))
+    )]);
 
     correrSonda($conversation->id, ['--runs' => 2])
         ->expectsOutputToContain('2/2')
