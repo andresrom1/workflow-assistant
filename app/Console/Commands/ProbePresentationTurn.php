@@ -196,10 +196,17 @@ class ProbePresentationTurn extends Command
         $cruda = collect($llamadas)
             ->first(fn (mixed $tc): bool => data_get($tc, 'function.name') === self::TOOL_ESPERADA);
 
-        /** @var array<string, mixed> $argumentos */
-        $argumentos = $cruda === null
+        /** @var array<string, mixed> $crudos */
+        $crudos = $cruda === null
             ? []
             : (array) json_decode((string) data_get($cruda, 'function.arguments', '{}'), true);
+
+        // El SDK envuelve el schema de cada tool en un `ObjectSchema` llamado `schema_definition`
+        // ({@see AddsToolsToPrismRequests::createPrismTool()}), así que el modelo devuelve los
+        // campos anidados ahí adentro. `invokeTool()` los desarma con el mismo `??`; sin esto la
+        // sonda lee un nivel más arriba y da todo inválido.
+        /** @var array<string, mixed> $argumentos */
+        $argumentos = (array) ($crudos['schema_definition'] ?? $crudos);
 
         $eleccion = $this->evaluar($argumentos, $alternativas);
 

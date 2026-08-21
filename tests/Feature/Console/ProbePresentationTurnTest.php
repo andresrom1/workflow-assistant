@@ -135,16 +135,20 @@ function respuestaDeTurno(array $tools = ['PresentQuoteOptionsTool'], array $arg
     ];
 }
 
-/** Una elección con la forma que la tool exige. */
+/**
+ * Una elección con la forma que la tool exige, anidada bajo `schema_definition` — que es como la
+ * devuelve el modelo, porque el SDK envuelve el schema de cada tool en un `ObjectSchema` con ese
+ * nombre. Leerla un nivel más arriba da todo inválido.
+ */
 function eleccion(int $recomendada, int $otra, string $razon1 = 'Cubre lo importante al mejor precio.', string $razon2 = 'Suma daños propios con franquicia.'): array
 {
-    return [
+    return ['schema_definition' => [
         'quote_id' => 1,
         'alternative_ids' => [$recomendada, $otra],
         'recommended_alternative_id' => $recomendada,
         'recommended_reason' => $razon1,
         'alternative_reason' => $razon2,
-    ];
+    ]];
 }
 
 function correrSonda(int $conversationId, array $opciones = []): PendingCommand
@@ -316,6 +320,24 @@ it('resuelve las alternativas elegidas contra el catálogo', function () {
     // dos expectativas de la misma línea nunca matchean las dos.
     correrSonda($conversation->id)
         ->expectsOutputToContain('★Galicia C Clima $81,0K (C+A) / Galicia Todo Riesgo 4% $107,3K (D)')
+        ->expectsOutputToContain('presentaciones válidas ... 1/1')
+        ->assertSuccessful();
+});
+
+/**
+ * Regresión del bug que dio 0/10 válidas en las dos primeras corridas reales: los argumentos venían
+ * anidados bajo `schema_definition` y la sonda los leía un nivel más arriba, así que reportaba
+ * `cantidad`, `recomendada_fuera`, `razon_vacia` y `grades_no_pedidos` en corridas que en realidad
+ * eran perfectas. Se acepta la forma plana también, por si el envoltorio del SDK cambia.
+ */
+it('acepta los argumentos planos igual que anidados bajo schema_definition', function () {
+    [$conversation, $cat] = escenario();
+
+    Http::fake(['*/chat/completions' => Http::response(
+        respuestaDeTurno(['PresentQuoteOptionsTool'], eleccion($cat['ca'], $cat['d'])['schema_definition'])
+    )]);
+
+    correrSonda($conversation->id)
         ->expectsOutputToContain('presentaciones válidas ... 1/1')
         ->assertSuccessful();
 });
