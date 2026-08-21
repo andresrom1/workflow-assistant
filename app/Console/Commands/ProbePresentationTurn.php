@@ -202,9 +202,14 @@ class ProbePresentationTurn extends Command
      */
     private function contextRows(int $conversationId): ?array
     {
-        $storeIds = DB::table('agent_conversations')
+        // El store se resuelve por `agent_conversation_messages.user_id` y NO por
+        // `agent_conversations.user_id`: esa columna viene inconsistente en producción — está en
+        // NULL para las conversaciones 21, 22 y 23, y poblada para la 20 y la 24. La de los
+        // mensajes está completa, y además es la tabla de la que se leen las filas.
+        $storeIds = DB::table('agent_conversation_messages')
             ->where('user_id', $conversationId)
-            ->pluck('id');
+            ->distinct()
+            ->pluck('conversation_id');
 
         if ($storeIds->count() !== 1) {
             $this->error("Se esperaba 1 conversación de agente para la #{$conversationId}, hay {$storeIds->count()}.");

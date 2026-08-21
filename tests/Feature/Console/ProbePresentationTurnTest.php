@@ -40,9 +40,12 @@ function storeDePresentacion(int $conversationId, string $payloadDeQuote = 'PAYL
 {
     $storeId = (string) Str::uuid();
 
+    // `user_id` va en NULL a propósito: así viene en producción para las conversaciones 21, 22 y
+    // 23. Por eso el store se resuelve por `agent_conversation_messages.user_id`, que sí está
+    // completo, y no por esta tabla.
     DB::table('agent_conversations')->insert([
         'id' => $storeId,
-        'user_id' => $conversationId,
+        'user_id' => null,
         'title' => 'test',
         'created_at' => now(),
         'updated_at' => now(),
