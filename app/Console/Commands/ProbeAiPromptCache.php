@@ -7,13 +7,12 @@ use App\AI\Agents\CoveragePreferenceAgent;
 use App\AI\Agents\CustomerIdentifierAgent;
 use App\AI\Agents\QuoteAgent;
 use App\AI\Agents\VehicleIdentifierAgent;
-use App\Models\AgentPrompt;
+use App\AI\Probes\DeepSeekProbe;
+use App\AI\Probes\TurnRequest;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
-use Laravel\Ai\Attributes\UseCheapestModel;
-use Laravel\Ai\Attributes\UseSmartestModel;
 use ReflectionClass;
+use Throwable;
 
 /**
  * Mide si el prompt de sistema pega en la caché de prefijos de DeepSeek, y cuánto ahorra.
@@ -47,12 +46,11 @@ class ProbeAiPromptCache extends Command
     /** Por debajo de esto, el prefill que evita la caché no mueve la aguja de la UX. */
     private const UMBRAL_MS = 500;
 
-    public function handle(): int
+    public function handle(DeepSeekProbe $probe): int
     {
         $key = (string) $this->argument('agent');
-        $apiKey = (string) config('ai.providers.deepseek.key');
 
-        if ($apiKey === '') {
+        if (DeepSeekProbe::apiKey() === '') {
             $this->error('Falta DEEPSEEK_API_KEY.');
 
             return self::FAILURE;
@@ -79,9 +77,9 @@ class ProbeAiPromptCache extends Command
         // invalidaría nada y la primera llamada pegaría hit igual, falseando el delta.
         $ruido = '['.Str::random(48)."]\n\n";
 
-        $miss = $this->medir($apiKey, $model, $ruido.$prompt, 'miss forzado');
-        $hit = $this->medir($apiKey, $model, $ruido.$prompt, 'repetición');
-        $real = $this->medir($apiKey, $model, $prompt, 'prompt tal cual');
+        $miss = $this->medir($probe, $model, $ruido.$prompt, 'miss forzado');
+        $hit = $this->medir($probe, $model, $ruido.$prompt, 'repetición');
+        $real = $this->medir($probe, $model, $prompt, 'prompt tal cual');
 
         if ($miss === null || $hit === null || $real === null) {
             return self::FAILURE;
@@ -138,41 +136,26 @@ class ProbeAiPromptCache extends Command
      *
      * @return array{tokens: int, hit: int, miss: int, ms: int}|null
      */
-    private function medir(string $apiKey, string $model, string $system, string $etiqueta): ?array
+    private function medir(DeepSeekProbe $probe, string $model, string $system, string $etiqueta): ?array
     {
-        // La misma URL que usa el provider de Prism, para medir contra el endpoint real.
-        $url = rtrim((string) config('prism.providers.deepseek.url', 'https://api.deepseek.com/v1'), '/');
-
-        $arranque = hrtime(true);
-
-        $response = Http::withToken($apiKey)
-            ->timeout(120)
-            ->post("{$url}/chat/completions", [
-                'model' => $model,
-                'max_tokens' => 1,
-                'temperature' => 0,
-                'messages' => [
-                    ['role' => 'system', 'content' => $system],
-                    ['role' => 'user', 'content' => 'ok'],
-                ],
-            ]);
-
-        $ms = (int) round((hrtime(true) - $arranque) / 1e6);
-
-        if ($response->failed()) {
-            $this->error("  {$etiqueta}: HTTP {$response->status()} — ".$response->body());
+        try {
+            // `max_tokens = 1`: la respuesta es despreciable, así que el tiempo de pared es
+            // esencialmente prefill — que es justo lo que la caché evita.
+            $r = $probe->send($model, [
+                ['role' => 'system', 'content' => $system],
+                ['role' => 'user', 'content' => 'ok'],
+            ], [], ['max_tokens' => 1, 'temperature' => 0]);
+        } catch (Throwable $e) {
+            $this->error("  {$etiqueta}: ".$e->getMessage());
 
             return null;
         }
 
-        /** @var array<string, mixed> $usage */
-        $usage = (array) $response->json('usage', []);
-
         $fila = [
-            'tokens' => (int) ($usage['prompt_tokens'] ?? 0),
-            'hit' => (int) ($usage['prompt_cache_hit_tokens'] ?? 0),
-            'miss' => (int) ($usage['prompt_cache_miss_tokens'] ?? 0),
-            'ms' => $ms,
+            'tokens' => $r['prompt_tokens'],
+            'hit' => $r['cache_hit_tokens'],
+            'miss' => $r['cache_miss_tokens'],
+            'ms' => $r['ms'],
         ];
 
         $this->line(sprintf(
@@ -193,7 +176,7 @@ class ProbeAiPromptCache extends Command
         $file = $this->option('file');
 
         if ($file === null) {
-            return AgentPrompt::compose($key, $this->sharedBlocks($key));
+            return TurnRequest::system($key, $this->sharedBlocks($key));
         }
 
         return is_readable((string) $file) ? (string) file_get_contents((string) $file) : '';
@@ -232,22 +215,10 @@ class ProbeAiPromptCache extends Command
     {
         /** @var array<string, string> $models */
         $models = (array) config('ai.providers.deepseek.models.text');
-
-        $fallback = $models['default'] ?? 'deepseek-v4-flash';
         $class = self::AGENT_CLASSES[$key] ?? null;
 
-        if ($class === null) {
-            return $fallback;
-        }
-
-        $reflection = new ReflectionClass($class);
-
-        $tier = match (true) {
-            $reflection->getAttributes(UseSmartestModel::class) !== [] => 'smartest',
-            $reflection->getAttributes(UseCheapestModel::class) !== [] => 'cheapest',
-            default => 'default',
-        };
-
-        return $models[$tier] ?? $fallback;
+        return $class === null
+            ? ($models['default'] ?? 'deepseek-v4-flash')
+            : DeepSeekProbe::modelFor($class);
     }
 }

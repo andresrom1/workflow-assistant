@@ -3,56 +3,33 @@
 namespace App\Console\Commands;
 
 use App\Adapters\AIProviders\WhatsAppAdapter;
+use App\AI\Agents\CheckoutAgent;
+use App\AI\Probes\DeepSeekProbe;
+use App\AI\Probes\ProbeStats;
+use App\AI\Probes\TurnRequest;
 use App\AI\Tools\CheckCoverageRuleTool;
 use App\AI\Tools\CheckoutTool;
 use App\AI\Tools\PresentQuoteOptionsTool;
 use App\AI\Tools\RevertStageTool;
 use App\AI\Tools\SiniestroGuidanceTool;
-use App\Models\AgentPrompt;
 use App\Models\Conversation;
 use Illuminate\Console\Command;
-use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Contracts\Tool;
-use Laravel\Ai\Gateway\Prism\Concerns\AddsToolsToPrismRequests;
-use Laravel\Ai\ObjectSchema;
-use Laravel\Ai\Storage\DatabaseConversationStore;
-use Prism\Prism\Providers\DeepSeek\Maps\MessageMap;
-use Prism\Prism\Providers\DeepSeek\Maps\ToolMap;
-use Prism\Prism\Tool as PrismTool;
-use Prism\Prism\ValueObjects\Messages\AssistantMessage;
-use Prism\Prism\ValueObjects\Messages\SystemMessage;
-use Prism\Prism\ValueObjects\Messages\ToolResultMessage;
-use Prism\Prism\ValueObjects\Messages\UserMessage;
-use Prism\Prism\ValueObjects\ToolCall;
-use Prism\Prism\ValueObjects\ToolResult;
 use stdClass;
+use Throwable;
 
 /**
- * Repite N veces el turno de presentación del closer sobre un contexto histórico, para medir
- * cuántas veces toma el camino correcto (llamar `PresentQuoteOptionsTool`) y cuánto tarda.
+ * Repite N veces el turno de presentación del closer sobre un contexto histórico, para medir si
+ * toma el camino correcto (llamar `PresentQuoteOptionsTool`), si elige bien, y cuánto tarda.
  *
  * Por qué existe: dos conversaciones de producción con prompt, payload, código y guión IDÉNTICOS
  * (#23 y #24) tardaron 108,2s y 63,5s y generaron 7.699 y 4.578 tokens. Con esa dispersión, ninguna
- * hipótesis sobre latencia o sobre el camino del agente se puede evaluar con una corrida por
- * condición — y cada corrida real cuesta una conversación de WhatsApp de tres minutos.
+ * hipótesis se puede evaluar con una corrida por condición — y cada corrida real cuesta una
+ * conversación de WhatsApp de tres minutos.
  *
- * Por qué manda UN SOLO paso y no usa el SDK: la pregunta es qué DECIDE el modelo, no qué pasa
- * después. Leyendo `choices.0.message.tool_calls` sin ejecutar nada, la sonda no escribe en `quotes`,
- * no toca metadata, no despacha jobs y no manda WhatsApp — es segura por construcción y no por
- * convención. Con el SDK no se puede: `DeepSeek\Handlers\Text::handleToolCalls()` llama a
- * `callTools()` ANTES de chequear `shouldContinue()`, así que ni con `maxSteps = 1` se evitan los
- * efectos.
- *
- * Y no pierde casi nada: en la #23 el primer paso fue 103s de los 108s del turno.
- *
- * La fidelidad con producción no se traduce a mano: el payload se arma con los mismos mappers que
- * usa Prism ({@see ToolMap}, {@see MessageMap}) sobre los mismos value objects.
- *
- * Por qué no sirve el Studio: `PromptReevaluationService::resolveToolsForAgent('checkout_closer')`
- * no ofrece `PresentQuoteOptionsTool`, y su `buildContext()` lee la tabla `messages` (solo texto
- * visible), así que el resultado de `get_quote` —el centro del asunto— no estaría en el contexto.
+ * Manda UN SOLO paso y lee lo que el modelo pidió, sin ejecutar nada: ver {@see DeepSeekProbe}.
+ * No pierde casi nada — en la #23 el primer paso fue 103s de los 108s del turno.
  */
 class ProbePresentationTurn extends Command
 {
@@ -60,7 +37,7 @@ class ProbePresentationTurn extends Command
                             {--runs=10 : Cuántas veces repetir el turno}
                             {--conversation=23 : ID de la conversación cuyo contexto se reevalúa}
                             {--prompt-id= : Pinear una versión de checkout_closer en vez de la activa}
-                            {--model= : Correr con otro modelo (por defecto, el tier smartest)}
+                            {--model= : Correr con otro modelo (por defecto, el tier del agente)}
                             {--json= : Volcar las corridas crudas a este archivo}';
 
     protected $description = 'Repite el turno del closer sobre un contexto histórico y mide camino, calidad y latencia';
@@ -80,11 +57,9 @@ class ProbePresentationTurn extends Command
 
     private const FAMILIA_D = ['all_risk'];
 
-    public function handle(): int
+    public function handle(DeepSeekProbe $probe): int
     {
-        $apiKey = (string) config('ai.providers.deepseek.key');
-
-        if ($apiKey === '') {
+        if (DeepSeekProbe::apiKey() === '') {
             $this->error('Falta DEEPSEEK_API_KEY.');
 
             return self::FAILURE;
@@ -99,13 +74,16 @@ class ProbePresentationTurn extends Command
             return self::FAILURE;
         }
 
-        $rows = $this->contextRows($conversationId);
+        try {
+            $rows = TurnRequest::rowsUpToLastUser($conversationId);
+        } catch (Throwable $e) {
+            $this->error($e->getMessage());
 
-        if ($rows === null) {
             return self::FAILURE;
         }
 
-        $system = $this->systemPrompt();
+        $pinned = $this->option('prompt-id');
+        $system = TurnRequest::system('checkout_closer', self::SHARED_BLOCKS, $pinned === null ? null : (int) $pinned);
 
         if (trim($system) === '') {
             $this->error('El prompt compuesto quedó vacío. ¿Hay una versión activa de checkout_closer?');
@@ -113,18 +91,15 @@ class ProbePresentationTurn extends Command
             return self::FAILURE;
         }
 
-        $tools = ToolMap::Map($this->prismTools($conversation));
-        $messages = (new MessageMap($this->prismMessages($rows), [new SystemMessage($system)]))();
-
-        $model = (string) ($this->option('model')
-            ?: config('ai.providers.deepseek.models.text.smartest')
-            ?: 'deepseek-v4-pro');
+        $tools = TurnRequest::toolPayload($this->tools($conversation));
+        $messages = TurnRequest::payload(TurnRequest::prismMessages($rows), $system);
+        $model = (string) ($this->option('model') ?: DeepSeekProbe::modelFor(CheckoutAgent::class));
 
         // El catálogo contra el que se juzga la elección: sin esto la sonda solo puede decir si
         // llamó la tool, no si eligió bien.
         $alternativas = $this->alternativasDelContexto($conversationId, $rows);
 
-        $this->resumenDeEntrada($conversationId, $system, $rows, $tools, $model, count($alternativas));
+        $this->cabecera($conversationId, $system, $rows, $tools, $model, count($alternativas));
 
         $runs = max(1, (int) $this->option('runs'));
         $resultados = [];
@@ -132,9 +107,11 @@ class ProbePresentationTurn extends Command
         $this->line(sprintf('  %-4s %10s %11s %11s  %s', '#', 'ms', 'prompt_tok', 'compl_tok', 'elección'));
 
         for ($i = 1; $i <= $runs; $i++) {
-            $fila = $this->correr($apiKey, $model, $messages, $tools, $i, $alternativas);
+            try {
+                $fila = $this->correr($probe, $model, $messages, $tools, $i, $alternativas);
+            } catch (Throwable $e) {
+                $this->error("  corrida {$i}: ".$e->getMessage());
 
-            if ($fila === null) {
                 return self::FAILURE;
             }
 
@@ -149,73 +126,35 @@ class ProbePresentationTurn extends Command
     }
 
     /**
-     * Una pasada contra la API. Nunca ejecuta una tool: solo mira qué pidió el modelo y con qué
-     * argumentos.
-     *
      * @param  array<int, mixed>  $messages
      * @param  array<array-key, mixed>  $tools
      * @param  array<int, array{aseguradora: string, titulo: string, grade: string, precio: float, ofrecible: bool}>  $alternativas
-     * @return array<string, mixed>|null
+     * @return array<string, mixed>
      */
-    private function correr(string $apiKey, string $model, array $messages, array $tools, int $run, array $alternativas): ?array
+    private function correr(DeepSeekProbe $probe, string $model, array $messages, array $tools, int $run, array $alternativas): array
     {
-        // La misma URL que usa el provider de Prism, para medir contra el endpoint real.
-        $url = rtrim((string) config('prism.providers.deepseek.url', 'https://api.deepseek.com/v1'), '/');
-
-        $arranque = hrtime(true);
-
-        $response = Http::withToken($apiKey)
-            ->timeout(400)
-            ->post("{$url}/chat/completions", [
-                'model' => $model,
-                'messages' => $messages,
-                'tools' => $tools,
-                // Los dos tal como los manda producción: `auto` está hardcodeado en el SDK
-                // (AddsToolsToPrismRequests) y CheckoutAgent no declara #[Temperature], así que
-                // mandar una acá mediría otra cosa.
-                'tool_choice' => 'auto',
-            ]);
-
-        $ms = (int) round((hrtime(true) - $arranque) / 1e6);
-
-        if ($response->failed()) {
-            $this->error("  corrida {$run}: HTTP {$response->status()} — ".$response->body());
-
-            return null;
-        }
-
-        /** @var list<array<string, mixed>> $llamadas */
-        $llamadas = (array) $response->json('choices.0.message.tool_calls', []);
+        $r = $probe->send($model, $messages, $tools);
 
         /** @var list<string> $pedidas */
-        $pedidas = collect($llamadas)
+        $pedidas = collect($r['tool_calls'])
             ->map(fn (mixed $tc): string => (string) data_get($tc, 'function.name', '?'))
             ->all();
 
-        // Los argumentos vienen como string JSON, no como objeto.
-        $cruda = collect($llamadas)
+        $cruda = collect($r['tool_calls'])
             ->first(fn (mixed $tc): bool => data_get($tc, 'function.name') === self::TOOL_ESPERADA);
 
-        /** @var array<string, mixed> $crudos */
-        $crudos = $cruda === null
+        $argumentos = $cruda === null
             ? []
-            : (array) json_decode((string) data_get($cruda, 'function.arguments', '{}'), true);
-
-        // El SDK envuelve el schema de cada tool en un `ObjectSchema` llamado `schema_definition`
-        // ({@see AddsToolsToPrismRequests::createPrismTool()}), así que el modelo devuelve los
-        // campos anidados ahí adentro. `invokeTool()` los desarma con el mismo `??`; sin esto la
-        // sonda lee un nivel más arriba y da todo inválido.
-        /** @var array<string, mixed> $argumentos */
-        $argumentos = (array) ($crudos['schema_definition'] ?? $crudos);
+            : TurnRequest::unwrapArguments((string) data_get($cruda, 'function.arguments', '{}'));
 
         $eleccion = $this->evaluar($argumentos, $alternativas);
 
         $fila = [
             'run' => $run,
-            'ms' => $ms,
-            'prompt_tokens' => (int) $response->json('usage.prompt_tokens', 0),
-            'completion_tokens' => (int) $response->json('usage.completion_tokens', 0),
-            'finish_reason' => (string) $response->json('choices.0.finish_reason', '?'),
+            'ms' => $r['ms'],
+            'prompt_tokens' => $r['prompt_tokens'],
+            'completion_tokens' => $r['completion_tokens'],
+            'finish_reason' => $r['finish_reason'],
             'tools' => $pedidas,
             'arguments' => $argumentos,
             'eleccion' => $eleccion,
@@ -230,9 +169,9 @@ class ProbePresentationTurn extends Command
         $this->line(sprintf(
             '  %-4s %10s %11s %11s  %s %s',
             $run,
-            number_format($ms, 0, ',', '.'),
-            number_format($fila['prompt_tokens'], 0, ',', '.'),
-            number_format($fila['completion_tokens'], 0, ',', '.'),
+            number_format($r['ms'], 0, ',', '.'),
+            number_format($r['prompt_tokens'], 0, ',', '.'),
+            number_format($r['completion_tokens'], 0, ',', '.'),
             $marca,
             $eleccion['etiqueta'],
         ));
@@ -341,9 +280,27 @@ class ProbePresentationTurn extends Command
     }
 
     /**
+     * Las 5 tools que `InsuranceOrchestrator::resolveAgent()` le da al closer en el paso 5.
+     *
+     * @return array<int, Tool>
+     */
+    private function tools(Conversation $conversation): array
+    {
+        /** @var WhatsAppAdapter $adapter */
+        $adapter = app(WhatsAppAdapter::class);
+
+        return [
+            new CheckoutTool($adapter, $conversation),
+            new CheckCoverageRuleTool,
+            new RevertStageTool($adapter, $conversation),
+            new PresentQuoteOptionsTool($conversation),
+            new SiniestroGuidanceTool($conversation),
+        ];
+    }
+
+    /**
      * El catálogo de la cotización a la que se refiere el contexto. El id sale del `GetQuoteTool`
-     * que el `QuoteAgent` llamó en ese mismo turno — que es la fuente exacta, no una inferencia
-     * por conversación.
+     * que el `QuoteAgent` llamó en ese mismo turno — la fuente exacta, no una inferencia.
      *
      * @param  list<stdClass>  $rows
      * @return array<int, array{aseguradora: string, titulo: string, grade: string, precio: float, ofrecible: bool}>
@@ -382,177 +339,10 @@ class ProbePresentationTurn extends Command
     }
 
     /**
-     * Las filas del store hasta la última `user` inclusive: ese es el turno a regenerar, así que la
-     * respuesta del closer que vino después NO viaja.
-     *
-     * @return list<stdClass>|null
-     */
-    private function contextRows(int $conversationId): ?array
-    {
-        // El store se resuelve por `agent_conversation_messages.user_id` y NO por
-        // `agent_conversations.user_id`: esa columna viene inconsistente en producción — está en
-        // NULL para las conversaciones 21, 22 y 23, y poblada para la 20 y la 24. La de los
-        // mensajes está completa, y además es la tabla de la que se leen las filas.
-        $storeIds = DB::table('agent_conversation_messages')
-            ->where('user_id', $conversationId)
-            ->distinct()
-            ->pluck('conversation_id');
-
-        if ($storeIds->count() !== 1) {
-            $this->error("Se esperaba 1 conversación de agente para la #{$conversationId}, hay {$storeIds->count()}.");
-
-            return null;
-        }
-
-        /** @var list<stdClass> $rows */
-        $rows = DB::table('agent_conversation_messages')
-            ->where('conversation_id', (string) $storeIds->first())
-            ->orderBy('id')
-            ->get()
-            ->all();
-
-        $ultimoUser = null;
-        foreach ($rows as $idx => $row) {
-            if ($row->role === 'user') {
-                $ultimoUser = $idx;
-            }
-        }
-
-        if ($ultimoUser === null) {
-            $this->error("La conversación #{$conversationId} no tiene ningún mensaje de usuario en el store.");
-
-            return null;
-        }
-
-        return array_slice($rows, 0, $ultimoUser + 1);
-    }
-
-    /**
-     * Traduce las filas del store a value objects de Prism, con la misma lógica que
-     * {@see DatabaseConversationStore::getLatestConversationMessages()}.
-     *
-     * Reconstruir `tool_calls` y `tool_results` es lo que hace fiel a la sonda: ahí adentro viaja el
-     * payload de `get_quote`, que es la variable que estamos estudiando.
-     *
-     * @param  list<stdClass>  $rows
-     * @return array<int, AssistantMessage|ToolResultMessage|UserMessage>
-     */
-    private function prismMessages(array $rows): array
-    {
-        $messages = [];
-
-        foreach ($rows as $row) {
-            if ($row->role === 'user') {
-                $messages[] = new UserMessage((string) $row->content);
-
-                continue;
-            }
-
-            /** @var list<array<string, mixed>> $toolCalls */
-            $toolCalls = (array) json_decode((string) $row->tool_calls, true);
-            /** @var list<array<string, mixed>> $toolResults */
-            $toolResults = (array) json_decode((string) $row->tool_results, true);
-
-            if ($toolCalls === []) {
-                $messages[] = new AssistantMessage((string) $row->content);
-
-                continue;
-            }
-
-            $messages[] = new AssistantMessage(
-                (string) ($row->content ?: ''),
-                array_map(fn (array $tc): ToolCall => new ToolCall(
-                    id: (string) $tc['id'],
-                    name: (string) $tc['name'],
-                    arguments: $tc['arguments'],
-                    resultId: $tc['result_id'] ?? null,
-                ), $toolCalls),
-            );
-
-            if ($toolResults !== []) {
-                $messages[] = new ToolResultMessage(
-                    array_map(fn (array $tr): ToolResult => new ToolResult(
-                        toolCallId: (string) $tr['id'],
-                        toolName: (string) $tr['name'],
-                        args: (array) ($tr['arguments'] ?? []),
-                        result: $tr['result'],
-                        toolCallResultId: $tr['result_id'] ?? null,
-                    ), $toolResults),
-                );
-            }
-        }
-
-        return $messages;
-    }
-
-    /**
-     * Las 5 tools del closer, envueltas igual que {@see AddsToolsToPrismRequests::createPrismTool()}.
-     *
-     * Ninguna sobreescribe `name()`, así que el nombre que viaja es `class_basename` — que es el que
-     * se ve en `agent_execution_logs.tool_calls`.
-     *
-     * Instanciarlas es inofensivo: acá solo se leen `description()` y `schema()`; los `handle()`
-     * nunca se invocan porque la sonda no ejecuta el tool loop.
-     *
-     * @return array<int, PrismTool>
-     */
-    private function prismTools(Conversation $conversation): array
-    {
-        /** @var WhatsAppAdapter $adapter */
-        $adapter = app(WhatsAppAdapter::class);
-
-        /** @var array<int, Tool> $tools */
-        $tools = [
-            new CheckoutTool($adapter, $conversation),
-            new CheckCoverageRuleTool,
-            new RevertStageTool($adapter, $conversation),
-            new PresentQuoteOptionsTool($conversation),
-            new SiniestroGuidanceTool($conversation),
-        ];
-
-        return array_map(function (Tool $tool): PrismTool {
-            $schema = $tool->schema(new JsonSchemaTypeFactory);
-
-            $prismTool = (new PrismTool)
-                ->as(class_basename($tool))
-                ->for((string) $tool->description());
-
-            if ($schema !== []) {
-                $prismTool = $prismTool->withParameter(new ObjectSchema($schema));
-            }
-
-            return $prismTool;
-        }, $tools);
-    }
-
-    /** El prompt tal como lo compone el runtime, o una versión pineada con --prompt-id. */
-    private function systemPrompt(): string
-    {
-        $pinned = $this->option('prompt-id');
-
-        if ($pinned === null) {
-            return AgentPrompt::compose('checkout_closer', self::SHARED_BLOCKS);
-        }
-
-        $version = AgentPrompt::find((int) $pinned);
-
-        if ($version === null) {
-            return '';
-        }
-
-        // Mismo orden que compose(): los compartidos primero, el del agente al final.
-        return collect(self::SHARED_BLOCKS)
-            ->map(fn (string $key): ?string => AgentPrompt::activeFor($key)?->content)
-            ->push($version->content)
-            ->filter()
-            ->implode("\n\n");
-    }
-
-    /**
      * @param  list<stdClass>  $rows
      * @param  array<array-key, mixed>  $tools
      */
-    private function resumenDeEntrada(int $conversationId, string $system, array $rows, array $tools, string $model, int $alternativas): void
+    private function cabecera(int $conversationId, string $system, array $rows, array $tools, string $model, int $alternativas): void
     {
         /** @var list<string> $nombres */
         $nombres = collect($tools)->map(fn (mixed $t): string => (string) data_get($t, 'function.name', '?'))->all();
@@ -585,9 +375,6 @@ class ProbePresentationTurn extends Command
             ->map(fn (int $n, string $name): string => "{$name} ×{$n}")
             ->values();
 
-        $ms = collect($resultados)->pluck('ms');
-        $tok = collect($resultados)->pluck('completion_tokens');
-
         $validas = collect($resultados)->filter(fn (array $r): bool => $r['eleccion']['valida'])->count();
 
         // La dispersión de pares es el dato central de calidad: un modelo que delibera menos puede
@@ -614,6 +401,11 @@ class ProbePresentationTurn extends Command
             ->map(fn (int $n, string $f): string => "{$f} ×{$n}")
             ->values();
 
+        /** @var list<int> $ms */
+        $ms = collect($resultados)->pluck('ms')->all();
+        /** @var list<int> $tok */
+        $tok = collect($resultados)->pluck('completion_tokens')->all();
+
         $this->line("  corridas ................. {$total}");
         $this->line("  llamó la tool ............ {$conLaTool}/{$total}  (".round($conLaTool * 100 / $total).' %)');
         $this->line("  presentaciones válidas ... {$validas}/{$total}  (".round($validas * 100 / $total).' %)');
@@ -621,8 +413,8 @@ class ProbePresentationTurn extends Command
         $this->line('  recomendada .............. '.($recomendadas->isEmpty() ? '(ninguna)' : $recomendadas->implode(' · ')));
         $this->line('  fallos ................... '.($fallos->isEmpty() ? '(ninguno)' : $fallos->implode(' · ')));
         $this->line('  otras tools .............. '.($otras->isEmpty() ? '(ninguna)' : $otras->implode(', ')));
-        $this->line('  latencia ................. '.$this->tramo($ms->all(), 1000, ' s'));
-        $this->line('  completion_tokens ........ '.$this->tramo($tok->all(), 1, ''));
+        $this->line('  latencia ................. '.ProbeStats::tramo($ms, 1000, ' s'));
+        $this->line('  completion_tokens ........ '.ProbeStats::tramo($tok));
         $this->newLine();
 
         $this->line(match (true) {
@@ -632,22 +424,6 @@ class ProbePresentationTurn extends Command
         });
 
         $this->line('  → Las razones son prosa: leerlas del volcado --json para juzgar redacción.');
-    }
-
-    /**
-     * @param  list<int>  $valores
-     */
-    private function tramo(array $valores, int $divisor, string $sufijo): string
-    {
-        sort($valores);
-        $n = count($valores);
-        $fmt = fn (float $v): string => $divisor > 1
-            ? number_format($v / $divisor, 1, ',', '.').$sufijo
-            : number_format($v, 0, ',', '.').$sufijo;
-
-        return 'min '.$fmt((float) $valores[0])
-            .' · p50 '.$fmt((float) $valores[intdiv($n - 1, 2)])
-            .' · max '.$fmt((float) $valores[$n - 1]);
     }
 
     /**

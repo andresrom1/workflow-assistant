@@ -34,6 +34,20 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
 {
     use ConditionalLogger;
 
+    /**
+     * Le PIDE al agente el aviso de espera en vez de prohibírselo: desde que se sacó el texto fijo
+     * (2026-08-22), su mensaje es el único que el cliente recibe antes de 100-130s de silencio.
+     *
+     * El peso va acá y no solo en el prompt porque el `tool_output` es el canal que mejor obedece
+     * en este sistema — el prompt v7 prohibía la promesa y el modelo la hacía igual en 3 de 4
+     * conversaciones. Ver ROADMAP, bitácora 2026-08-22.
+     *
+     * Es constante y no un literal porque `ai:probe-coverage-turn` lo inyecta como resultado de
+     * tool para medir cuántas veces el agente efectivamente avisa. Con una copia, las dos
+     * redacciones se desincronizarían sin que nadie se entere.
+     */
+    public const PEDIDO_DE_AVISO = 'La consulta a las compañías está en marcha desde que registraste el vehículo y tarda entre 30 segundos y dos minutos. Confirmá la cobertura elegida en una frase y cerrá avisándole que le pasás las opciones apenas lleguen. Ese es el ÚNICO aviso de espera que el cliente va a recibir, así que no lo omitas. Tampoco inventes alternativas ni precios — te avisan cuando lleguen.';
+
     public function __construct(
         private readonly CustomerIdentificationService $customerService,
         private readonly VehicleIdentificationService $vehicleService,
@@ -410,11 +424,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         $guardada = "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}.";
 
         $message = match (true) {
-            // Le PIDE el aviso de espera en vez de prohibírselo: desde que se sacó el texto fijo,
-            // su mensaje es el único que el cliente recibe antes de 100-130s de silencio. El
-            // tool_output es el canal que mejor obedece en este sistema, así que el peso va acá y
-            // no solo en el prompt. Ver ROADMAP, bitácora 2026-08-22.
-            $enVuelo => "{$guardada} La consulta a las compañías está en marcha desde que registraste el vehículo y tarda entre 30 segundos y dos minutos. Confirmá la cobertura elegida en una frase y cerrá avisándole que le pasás las opciones apenas lleguen. Ese es el ÚNICO aviso de espera que el cliente va a recibir, así que no lo omitas. Tampoco inventes alternativas ni precios — te avisan cuando lleguen.",
+            $enVuelo => "{$guardada} ".self::PEDIDO_DE_AVISO,
 
             // Cubre dos casos que terminan igual: la consulta terminó mientras indagabas la
             // cobertura (el normal desde que se adelantó al paso del vehículo), y el cliente que

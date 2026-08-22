@@ -462,6 +462,48 @@ define el tag, va en el glosario.
 - Si se usa Nginx: `client_max_body_size 50m;` en el bloque server
 - La validacion Laravel permite hasta 50MB (`max:51200` en `CoverageDocumentController@store`)
 
+## Sondas de agentes (`ai:probe-*`)
+
+Comandos de consola que **reproducen un turno real contra el modelo, N veces**, para responder
+preguntas que con una conversación de WhatsApp por muestra saldrían carísimas en tiempo.
+
+| Comando | Qué contesta |
+|---|---|
+| `ai:probe-cache` | ¿El prompt de sistema pega en la caché de prefijos de DeepSeek, y cuánto ahorra? |
+| `ai:probe-presentation` | ¿El closer llama `present_quote_options`, elige bien las 2 alternativas, y cuánto tarda? |
+| `ai:probe-coverage-turn` | ¿Qué escribe `CoveragePreferenceAgent`, y menciona la espera de la cotización? |
+
+La maquinaria compartida vive en `app/AI/Probes/`: `DeepSeekProbe` (la llamada cruda cronometrada y
+el modelo por atributo), `TurnRequest` (prompt + mensajes del store + tools) y `ProbeStats`.
+
+### Las tres reglas que las hacen confiables
+
+1. **Nunca ejecutan una tool.** Leen lo que el modelo *pidió*, no lo que pasaría. Por eso no escriben
+   en la base, no despachan jobs y no mandan WhatsApp — es seguro **por construcción, no por
+   convención**. Con el SDK sería imposible: `DeepSeek\Handlers\Text::handleToolCalls()` llama a
+   `callTools()` **antes** de chequear `shouldContinue()`, así que ni con `maxSteps = 1` se evitan
+   los efectos. Por eso le pegan a la API con `Http` directo.
+   Cuando hace falta el texto que el agente escribe *después* de una tool, el intercambio se inyecta
+   ya resuelto con `TurnRequest::withToolExchange()`.
+
+2. **Fidelidad sin traducción a mano.** El payload se arma con los **mismos mappers de Prism**
+   (`ToolMap`, `MessageMap`) sobre los mismos value objects, el prompt con `AgentPrompt::compose()`
+   y el modelo con el atributo `#[UseSmartestModel]` / `#[UseCheapestModel]` del agente. Traducir a
+   mano se desincroniza del SDK sin que nadie se entere.
+   Ojo con dos trampas ya pisadas: el SDK anida los argumentos bajo **`schema_definition`** (usar
+   `TurnRequest::unwrapArguments()`), y **no se manda `temperature`** porque producción tampoco.
+
+3. **Siempre N corridas.** Dos corridas idénticas —mismo modelo, mismo prompt, mismo contexto—
+   difirieron **1,7× en latencia y tokens**, y un lote de 10 dio p50 93,7 s contra 72,2 s de otro
+   lote igual. Con n=1 no se concluye nada; una diferencia menor a la varianza entre lotes es ruido.
+
+### Cómo se juzga la salida
+
+Los chequeos objetivos van en código (¿llamó la tool? ¿los ids existen? ¿los grados son los
+pedidos?). **La prosa se lee.** Un regex sobre frases como *"te las paso"* sería frágil y daría una
+falsa sensación de rigor: por eso las sondas vuelcan el texto completo con `--json` en vez de
+contarlo solas.
+
 ## Modales y Confirmaciones
 
 - `window.confirm()` y `window.alert()` están **prohibidos**. Usar siempre modales inline.
