@@ -41,7 +41,9 @@ class EmitirPoliza implements ShouldQueue
         public readonly int $quoteId,
         public readonly int $checkoutSessionId,
     ) {
-        $this->onQueue('default');
+        // Post-checkout y asíncrona: el cliente ya recibió el aviso. En `default` bloqueaba hasta
+        // 2 min el acuse de lectura del próximo mensaje entrante.
+        $this->onQueue('background');
     }
 
     public function handle(PolizaEmisionService $service): void

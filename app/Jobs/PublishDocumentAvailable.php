@@ -30,7 +30,8 @@ class PublishDocumentAvailable implements ShouldQueue
         public readonly int $polizaId,
         public readonly string $kind,
     ) {
-        $this->onQueue('default');
+        // Push a la app mobile: no es una respuesta conversacional.
+        $this->onQueue('background');
     }
 
     public function handle(DocumentAvailablePublisher $publisher): void

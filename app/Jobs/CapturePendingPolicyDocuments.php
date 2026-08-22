@@ -36,7 +36,8 @@ class CapturePendingPolicyDocuments implements ShouldQueue
 
     public function __construct(public readonly int $polizaId)
     {
-        $this->onQueue('default');
+        // Reintenta hasta 10 veces esperando que la compañía genere el PDF.
+        $this->onQueue('background');
     }
 
     public function backoff(): int

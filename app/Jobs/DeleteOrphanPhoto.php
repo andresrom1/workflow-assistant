@@ -23,7 +23,8 @@ class DeleteOrphanPhoto implements ShouldQueue
      */
     public function __construct(public string $publicId)
     {
-        $this->onQueue('default');
+        // Borrado en R2, best-effort.
+        $this->onQueue('background');
     }
 
     /**

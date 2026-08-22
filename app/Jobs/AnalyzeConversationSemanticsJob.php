@@ -38,7 +38,8 @@ class AnalyzeConversationSemanticsJob implements ShouldQueue
         public int $conversationId,
         public bool $force = false,
     ) {
-        $this->onQueue('semantic-analysis');
+        // Observabilidad del admin, apagada por flag. Cierra la cola huérfana por mudanza.
+        $this->onQueue('background');
     }
 
     public function handle(): void

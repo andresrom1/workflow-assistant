@@ -21,7 +21,12 @@ class ProcessMediaAttachment implements ShouldQueue
 
     public int $backoff = 30;
 
-    public int $timeout = 120;
+    /**
+     * Comparte el worker `realtime` con la ingesta y los envíos al cliente, así que su techo es
+     * lo que puede llegar a demorarlos. 120s eran el techo de cuando tenía proceso propio; un STT
+     * que tarda más de un minuto ya falló.
+     */
+    public int $timeout = 60;
 
     public function __construct(
         private readonly int $attachmentId,

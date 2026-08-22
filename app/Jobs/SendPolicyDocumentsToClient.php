@@ -38,7 +38,8 @@ class SendPolicyDocumentsToClient implements ShouldQueue
         private readonly int $polizaId,
         private readonly int $conversationId,
     ) {
-        $this->onQueue('whatsapp-outbound');
+        // Descarga PDFs y los sube a Meta uno por uno; no es la respuesta a un mensaje.
+        $this->onQueue('background');
     }
 
     public function handle(WhatsAppOutboundService $waService): void

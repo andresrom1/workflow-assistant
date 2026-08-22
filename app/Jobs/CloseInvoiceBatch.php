@@ -31,7 +31,8 @@ class CloseInvoiceBatch implements ShouldQueue
         public readonly int $batchId,
         public readonly string $estado = 'completed',
     ) {
-        $this->onQueue('default');
+        // Cierre de lote de facturación.
+        $this->onQueue('background');
     }
 
     public function handle(): void

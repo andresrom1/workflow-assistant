@@ -178,7 +178,7 @@ class InvoiceBatchController extends Controller
         // con el que se despacha cada eslabón siguiente, así que si la cadena no la declara, el
         // encadenamiento no hereda la cola que eligió el constructor del job.
         Bus::chain([...$jobs, new CloseInvoiceBatch($batchId)])
-            ->onQueue('default')
+            ->onQueue('background')
             ->catch(function () use ($batchId): void {
                 CloseInvoiceBatch::dispatch($batchId, 'failed');
             })

@@ -295,7 +295,7 @@ it('E2E: sube por el endpoint real, el job (corrido a mano) deja pendiente y se 
     $doc = IngestedDocument::findOrFail($response->json('ingested_document_id'));
     // El endpoint encola la extracción y contesta: no la corre adentro del request.
     expect($doc->status)->toBe(IngestaStatus::EnExtraccion);
-    Queue::assertPushedOn('documents', ExtractIngestedDocument::class);
+    Queue::assertPushedOn('background', ExtractIngestedDocument::class);
 
     // Simula al worker procesando el job encolado.
     $doc = runIngestaJob($doc);

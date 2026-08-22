@@ -50,7 +50,8 @@ class EmitInvoice implements ShouldQueue
         public readonly int $invoiceId,
         public readonly int $ptoVta,
     ) {
-        $this->onQueue('default');
+        // Facturación contra AFIP: el cliente no la ve en tiempo real.
+        $this->onQueue('background');
     }
 
     /**

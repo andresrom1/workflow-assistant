@@ -18,27 +18,39 @@
 use Illuminate\Contracts\Queue\ShouldQueue;
 
 /**
- * Los workers declarados en el arranque del contenedor.
+ * Todos los workers del despliegue: los residentes que arranca supervisor y el de
+ * `background`, que no es residente y lo levanta el scheduler bajo demanda. Los dos se
+ * declaran como `queue:work`, así que los dos tienen que cumplir el mismo invariante.
  *
  * @return list<array{nombre: string, conexion: string, colas: list<string>, timeout: int}>
  */
 function workersDeclarados(): array
 {
-    $script = file_get_contents(base_path('.docker/start.sh'));
+    $patronComando = 'queue:work (?<conexion>\w+) --queue=(?<colas>[\w,-]+)[^\r\n]*?--timeout=(?<timeout>\d+)';
 
-    preg_match_all(
-        '/\[program:(?<nombre>[\w-]+)\]\s+command=php artisan queue:work (?<conexion>\w+) --queue=(?<colas>[\w,-]+)[^\r\n]*?--timeout=(?<timeout>\d+)/',
-        (string) $script,
-        $matches,
-        PREG_SET_ORDER,
-    );
+    $fuentes = [
+        // Residentes: supervisor los nombra con [program:X].
+        ['.docker/start.sh', '/\[program:(?<nombre>[\w-]+)\]\s+command=php artisan '.$patronComando.'/'],
+        // Bajo demanda: el scheduler no le pone nombre, se lo damos nosotros.
+        ['routes/console.php', "/Schedule::command\('{$patronComando}/"],
+    ];
 
-    return array_map(fn (array $m): array => [
-        'nombre' => $m['nombre'],
-        'conexion' => $m['conexion'],
-        'colas' => explode(',', $m['colas']),
-        'timeout' => (int) $m['timeout'],
-    ], $matches);
+    $workers = [];
+
+    foreach ($fuentes as [$ruta, $patron]) {
+        preg_match_all($patron, (string) file_get_contents(base_path($ruta)), $matches, PREG_SET_ORDER);
+
+        foreach ($matches as $m) {
+            $workers[] = [
+                'nombre' => $m['nombre'] ?? "scheduler:{$m['colas']}",
+                'conexion' => $m['conexion'],
+                'colas' => explode(',', $m['colas']),
+                'timeout' => (int) $m['timeout'],
+            ];
+        }
+    }
+
+    return $workers;
 }
 
 /**
@@ -73,6 +85,45 @@ function jobsDeclarados(): array
 
     return $jobs;
 }
+
+it('mantiene el mapa de jobs por cola', function (): void {
+    // El reparto completo, explícito. No es redundante con los invariantes de abajo: éstos
+    // dicen que el reparto es CONSISTENTE, y esto dice cuál es. Si alguien mueve un job de
+    // cola, acá se entera de que cambió la topología en vez de descubrirlo en producción.
+    $esperado = [
+        // El turno del LLM. Aislado en su propio worker: 4-95s por turno.
+        'whatsapp-ai' => ['NotifyClientCheckoutCompleted', 'NotifyClientQuoteReady', 'ProcessConversationInbox'],
+
+        // Camino caliente, un worker compartido. Todo corto y de cara al cliente.
+        'default' => ['AnalyzeConversationHealthJob', 'HandleUserIdUpdate', 'ProcessWhatsAppMessage', 'UpdateMessageStatus'],
+        'whatsapp-outbound' => ['NotifyClientEmissionFailed', 'NotifyClientQuoteFailed', 'SendWhatsAppMessage', 'SendWhatsAppTemplate'],
+        'media' => ['ProcessMediaAttachment'],
+
+        // Aislada: retiene el proceso 30-360s contra el proveedor.
+        'quotes' => ['ResolveQuote'],
+
+        // Sin worker residente: la levanta el scheduler bajo demanda.
+        'background' => [
+            'AnalyzeConversationSemanticsJob', 'CapturePendingPolicyDocuments', 'CloseInvoiceBatch',
+            'DeleteOrphanPhoto', 'EmitInvoice', 'EmitirPoliza', 'ExtractCoverageDocumentText',
+            'ExtractIngestedDocument', 'PublishDocumentAvailable', 'SendPolicyDocumentsToClient',
+        ],
+    ];
+
+    $real = [];
+    foreach (jobsDeclarados() as $clase => $p) {
+        $real[$p['cola']][] = class_basename($clase);
+    }
+
+    foreach ($real as &$jobs) {
+        sort($jobs);
+    }
+
+    ksort($real);
+    ksort($esperado);
+
+    expect($real)->toBe($esperado);
+});
 
 it('encuentra los workers y los jobs', function (): void {
     expect(workersDeclarados())->not->toBeEmpty()
