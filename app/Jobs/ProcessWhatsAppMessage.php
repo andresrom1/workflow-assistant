@@ -27,6 +27,12 @@ class ProcessWhatsAppMessage implements ShouldQueue
 
     public int $backoff = 30;
 
+    /**
+     * Ingesta: persiste el mensaje, manda el acuse de lectura y despacha el turno. Es el camino
+     * caliente — si tardara más que esto, ya hay algo roto en la Cloud API.
+     */
+    public int $timeout = 60;
+
     public function __construct(
         private readonly ?string $waId,
         private readonly string $messageBody,
@@ -38,7 +44,9 @@ class ProcessWhatsAppMessage implements ShouldQueue
         private readonly ?string $extUsername = null,
         private readonly ?string $mediaId = null,
         private readonly ?string $mediaMimeType = null,
-    ) {}
+    ) {
+        $this->onQueue('default');
+    }
 
     public function handle(
         ConversationRepository $conversationRepo,
@@ -134,7 +142,7 @@ class ProcessWhatsAppMessage implements ShouldQueue
                 $conversation->id,
                 $this->waId,
                 $this->phoneNumberId,
-            )->onQueue('media');
+            );
 
             Log::info('WhatsApp: audio ingestado, transcripción encolada', [
                 'wamid' => $this->messageId,
@@ -145,7 +153,6 @@ class ProcessWhatsAppMessage implements ShouldQueue
             // 6b. Texto: despachar el inbox processor con la ventana de silencio. El job
             //     vuelve a evaluarla al correr y se re-libera si el cliente sigue escribiendo.
             ProcessConversationInbox::dispatch($conversation->id, $this->waId, $this->phoneNumberId)
-                ->onQueue('whatsapp-ai')
                 ->delay(now()->addSeconds((int) config('whatsapp.inbox_quiet_seconds', 3)));
 
             Log::info('WhatsApp: mensaje ingestado', [

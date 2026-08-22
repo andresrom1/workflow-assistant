@@ -13,7 +13,15 @@ class AnalyzeConversationHealthJob implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public int $conversationId) {}
+    public int $tries = 3;
+
+    /** Sólo lee y escribe la base: sin red ni LLM. */
+    public int $timeout = 30;
+
+    public function __construct(public int $conversationId)
+    {
+        $this->onQueue('default');
+    }
 
     public function handle(): void
     {

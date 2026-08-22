@@ -137,8 +137,7 @@ class PolizaEmisionService
             return;
         }
 
-        SendPolicyDocumentsToClient::dispatch($poliza->id, $quote->conversation_id)
-            ->onQueue('whatsapp-outbound');
+        SendPolicyDocumentsToClient::dispatch($poliza->id, $quote->conversation_id);
     }
 
     /**

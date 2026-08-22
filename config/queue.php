@@ -35,18 +35,52 @@ return [
             'driver' => 'sync',
         ],
 
+        /*
+        |----------------------------------------------------------------------
+        | Una conexión por worker — para qué sirve realmente `retry_after`
+        |----------------------------------------------------------------------
+        |
+        | Las cuatro conexiones de abajo apuntan a la MISMA tabla `jobs` de la MISMA base. No
+        | aíslan nada: lo único que las distingue es `retry_after`, o sea a los cuántos segundos
+        | la cola da por abandonado un job reservado y lo vuelve a entregar.
+        |
+        | Y `retry_after` NO viaja con el job: lo aplica la conexión del worker que lo SACA, no
+        | la del código que lo despachó. Por eso cada worker de `.docker/start.sh` recibe su
+        | conexión como primer argumento (`queue:work database_ai --queue=...`). Sin ese
+        | argumento, Laravel cae a `queue.default` y todos los workers usan el `retry_after` de
+        | `database` — que es lo que pasaba hasta el refactor de colas: los valores finos de acá
+        | abajo estaban escritos pero no los aplicaba nadie.
+        |
+        | INVARIANTE, para cada worker:
+        |
+        |     retry_after de su conexión  >  el $timeout más largo de las colas que atiende
+        |
+        | Si se viola, la cola re-reserva un job que todavía está corriendo y queda ejecutándose
+        | dos veces en paralelo. Lo verifica `tests/Feature/Queue/WorkerConfigTest.php`.
+        |
+        | Del lado del despacho no se usa `onConnection()`: la cola la fija el constructor del
+        | job con `onQueue()`, y con eso alcanza.
+        |
+        */
+
+        /*
+         * Camino caliente y corto: ingesta de WhatsApp, envíos salientes a Meta y transcripción
+         * de notas de voz. El job más largo que atiende es ProcessMediaAttachment (120s).
+         */
         'database' => [
             'driver' => 'database',
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 200),
             'after_commit' => false,
         ],
 
-        // Conexión dedicada para jobs de AI con timeout extendido.
-        // retry_after debe superar el --timeout del worker (180s) para evitar
-        // que el queue driver considere el job abandonado mientras el LLM responde.
+        /*
+         * El turno conversacional. ProcessConversationInbox y NotifyClientQuoteReady declaran
+         * timeout=180: el margen hasta 200 es lo que evita que la cola dé por abandonado un
+         * turno mientras el LLM todavía está respondiendo.
+         */
         'database_ai' => [
             'driver' => 'database',
             'connection' => env('DB_QUEUE_CONNECTION'),
@@ -56,8 +90,6 @@ return [
             'after_commit' => false,
         ],
 
-        // Conexión dedicada para procesamiento de media (descarga + STT).
-        // retry_after debe superar el --timeout del worker (120s).
         /*
          * Cotización contra el proveedor. Es la operación más larga del sistema: el POST a
          * Visred más el polling de una task por compañía llegó a medirse en 174s en prod.
@@ -73,19 +105,11 @@ return [
             'after_commit' => false,
         ],
 
-        'database_media' => [
-            'driver' => 'database',
-            'connection' => env('DB_QUEUE_CONNECTION'),
-            'table' => env('DB_QUEUE_TABLE', 'jobs'),
-            'queue' => 'media',
-            'retry_after' => 150,
-            'after_commit' => false,
-        ],
-
-        // Conexión dedicada para jobs largos y poco frecuentes (extracción de PDF +
-        // chunking/embeddings de documentación de coberturas). El job declara timeout=300;
-        // retry_after debe superarlo para que no sea reclamado mientras corre. Vive en su
-        // propia cola/worker para no bloquear el hot-path de respuestas WhatsApp.
+        /*
+         * Jobs largos y poco frecuentes: extracción de PDF por LLM + chunking/embeddings de
+         * documentación de coberturas (ExtractCoverageDocumentText declara timeout=300) e
+         * ingesta local de pólizas. Fuera del hot-path de WhatsApp.
+         */
         'database_long' => [
             'driver' => 'database',
             'connection' => env('DB_QUEUE_CONNECTION'),

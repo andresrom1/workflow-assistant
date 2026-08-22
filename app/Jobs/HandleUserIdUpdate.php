@@ -15,11 +15,17 @@ class HandleUserIdUpdate implements ShouldQueue
 
     public int $backoff = 30;
 
+    /** Un UPDATE sobre `conversations`. */
+    public int $timeout = 30;
+
     /**
      * @param  array<string, mixed>  $payload  El objeto user_id_updates[0] del webhook de Meta.
      *                                         Contiene 'previous' y 'current' con sus respectivos 'user_id'.
      */
-    public function __construct(private readonly array $payload) {}
+    public function __construct(private readonly array $payload)
+    {
+        $this->onQueue('default');
+    }
 
     /**
      * Actualiza el ext_user_id de la conversación cuando un usuario de WhatsApp

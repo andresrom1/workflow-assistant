@@ -56,8 +56,9 @@ class ProcessConversationInbox implements ShouldQueue
         private readonly ?string $waId,
         private readonly string $phoneNumberId,
     ) {
-        // Usa la conexión con retry_after extendido (200s) para tolerar llamadas largas al LLM.
-        $this->onConnection('database_ai');
+        // La lee el worker de la conexión `database_ai` (retry_after 200s > timeout 180s), que
+        // tolera las llamadas largas al LLM sin que la cola re-reserve el job mientras corre.
+        $this->onQueue('whatsapp-ai');
     }
 
     public function middleware(): array

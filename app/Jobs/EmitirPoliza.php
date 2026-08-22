@@ -29,10 +29,20 @@ class EmitirPoliza implements ShouldQueue
 
     public int $backoff = 120; // segundos entre reintentos
 
+    /**
+     * Emisión contra Visred: un POST con `VISRED_TIMEOUT` (30s) más los reintentos internos del
+     * cliente HTTP. Hasta la Fase 1 del refactor de colas heredaba los 60s del `--timeout` del
+     * worker `default` — un valor que nadie eligió para este job. Queda por debajo del
+     * `retry_after` de la conexión `database` (200s).
+     */
+    public int $timeout = 120;
+
     public function __construct(
         public readonly int $quoteId,
         public readonly int $checkoutSessionId,
-    ) {}
+    ) {
+        $this->onQueue('default');
+    }
 
     public function handle(PolizaEmisionService $service): void
     {
@@ -115,7 +125,7 @@ class EmitirPoliza implements ShouldQueue
             ...$this->visredErrorContext($e),
         ]));
 
-        NotifyClientEmissionFailed::dispatch($quote->id)->onQueue('whatsapp-outbound');
+        NotifyClientEmissionFailed::dispatch($quote->id);
     }
 
     /**

@@ -10,6 +10,7 @@ use App\Services\IngestaConfirmacionService;
 use App\Services\IngestaDocumentoService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 
@@ -276,6 +277,7 @@ it('no idempotente hacia atrás: un documento ya resuelto no se re-extrae ni re-
 
 it('E2E: sube por el endpoint real, el job (corrido a mano) deja pendiente y se confirma materializando la cadena', function (): void {
     Storage::fake('r2');
+    Queue::fake();
     IngestaExtractorAgent::fake([fixtureSancorPoliza()]);
     Sanctum::actingAs(User::factory()->create());
 
@@ -291,7 +293,9 @@ it('E2E: sube por el endpoint real, el job (corrido a mano) deja pendiente y se 
     ], ['Accept' => 'application/json'])->assertCreated();
 
     $doc = IngestedDocument::findOrFail($response->json('ingested_document_id'));
-    expect($doc->status)->toBe(IngestaStatus::EnExtraccion); // el job está en la tabla `jobs`, aún no corrió
+    // El endpoint encola la extracción y contesta: no la corre adentro del request.
+    expect($doc->status)->toBe(IngestaStatus::EnExtraccion);
+    Queue::assertPushedOn('documents', ExtractIngestedDocument::class);
 
     // Simula al worker procesando el job encolado.
     $doc = runIngestaJob($doc);

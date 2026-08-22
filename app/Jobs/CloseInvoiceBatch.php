@@ -22,10 +22,17 @@ class CloseInvoiceBatch implements ShouldQueue
 {
     use Queueable;
 
+    public int $tries = 3;
+
+    /** Cierre de lote: sólo escribe estado en la base. */
+    public int $timeout = 60;
+
     public function __construct(
         public readonly int $batchId,
         public readonly string $estado = 'completed',
-    ) {}
+    ) {
+        $this->onQueue('default');
+    }
 
     public function handle(): void
     {

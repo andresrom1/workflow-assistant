@@ -4,10 +4,30 @@ set -e
 # 1. Configuración Dinámica de Supervisor
 # Creamos un archivo de configuración extra para que Supervisor gestione los Workers.
 # Esto garantiza que si se caen, se reinicien automáticamente.
+#
+# ---------------------------------------------------------------------------------------
+# El PRIMER argumento de `queue:work` es la CONEXIÓN, y no es opcional.
+#
+# `retry_after` (cada cuántos segundos la cola da por abandonado un job reservado y lo
+# vuelve a entregar) NO viaja con el job: lo aplica la conexión del worker que lo SACA.
+# Sin el argumento, Laravel cae a `queue.default` y todos los workers terminan usando el
+# `retry_after` de `database`, ignorando los valores finos de config/queue.php.
+#
+# INVARIANTE por worker:  retry_after de su conexión  >  su --timeout
+#
+#   database        200  >  120
+#   database_ai     200  >  180
+#   database_quotes 420  >  360
+#   database_long   360  >  300
+#
+# `--timeout` y `--tries` acá son sólo el techo de seguridad: cada job declara los suyos
+# (`public int $timeout` / `$tries`) y ésos son los que manda Laravel. Ver el arch test
+# en tests/Feature/Queue/.
+# ---------------------------------------------------------------------------------------
 mkdir -p /var/log/supervisor
 
 echo "[program:worker]
-command=php artisan queue:work --queue=default --sleep=3 --tries=3 --timeout=60 --max-time=3600
+command=php artisan queue:work database --queue=default --sleep=3 --tries=3 --timeout=120 --max-time=3600
 autostart=true
 autorestart=true
 stopwaitsecs=3600
@@ -17,7 +37,7 @@ stdout_logfile_maxbytes=1MB
 stderr_logfile_maxbytes=1MB
 
 [program:worker-whatsapp-ai]
-command=php artisan queue:work --queue=whatsapp-ai --sleep=3 --tries=3 --timeout=180 --max-time=3600
+command=php artisan queue:work database_ai --queue=whatsapp-ai --sleep=3 --tries=3 --timeout=180 --max-time=3600
 autostart=true
 autorestart=true
 stopwaitsecs=3600
@@ -27,7 +47,7 @@ stdout_logfile_maxbytes=1MB
 stderr_logfile_maxbytes=1MB
 
 [program:worker-whatsapp-outbound]
-command=php artisan queue:work --queue=whatsapp-outbound --sleep=3 --tries=5 --timeout=30 --max-time=3600
+command=php artisan queue:work database --queue=whatsapp-outbound --sleep=3 --tries=5 --timeout=120 --max-time=3600
 autostart=true
 autorestart=true
 stopwaitsecs=3600
@@ -37,7 +57,7 @@ stdout_logfile_maxbytes=1MB
 stderr_logfile_maxbytes=1MB
 
 [program:worker-quotes]
-command=php artisan queue:work --queue=quotes --sleep=3 --tries=2 --timeout=360 --max-time=3600
+command=php artisan queue:work database_quotes --queue=quotes --sleep=3 --tries=2 --timeout=360 --max-time=3600
 autostart=true
 autorestart=true
 stopwaitsecs=3600
@@ -47,7 +67,7 @@ stdout_logfile_maxbytes=1MB
 stderr_logfile_maxbytes=1MB
 
 [program:worker-media]
-command=php artisan queue:work --queue=media --sleep=3 --tries=3 --timeout=120 --max-time=3600
+command=php artisan queue:work database --queue=media --sleep=3 --tries=3 --timeout=120 --max-time=3600
 autostart=true
 autorestart=true
 stopwaitsecs=3600
@@ -57,7 +77,7 @@ stdout_logfile_maxbytes=1MB
 stderr_logfile_maxbytes=1MB
 
 [program:worker-documents]
-command=php artisan queue:work --queue=documents --sleep=5 --tries=3 --timeout=300 --max-time=3600
+command=php artisan queue:work database_long --queue=documents,semantic-analysis --sleep=5 --tries=3 --timeout=300 --max-time=3600
 autostart=true
 autorestart=true
 stopwaitsecs=3600
@@ -77,7 +97,7 @@ stdout_logfile_maxbytes=1MB
 stderr_logfile_maxbytes=1MB" > /etc/supervisor/conf.d/laravel-worker.conf
 
 # 2. Migraciones (Producción)
-# Usamos --force para evitar preguntas. 
+# Usamos --force para evitar preguntas.
 # IMPORTANTE: Cambiamos :fresh por migrate estándar para NO borrar datos.
 php artisan migrate --force
 

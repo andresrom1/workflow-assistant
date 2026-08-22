@@ -21,6 +21,9 @@ class AnalyzeConversationSemanticsJob implements ShouldQueue
 
     public int $backoff = 120;
 
+    /** Una llamada al modelo caro sobre una ventana de 6 turnos. */
+    public int $timeout = 120;
+
     /** @var array<int, string> */
     public const FLAG_KEYS = [
         'user_frustrated',

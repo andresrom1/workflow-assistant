@@ -30,7 +30,6 @@ trait DespachaRespuestaDelAgente
         ?int $conversationId,
     ): void {
         if ($publicLink === null) {
-            $respuesta->onQueue('whatsapp-outbound');
             Bus::dispatch($respuesta);
 
             return;

@@ -104,6 +104,6 @@ class FollowUpStalledConversations extends Command
             config('services.whatsapp.phone_number_id'),
             $conversation->id,
             'followup'
-        )->onQueue('whatsapp-outbound');
+        );
     }
 }

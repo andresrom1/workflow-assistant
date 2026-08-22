@@ -44,7 +44,7 @@ class CloudApiWhatsAppDispatcher implements WhatsAppDispatcher
             $template['language'],
             $bodyParams,
             (string) config('services.whatsapp.phone_number_id'),
-        )->onQueue('whatsapp-outbound');
+        );
     }
 
     /**

@@ -13,7 +13,15 @@ class UpdateMessageStatus implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function __construct(private readonly array $statusData) {}
+    public int $tries = 3;
+
+    /** Un UPDATE sobre `messages`. */
+    public int $timeout = 30;
+
+    public function __construct(private readonly array $statusData)
+    {
+        $this->onQueue('default');
+    }
 
     public function handle(): void
     {

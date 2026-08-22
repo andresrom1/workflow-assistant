@@ -27,10 +27,19 @@ class SendPolicyDocumentsToClient implements ShouldQueue
 
     public int $backoff = 10;
 
+    /**
+     * Descarga los PDF de la póliza y los sube a la Cloud API, uno por uno. Hasta la Fase 1 del
+     * refactor de colas heredaba los 30s del `--timeout` del worker `whatsapp-outbound`, pensados
+     * para un POST de texto.
+     */
+    public int $timeout = 120;
+
     public function __construct(
         private readonly int $polizaId,
         private readonly int $conversationId,
-    ) {}
+    ) {
+        $this->onQueue('whatsapp-outbound');
+    }
 
     public function handle(WhatsAppOutboundService $waService): void
     {

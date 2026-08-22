@@ -29,7 +29,7 @@ class ProcessMediaAttachment implements ShouldQueue
         private readonly ?string $waId,
         private readonly string $phoneNumberId,
     ) {
-        $this->onConnection('database_media');
+        $this->onQueue('media');
     }
 
     public function handle(
@@ -60,7 +60,6 @@ class ProcessMediaAttachment implements ShouldQueue
             $attachment->message->update(['content' => $transcript]);
 
             ProcessConversationInbox::dispatch($this->conversationId, $this->waId, $this->phoneNumberId)
-                ->onQueue('whatsapp-ai')
                 ->delay(now()->addSeconds((int) config('whatsapp.inbox_quiet_seconds', 3)));
         } catch (\Throwable $e) {
             $attachment->update([

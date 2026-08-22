@@ -31,7 +31,13 @@ class CapturePendingPolicyDocuments implements ShouldQueue
 
     public int $tries = 10;
 
-    public function __construct(public readonly int $polizaId) {}
+    /** Consulta a Visred por los documentos ya generados; no descarga los PDF. */
+    public int $timeout = 60;
+
+    public function __construct(public readonly int $polizaId)
+    {
+        $this->onQueue('default');
+    }
 
     public function backoff(): int
     {
@@ -65,8 +71,7 @@ class CapturePendingPolicyDocuments implements ShouldQueue
             // idempotencia por poliza_id en el job evita un doble aviso si la emisión
             // ya había alcanzado a enviar algo antes de que esto quedara pendiente.
             if ($poliza->quote?->conversation_id !== null) {
-                SendPolicyDocumentsToClient::dispatch($poliza->id, $poliza->quote->conversation_id)
-                    ->onQueue('whatsapp-outbound');
+                SendPolicyDocumentsToClient::dispatch($poliza->id, $poliza->quote->conversation_id);
             }
         }
 

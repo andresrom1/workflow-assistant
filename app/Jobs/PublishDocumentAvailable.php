@@ -20,11 +20,18 @@ class PublishDocumentAvailable implements ShouldQueue
 {
     use Queueable;
 
+    public int $tries = 3;
+
+    /** Un push a FCM. */
+    public int $timeout = 30;
+
     public function __construct(
         public readonly int $mobileAccountId,
         public readonly int $polizaId,
         public readonly string $kind,
-    ) {}
+    ) {
+        $this->onQueue('default');
+    }
 
     public function handle(DocumentAvailablePublisher $publisher): void
     {
