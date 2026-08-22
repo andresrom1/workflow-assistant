@@ -71,21 +71,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Aviso de espera de la cotización
-    |--------------------------------------------------------------------------
-    |
-    | Texto fijo que sale apenas se dispara la consulta a las compañías, que es
-    | sincrónica y tarda 25-60s. No pasa por el LLM justamente para que llegue
-    | ANTES de la espera y no después.
-    |
-    */
-    'quote_wait_notice' => env(
-        'WHATSAPP_QUOTE_WAIT_NOTICE',
-        'Dale, ya estoy consultando con las compañías. Te aviso apenas tenga las opciones.',
-    ),
-
-    /*
-    |--------------------------------------------------------------------------
     | Número público para wa.me (landing / marketing)
     |--------------------------------------------------------------------------
     |

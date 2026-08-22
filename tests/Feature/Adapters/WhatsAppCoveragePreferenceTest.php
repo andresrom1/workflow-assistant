@@ -317,10 +317,14 @@ it('no resuelve la cotización durante el turno de cobertura', function () {
 });
 
 /**
- * Consulta todavía en vuelo: el aviso de espera es texto fijo y sale por su cuenta, porque el
- * texto del LLM se genera al final del turno y llegaría después de la espera que anuncia.
+ * Consulta todavía en vuelo: el aviso de espera lo redacta el agente, no sale como mensaje aparte.
+ *
+ * El texto fijo existía de cuando la consulta corría ADENTRO del turno (25-60s) y el mensaje del LLM
+ * llegaba después de la espera que anunciaba. Desde `f40e79c` la consulta se adelantó al paso del
+ * vehículo y el turno tarda 4-6s: el aviso fijo pasó a llegar cuatro segundos antes del mensaje del
+ * agente, diciendo lo mismo. Ver ROADMAP, bitácora 2026-08-22.
  */
-it('avisa la espera y manda a esperar cuando la cotización sigue en vuelo', function () {
+it('no manda un aviso aparte y le pide al agente que avise él cuando la cotización sigue en vuelo', function () {
     Bus::fake([SendWhatsAppMessage::class, NotifyClientQuoteReady::class]);
     config()->set('services.whatsapp.phone_number_id', '123456789');
 
@@ -337,18 +341,16 @@ it('avisa la espera y manda a esperar cuando la cotización sigue en vuelo', fun
         'patente' => 'AB123CD',
     ], 'coverage_preference', $conversation);
 
-    Bus::assertDispatched(
-        SendWhatsAppMessage::class,
-        fn (SendWhatsAppMessage $job): bool => $job->queue === 'whatsapp-outbound'
-    );
+    Bus::assertNotDispatched(SendWhatsAppMessage::class);
     Bus::assertNotDispatched(NotifyClientQuoteReady::class);
 
-    // El aviso de espera es texto fijo y ya salió. Si el agente además cierra con "en cuanto
-    // tenga las opciones te las paso", el cliente ve dos mensajes seguidos diciendo lo mismo
-    // (pasó en la conversación #19 de prod, msgs 326 y 327, con un segundo de diferencia).
-    expect($result['tool_output'])->toContain('NO menciones la consulta')
-        ->and($result['tool_output'])->toContain('NO cierres prometiendo avisarle')
-        ->and($result['tool_output'])->toContain('inventes alternativas');
+    // El mensaje del agente es el ÚNICO que el cliente recibe antes de 100-130s de silencio, así
+    // que el tool_output le pide el aviso en vez de prohibírselo. El peso va acá y no solo en el
+    // prompt porque es el canal que mejor obedece en este sistema.
+    expect($result['tool_output'])->toContain('cerrá avisándole que le pasás las opciones')
+        ->and($result['tool_output'])->toContain('ÚNICO aviso de espera')
+        ->and($result['tool_output'])->toContain('inventes alternativas')
+        ->and($result['tool_output'])->not->toContain('NO menciones la consulta');
 });
 
 /**

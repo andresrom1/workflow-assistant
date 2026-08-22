@@ -6,7 +6,6 @@ use App\Contracts\AIProviderAdapterInterface;
 use App\Contracts\Quotability;
 use App\Jobs\NotifyClientQuoteReady;
 use App\Jobs\ResolveQuote;
-use App\Jobs\SendWhatsAppMessage;
 use App\Models\Conversation;
 use App\Models\CoveragePreference;
 use App\Models\Customer;
@@ -399,12 +398,6 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         $lista = $quoteEnCurso instanceof Quote && ! $enVuelo;
         $pendingFact = data_get($conversation->metadata, 'pending_vehicle_fact');
 
-        if ($enVuelo) {
-            // Todavía no volvieron las compañías: el aviso de espera es texto fijo y sale ya, no
-            // al final del turno, para que el cliente sepa que arrancó.
-            $this->avisarEsperaDeCotizacion($conversation, $quoteEnCurso->id);
-        }
-
         if ($lista) {
             // Las alternativas ya están, pero CoveragePreferenceAgent no tiene `get_quote`: no
             // puede presentarlas en este turno. Este job abre uno nuevo, y para ese turno
@@ -417,7 +410,11 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         $guardada = "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}.";
 
         $message = match (true) {
-            $enVuelo => "{$guardada} La consulta a las compañías está en marcha desde que registraste el vehículo. Al cliente ACABA de salirle un mensaje avisándole que estás consultando. Respondé SOLO confirmando la cobertura elegida, en una frase: NO menciones la consulta, NO hables de la espera y NO cierres prometiendo avisarle. Verlo dos veces seguidas se lee como que algo se rompió. Tampoco inventes alternativas ni precios — te avisan cuando lleguen.",
+            // Le PIDE el aviso de espera en vez de prohibírselo: desde que se sacó el texto fijo,
+            // su mensaje es el único que el cliente recibe antes de 100-130s de silencio. El
+            // tool_output es el canal que mejor obedece en este sistema, así que el peso va acá y
+            // no solo en el prompt. Ver ROADMAP, bitácora 2026-08-22.
+            $enVuelo => "{$guardada} La consulta a las compañías está en marcha desde que registraste el vehículo y tarda entre 30 segundos y dos minutos. Confirmá la cobertura elegida en una frase y cerrá avisándole que le pasás las opciones apenas lleguen. Ese es el ÚNICO aviso de espera que el cliente va a recibir, así que no lo omitas. Tampoco inventes alternativas ni precios — te avisan cuando lleguen.",
 
             // Cubre dos casos que terminan igual: la consulta terminó mientras indagabas la
             // cobertura (el normal desde que se adelantó al paso del vehículo), y el cliente que
@@ -672,44 +669,6 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
         }
 
         return $validator->validated();
-    }
-
-    /**
-     * Le avisa al cliente que la consulta a las compañías arranca, antes de que arranque.
-     *
-     * Texto fijo y despacho directo a la cola de salida: hacerlo pasar por el LLM implicaría
-     * esperar a que termine el turno, y el turno incluye la consulta sincrónica de 25-60s —
-     * o sea que el anuncio llegaría al final de la espera que anuncia.
-     *
-     * Best-effort: sin destinatario se loguea y la cotización sigue su curso igual.
-     */
-    private function avisarEsperaDeCotizacion(Conversation $conversation, ?int $quoteId): void
-    {
-        // Sin quote pendiente no hay consulta que anunciar.
-        if ($quoteId === null) {
-            return;
-        }
-
-        $bsuid = $conversation->ext_user_id;
-        $phone = $conversation->recipientPhone();
-        $phoneNumberId = config('services.whatsapp.phone_number_id');
-
-        if ((! $phone && ! $bsuid) || ! is_string($phoneNumberId) || $phoneNumberId === '') {
-            Log::warning('WhatsApp: sin destinatario para el aviso de espera de cotización', [
-                'conversation_id' => $conversation->id,
-            ]);
-
-            return;
-        }
-
-        SendWhatsAppMessage::dispatch(
-            $phone,
-            $bsuid,
-            (string) config('whatsapp.quote_wait_notice'),
-            $phoneNumberId,
-            $conversation->id,
-            'quote_wait_notice',
-        )->onQueue('whatsapp-outbound');
     }
 
     /**

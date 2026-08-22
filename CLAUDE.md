@@ -291,11 +291,23 @@ cobertura**.
 **`CoveragePreferenceAgent` no tiene `get_quote`** (la tiene solo `QuoteAgent`). El job abre un
 turno nuevo, y para ese turno `coverage_set` ya está en true → el orquestador entrega QuoteAgent.
 
-#### El aviso de espera es condicional
+#### El aviso de espera lo redacta el agente, no sale aparte
 
-Si al elegir cobertura la consulta sigue en vuelo, sale un **texto fijo** despachado por el adapter
-(`whatsapp.quote_wait_notice`). No lo redacta el LLM: el texto del LLM se genera al final del turno.
-Si la cotización ya está lista, **no sale ningún aviso** — se presenta y listo.
+Si al elegir cobertura la consulta sigue en vuelo, el `tool_output` de `coverage_preference` **le
+pide al agente que cierre avisando** que le pasa las opciones apenas lleguen. No hay ningún mensaje
+fijo: el del agente es el único que el cliente recibe antes de 100-130 s de silencio, y por eso el
+`tool_output` dice explícitamente que es el único aviso y que no lo omita.
+
+Hubo un texto fijo (`whatsapp.quote_wait_notice`) hasta el 2026-08-22. Existía de cuando la consulta
+corría **adentro** del turno (25-60 s) y el mensaje del LLM llegaba *después* de la espera que
+anunciaba. Desde `f40e79c` la consulta se adelantó al paso del vehículo y el turno tarda 4-6 s: el
+aviso fijo pasó a llegar cuatro segundos antes del mensaje del agente, diciendo lo mismo.
+
+**El peso va en el `tool_output` y no solo en el prompt** porque es el canal que mejor obedece acá:
+el prompt v7 prohibía la promesa y el modelo la hacía igual en 3 de 4 conversaciones.
+
+Si la cotización ya está lista, la otra rama del `match` no menciona ninguna espera — se presenta y
+listo.
 
 #### Camino de fallo
 
