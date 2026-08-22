@@ -14,6 +14,9 @@
             <p class="text-[11px] font-mono mt-0.5" style="color: var(--text-3);">
               Ref: {{ quote.external_ref_id ?? 'N/A' }}
             </p>
+            <p class="text-[11px] mt-0.5" style="color: var(--text-3);">
+              {{ quote.presented_at ? `Presentada el ${formatDate(quote.presented_at)}` : 'Sin presentar' }}
+            </p>
           </div>
         </div>
         <span class="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
@@ -21,6 +24,28 @@
           <span class="w-1.5 h-1.5 rounded-full" :style="dotStyle(quote.status)"></span>
           {{ statusLabel(quote.status) }}
         </span>
+      </div>
+
+      <!-- Links que recibio el cliente -->
+      <div v-if="quote.public_url || quote.checkout_url" class="rounded-[14px] p-5"
+        style="background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card);">
+        <h2 class="text-[11px] font-semibold uppercase tracking-wider mb-3" style="color: var(--text-3);">
+          Links
+        </h2>
+        <dl class="space-y-2">
+          <div v-for="link in links" :key="link.key" class="flex items-center gap-3 min-w-0">
+            <dt class="text-xs w-20 flex-shrink-0" style="color: var(--text-3);">{{ link.label }}</dt>
+            <dd class="min-w-0 flex-1">
+              <a :href="link.url" target="_blank" rel="noopener"
+                class="text-xs font-mono truncate block hover:underline" style="color: var(--text-1);">
+                {{ link.url }}
+              </a>
+            </dd>
+            <button type="button" class="btn btn-secondary text-xs flex-shrink-0" @click="copyLink(link)">
+              {{ copiado === link.key ? 'Copiado ✓' : 'Copiar' }}
+            </button>
+          </div>
+        </dl>
       </div>
 
       <!-- Snapshot -->
@@ -161,11 +186,14 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import BackLink from '@/components/UI/BackLink.vue'
 
-defineProps<{
+const props = defineProps<{
   quote: {
     id: number; status: string; external_ref_id: string | null
+    presented_at: string | null
+    public_url: string | null; checkout_url: string | null
     marca: string; modelo: string; version: string
     year: number; codigo_postal: string; combustible: string | null
     uso: string | null; edad_conductor: string | null
@@ -219,4 +247,28 @@ const gradeLabel = (g: string) => ({
 
 const formatPrice = (n: number) =>
   new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0 }).format(n)
+
+// La zona va fija: sin ella la hora sale en la del navegador, y lo que se audita es la hora
+// argentina en la que el agente le presento las opciones al cliente.
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleString('es-AR', {
+    dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Argentina/Buenos_Aires',
+  })
+
+type Link = { key: string; label: string; url: string }
+
+const links = computed<Link[]>(() => [
+  props.quote.public_url ? { key: 'comparador', label: 'Comparador', url: props.quote.public_url } : null,
+  props.quote.checkout_url ? { key: 'checkout', label: 'Checkout', url: props.quote.checkout_url } : null,
+].filter((l): l is Link => l !== null))
+
+const copiado = ref<string | null>(null)
+
+const copyLink = async (link: Link) => {
+  try {
+    await navigator.clipboard.writeText(link.url)
+    copiado.value = link.key
+    setTimeout(() => (copiado.value = null), 1500)
+  } catch { /* clipboard no disponible */ }
+}
 </script>

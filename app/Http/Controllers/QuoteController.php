@@ -62,6 +62,13 @@ class QuoteController extends Controller
                 'id' => $quote->id,
                 'status' => $quote->status,
                 'external_ref_id' => $quote->external_ref_id,
+                'presented_at' => $quote->presented_at?->setTimezone(Quote::TIMEZONE)->toIso8601String(),
+                'public_url' => $quote->public_token !== null
+                    ? route('cotizaciones.show', ['token' => $quote->public_token])
+                    : null,
+                'checkout_url' => $quote->checkout_token !== null
+                    ? route('checkout.show', ['token' => $quote->checkout_token])
+                    : null,
                 'marca' => $quote->riskSnapshot?->marca,
                 'modelo' => $quote->riskSnapshot?->modelo,
                 'version' => $quote->riskSnapshot?->version,

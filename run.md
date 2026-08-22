@@ -58,3 +58,6 @@ docker compose --env-file .env.production -f compose.prod.yaml logs -f app
 
 # 3. Logs de un worker de cola (ej. el de WhatsApp AI)
 docker compose --env-file .env.production -f compose.prod.yaml \exec app tail -f /var/log/supervisor/worker-whatsapp-ai-out.log
+
+# sonda de prueba para el agente: 21-08
+sudo docker exec workflow-assistant-app-1 php artisan ai:probe-presentation --conversation=23 --runs=1
