@@ -83,14 +83,31 @@ function respuestaConTexto(string $texto, array $tools = []): array
         'choices' => [[
             'message' => [
                 'content' => $texto,
+                'reasoning_content' => 'El cliente pidió comparar C y D.',
                 'tool_calls' => array_map(fn (string $n): array => [
-                    'id' => 'x', 'type' => 'function', 'function' => ['name' => $n, 'arguments' => '{}'],
+                    'id' => 'call_'.$n, 'type' => 'function', 'function' => ['name' => $n, 'arguments' => '{}'],
                 ], $tools),
             ],
-            'finish_reason' => 'stop',
+            'finish_reason' => $tools === [] ? 'stop' : 'tool_calls',
         ]],
         'usage' => ['prompt_tokens' => 15400, 'completion_tokens' => 90],
     ];
+}
+
+/**
+ * Cada corrida son DOS llamadas: primero el modelo llama la tool por su cuenta, después escribe el
+ * texto con el resultado que le inyectamos. Inventar el mensaje del assistant no serviría — la API
+ * lo rechaza si no vuelve su `reasoning_content`.
+ */
+function fakeDelTurno(string $texto, int $corridas = 1): void
+{
+    $seq = Http::sequence();
+
+    for ($i = 0; $i < $corridas; $i++) {
+        $seq->push(respuestaConTexto('', ['CoveragePreferenceTool']))->push(respuestaConTexto($texto));
+    }
+
+    Http::fake(['*/chat/completions' => $seq]);
 }
 
 function correrSondaCobertura(int $conversationId, array $opciones = []): PendingCommand
@@ -111,7 +128,7 @@ function escenarioDeCobertura(): Conversation
 }
 
 it('manda como system el prompt de cobertura compuesto con sus bloques compartidos', function () {
-    Http::fake(['*/chat/completions' => Http::response(respuestaConTexto('Dale.'))]);
+    fakeDelTurno('Dale.');
 
     $conversation = Conversation::factory()->create();
     storeConTurnoDeCobertura($conversation->id);
@@ -137,7 +154,7 @@ it('manda como system el prompt de cobertura compuesto con sus bloques compartid
  * "Cotizaciones listas", pero el turno que interesa termina tres filas antes.
  */
 it('corta en el turno de cobertura y no en la última user de la conversación', function () {
-    Http::fake(['*/chat/completions' => Http::response(respuestaConTexto('Dale.'))]);
+    fakeDelTurno('Dale.');
 
     $conversation = escenarioDeCobertura();
 
@@ -154,27 +171,46 @@ it('corta en el turno de cobertura y no en la última user de la conversación',
 });
 
 /**
- * El intercambio de la tool se inyecta ya resuelto: por eso la respuesta del modelo es directamente
- * el texto que escribiría después, sin que ninguna tool corra.
+ * Lo único sintético es el RESULTADO de la tool. La llamada y el `reasoning_content` son los que
+ * devolvió el modelo en el paso 1: inventarlos hace que la API rechace la request con *"The
+ * `reasoning_content` in the thinking mode must be passed back to the API"*, y además cambiaría el
+ * contexto que estamos midiendo.
  */
-it('inyecta el tool call con los argumentos reales y su resultado', function () {
-    Http::fake(['*/chat/completions' => Http::response(respuestaConTexto('Dale.'))]);
+it('devuelve la llamada del modelo con su reasoning y sustituye solo el resultado', function () {
+    fakeDelTurno('Dale.');
 
     $conversation = escenarioDeCobertura();
 
     correrSondaCobertura($conversation->id)->assertSuccessful();
 
-    Http::assertSent(function ($request) {
-        $messages = $request['messages'];
-        $tool = collect($messages)->firstWhere('role', 'tool');
-        $assistant = collect($messages)->last(fn ($m): bool => ($m['role'] ?? null) === 'assistant');
-        $args = json_decode($assistant['tool_calls'][0]['function']['arguments'], true);
+    // La segunda request es la continuación: lleva el assistant del modelo y el tool result nuestro.
+    $requests = [];
+    Http::assertSent(function ($request) use (&$requests) {
+        $requests[] = $request['messages'];
 
-        return $assistant['tool_calls'][0]['function']['name'] === 'CoveragePreferenceTool'
-            && $args['patente'] === 'AD415WE'
-            && $args['coverage_code'] === 'D'
-            && str_contains($tool['content'], "Preferencia 'D' guardada para AD415WE");
+        return true;
     });
+
+    $continuacion = collect($requests[1]);
+    $assistant = $continuacion->last(fn ($m): bool => ($m['role'] ?? null) === 'assistant');
+    $tool = $continuacion->last(fn ($m): bool => ($m['role'] ?? null) === 'tool');
+
+    expect($assistant['tool_calls'][0]['function']['name'])->toBe('CoveragePreferenceTool')
+        ->and($assistant['reasoning_content'])->toBe('El cliente pidió comparar C y D.')
+        ->and($tool['tool_call_id'])->toBe('call_CoveragePreferenceTool')
+        ->and($tool['content'])->toContain("Preferencia 'D' guardada para AD415WE");
+});
+
+/** Si el modelo no llama la tool, no hay segundo paso que dar — se registra y se sigue. */
+it('registra la corrida en la que el modelo no llamó la tool', function () {
+    Http::fake(['*/chat/completions' => Http::response(respuestaConTexto('¿Qué cobertura preferís?'))]);
+
+    $conversation = escenarioDeCobertura();
+
+    correrSondaCobertura($conversation->id)
+        ->expectsOutputToContain('no llamó CoveragePreferenceTool')
+        ->expectsOutputToContain('llamó la tool ........ 0/1')
+        ->assertSuccessful();
 });
 
 /**
@@ -182,22 +218,24 @@ it('inyecta el tool call con los argumentos reales y su resultado', function () 
  * de producción — que es justo lo que la sonda tiene que reproducir.
  */
 it('usa por defecto el pedido de aviso que manda el adapter en producción', function () {
-    Http::fake(['*/chat/completions' => Http::response(respuestaConTexto('Dale.'))]);
+    fakeDelTurno('Dale.');
 
     $conversation = escenarioDeCobertura();
 
     correrSondaCobertura($conversation->id)->assertSuccessful();
 
     Http::assertSent(function ($request) {
+        // El guard no es cosmético: `assertSent` corre contra TODAS las requests, y la del paso 1
+        // todavía no tiene mensaje `tool`.
         $tool = collect($request['messages'])->firstWhere('role', 'tool');
 
-        return str_contains($tool['content'], WhatsAppAdapter::PEDIDO_DE_AVISO);
+        return $tool !== null && str_contains($tool['content'], WhatsAppAdapter::PEDIDO_DE_AVISO);
     });
 });
 
 /** El punto del flag: probar otra redacción sin desplegar nada. */
 it('permite inyectar un tool_output propio', function () {
-    Http::fake(['*/chat/completions' => Http::response(respuestaConTexto('Dale.'))]);
+    fakeDelTurno('Dale.');
 
     $conversation = escenarioDeCobertura();
 
@@ -206,7 +244,8 @@ it('permite inyectar un tool_output propio', function () {
     Http::assertSent(function ($request) {
         $tool = collect($request['messages'])->firstWhere('role', 'tool');
 
-        return $tool['content'] === 'REDACCION ALTERNATIVA'
+        return $tool !== null
+            && $tool['content'] === 'REDACCION ALTERNATIVA'
             && ! str_contains($tool['content'], WhatsAppAdapter::PEDIDO_DE_AVISO);
     });
 });
@@ -216,7 +255,7 @@ it('permite inyectar un tool_output propio', function () {
  * texto y una latencia que no son los del turno real.
  */
 it('usa el tier cheapest que declara el agente y ofrece sus 5 tools', function () {
-    Http::fake(['*/chat/completions' => Http::response(respuestaConTexto('Dale.'))]);
+    fakeDelTurno('Dale.');
 
     $conversation = escenarioDeCobertura();
 
@@ -238,7 +277,9 @@ it('usa el tier cheapest que declara el agente y ofrece sus 5 tools', function (
 it('imprime el texto de cada corrida y lo vuelca al json', function () {
     Http::fake([
         '*/chat/completions' => Http::sequence()
+            ->push(respuestaConTexto('', ['CoveragePreferenceTool']))
             ->push(respuestaConTexto('Dale, te cotizo las dos. En cuanto las tenga te las paso.'))
+            ->push(respuestaConTexto('', ['CoveragePreferenceTool']))
             ->push(respuestaConTexto('Listo, tomo nota.')),
     ]);
 

@@ -92,11 +92,7 @@ class ProbeCoverageTurn extends Command
         $argumentos = $this->argumentosHistoricos($conversationId);
         $toolOutput = (string) ($this->option('tool-output') ?: $this->salidaDeProduccion($argumentos));
 
-        $messages = TurnRequest::payload(
-            TurnRequest::withToolExchange(TurnRequest::prismMessages($rows), self::TOOL, $argumentos, $toolOutput),
-            $system,
-        );
-
+        $messages = TurnRequest::payload(TurnRequest::prismMessages($rows), $system);
         $tools = TurnRequest::toolPayload($this->tools($conversation));
         $model = (string) ($this->option('model') ?: DeepSeekProbe::modelFor(CoveragePreferenceAgent::class));
 
@@ -107,34 +103,61 @@ class ProbeCoverageTurn extends Command
 
         for ($i = 1; $i <= $runs; $i++) {
             try {
-                $r = $probe->send($model, $messages, $tools);
+                // Paso 1: el modelo llama la tool por su cuenta. Su respuesta —incluido el
+                // `reasoning_content`— se devuelve tal cual, así lo único sintético es el
+                // resultado de la tool.
+                $llamada = $probe->send($model, $messages, $tools);
+
+                $pedidas = $this->nombres($llamada['tool_calls']);
+
+                if (! in_array(self::TOOL, $pedidas, true)) {
+                    $this->line(sprintf('  <options=bold>%2d</>  <comment>no llamó %s</comment> — pidió: %s',
+                        $i, self::TOOL, $pedidas === [] ? '(ninguna)' : implode(', ', $pedidas)));
+                    $this->line('      '.trim($llamada['content']));
+                    $this->newLine();
+
+                    $resultados[] = [
+                        'run' => $i, 'ms' => $llamada['ms'],
+                        'prompt_tokens' => $llamada['prompt_tokens'],
+                        'completion_tokens' => $llamada['completion_tokens'],
+                        'llamo_la_tool' => false, 'tools' => $pedidas,
+                        'texto' => $llamada['content'],
+                    ];
+
+                    continue;
+                }
+
+                // Paso 2: se le devuelve el resultado que queremos medir y escribe el texto.
+                $r = $probe->send(
+                    $model,
+                    TurnRequest::continueAfterTool($messages, $llamada, $toolOutput),
+                    $tools,
+                );
             } catch (Throwable $e) {
                 $this->error("  corrida {$i}: ".$e->getMessage());
 
                 return self::FAILURE;
             }
 
-            /** @var list<string> $pedidas */
-            $pedidas = collect($r['tool_calls'])
-                ->map(fn (mixed $tc): string => (string) data_get($tc, 'function.name', '?'))
-                ->all();
+            $ms = $llamada['ms'] + $r['ms'];
+            $tokens = $llamada['completion_tokens'] + $r['completion_tokens'];
 
             $resultados[] = [
                 'run' => $i,
-                'ms' => $r['ms'],
-                'prompt_tokens' => $r['prompt_tokens'],
-                'completion_tokens' => $r['completion_tokens'],
+                'ms' => $ms,
+                'prompt_tokens' => $llamada['prompt_tokens'] + $r['prompt_tokens'],
+                'completion_tokens' => $tokens,
                 'finish_reason' => $r['finish_reason'],
-                'tools' => $pedidas,
+                'llamo_la_tool' => true,
+                'tools' => $this->nombres($r['tool_calls']),
                 'texto' => $r['content'],
             ];
 
             $this->line(sprintf(
-                '  <options=bold>%2d</>  %6s ms · %s tok%s',
+                '  <options=bold>%2d</>  %6s ms · %s tok',
                 $i,
-                number_format($r['ms'], 0, ',', '.'),
-                number_format($r['completion_tokens'], 0, ',', '.'),
-                $pedidas === [] ? '' : '  <comment>[pidió '.implode(', ', $pedidas).']</comment>',
+                number_format($ms, 0, ',', '.'),
+                number_format($tokens, 0, ',', '.'),
             ));
             $this->line('      '.str_replace("\n", "\n      ", trim($r['content'])));
             $this->newLine();
@@ -147,8 +170,23 @@ class ProbeCoverageTurn extends Command
     }
 
     /**
-     * Los argumentos con los que el agente llamó la tool en la conversación real. Se usan los
-     * históricos y no unos inventados para que el intercambio inyectado sea el que de verdad pasó.
+     * @param  list<array<string, mixed>>  $toolCalls
+     * @return list<string>
+     */
+    private function nombres(array $toolCalls): array
+    {
+        /** @var list<string> $nombres */
+        $nombres = collect($toolCalls)
+            ->map(fn (mixed $tc): string => (string) data_get($tc, 'function.name', '?'))
+            ->all();
+
+        return $nombres;
+    }
+
+    /**
+     * Los argumentos con los que el agente llamó la tool en la conversación real. Solo se usan para
+     * armar el `tool_output` por defecto (que lleva la patente y el código elegido); la llamada que
+     * viaja es la que hace el modelo en el paso 1.
      *
      * @return array<string, mixed>
      */
@@ -245,12 +283,13 @@ class ProbeCoverageTurn extends Command
         /** @var list<int> $tok */
         $tok = collect($resultados)->pluck('completion_tokens')->all();
 
-        $conTool = collect($resultados)->filter(fn (array $r): bool => $r['tools'] !== [])->count();
+        $total = count($resultados);
+        $llamaron = collect($resultados)->filter(fn (array $r): bool => (bool) $r['llamo_la_tool'])->count();
 
-        $this->line('  corridas ............. '.count($resultados));
-        $this->line('  latencia ............. '.ProbeStats::tramo($ms, 1000, ' s'));
+        $this->line("  corridas ............. {$total}");
+        $this->line("  llamó la tool ........ {$llamaron}/{$total}");
+        $this->line('  latencia ............. '.ProbeStats::tramo($ms, 1000, ' s').'  (los dos pasos)');
         $this->line('  completion_tokens .... '.ProbeStats::tramo($tok));
-        $this->line('  pidieron otra tool ... '.($conTool === 0 ? 'ninguna' : "{$conTool}"));
         $this->newLine();
 
         // A propósito no hay contador automático: un regex sobre "te las paso" / "te aviso" /

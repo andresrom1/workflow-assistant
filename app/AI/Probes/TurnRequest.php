@@ -180,28 +180,37 @@ class TurnRequest
     }
 
     /**
-     * Agrega a mano un intercambio de tool ya resuelto: la llamada y su resultado.
+     * Continúa un turno después de una tool, sustituyendo SOLO el resultado.
      *
-     * Sirve para llegar al texto que el agente escribe DESPUÉS de una tool sin ejecutarla, y para
-     * sustituir el resultado por una redacción distinta y comparar.
+     * El mensaje del assistant se arma con lo que el modelo devolvió de verdad —incluido su
+     * `reasoning_content`, que los modelos en modo thinking exigen de vuelta— así que lo único
+     * sintético es el resultado de la tool, que es justamente la variable bajo estudio.
      *
-     * @param  array<int, AssistantMessage|ToolResultMessage|UserMessage>  $messages
-     * @param  array<string, mixed>  $arguments
-     * @return array<int, AssistantMessage|ToolResultMessage|UserMessage>
+     * Inventar ese mensaje no funciona: la API rechaza la request con *"The `reasoning_content` in
+     * the thinking mode must be passed back to the API."*
+     *
+     * @param  array<int, mixed>  $payloadMessages  ya mapeados, tal como se mandaron
+     * @param  array{content: string, reasoning_content: string, tool_calls: list<array<string, mixed>>}  $respuesta
+     * @return array<int, mixed>
      */
-    public static function withToolExchange(array $messages, string $toolName, array $arguments, string $result): array
+    public static function continueAfterTool(array $payloadMessages, array $respuesta, string $result): array
     {
-        $id = 'probe_'.$toolName;
+        $payloadMessages[] = array_filter([
+            'role' => 'assistant',
+            'content' => $respuesta['content'],
+            'reasoning_content' => $respuesta['reasoning_content'],
+            'tool_calls' => $respuesta['tool_calls'],
+        ], fn (mixed $v): bool => $v !== '' && $v !== []);
 
-        $messages[] = new AssistantMessage('', [
-            new ToolCall(id: $id, name: $toolName, arguments: $arguments),
-        ]);
+        foreach ($respuesta['tool_calls'] as $tc) {
+            $payloadMessages[] = [
+                'role' => 'tool',
+                'tool_call_id' => (string) ($tc['id'] ?? ''),
+                'content' => $result,
+            ];
+        }
 
-        $messages[] = new ToolResultMessage([
-            new ToolResult(toolCallId: $id, toolName: $toolName, args: $arguments, result: $result),
-        ]);
-
-        return $messages;
+        return $payloadMessages;
     }
 
     /**

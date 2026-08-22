@@ -28,7 +28,7 @@ class DeepSeekProbe
      * @param  array<int, mixed>  $messages
      * @param  array<array-key, mixed>  $tools
      * @param  array<string, mixed>  $extra
-     * @return array{ms: int, prompt_tokens: int, completion_tokens: int, cache_hit_tokens: int, cache_miss_tokens: int, finish_reason: string, content: string, tool_calls: list<array<string, mixed>>}
+     * @return array{ms: int, prompt_tokens: int, completion_tokens: int, cache_hit_tokens: int, cache_miss_tokens: int, finish_reason: string, content: string, reasoning_content: string, tool_calls: list<array<string, mixed>>}
      *
      * @throws RuntimeException
      */
@@ -74,6 +74,11 @@ class DeepSeekProbe
             'cache_miss_tokens' => (int) $response->json('usage.prompt_cache_miss_tokens', 0),
             'finish_reason' => (string) $response->json('choices.0.finish_reason', '?'),
             'content' => (string) $response->json('choices.0.message.content', ''),
+            // Hay que devolvérselo si se quiere continuar el turno después de una tool: los modelos
+            // en modo thinking rechazan la request con "The `reasoning_content` in the thinking mode
+            // must be passed back to the API." Producción lo satisface porque streamea, y
+            // `Stream.php` de Prism sí lo trackea — el handler no-streaming lo descarta.
+            'reasoning_content' => (string) $response->json('choices.0.message.reasoning_content', ''),
             'tool_calls' => $toolCalls,
         ];
     }
