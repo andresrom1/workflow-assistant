@@ -163,7 +163,7 @@ class PublicQuoteController extends Controller
             (string) config('services.whatsapp.phone_number_id'),
             $conversation->id,
             'checkout_link'
-        )->onQueue('whatsapp-outbound');
+        );
 
         return back();
     }

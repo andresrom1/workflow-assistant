@@ -46,7 +46,7 @@ class ResolveQuote implements ShouldQueue
     public function __construct(
         private readonly int $quoteId,
     ) {
-        $this->onConnection('database_quotes');
+        $this->onQueue('quotes');
     }
 
     public function handle(QuoteService $quoteService): void
@@ -94,6 +94,6 @@ class ResolveQuote implements ShouldQueue
 
     private function avisarFallo(): void
     {
-        NotifyClientQuoteFailed::dispatch($this->quoteId)->onQueue('whatsapp-outbound');
+        NotifyClientQuoteFailed::dispatch($this->quoteId);
     }
 }

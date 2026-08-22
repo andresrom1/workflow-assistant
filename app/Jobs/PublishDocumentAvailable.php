@@ -20,11 +20,19 @@ class PublishDocumentAvailable implements ShouldQueue
 {
     use Queueable;
 
+    public int $tries = 3;
+
+    /** Un push a FCM. */
+    public int $timeout = 30;
+
     public function __construct(
         public readonly int $mobileAccountId,
         public readonly int $polizaId,
         public readonly string $kind,
-    ) {}
+    ) {
+        // Push a la app mobile: no es una respuesta conversacional.
+        $this->onQueue('background');
+    }
 
     public function handle(DocumentAvailablePublisher $publisher): void
     {

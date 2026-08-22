@@ -174,7 +174,11 @@ class InvoiceBatchController extends Controller
 
         $batchId = $batch->id;
 
+        // La cola va en la cadena y no solo en cada job: `Bus::chain()` fija el `chainQueue`
+        // con el que se despacha cada eslabón siguiente, así que si la cadena no la declara, el
+        // encadenamiento no hereda la cola que eligió el constructor del job.
         Bus::chain([...$jobs, new CloseInvoiceBatch($batchId)])
+            ->onQueue('background')
             ->catch(function () use ($batchId): void {
                 CloseInvoiceBatch::dispatch($batchId, 'failed');
             })

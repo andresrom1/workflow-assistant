@@ -54,10 +54,10 @@ class ExtractIngestedDocument implements ShouldQueue
     public function __construct(
         public IngestedDocument $document,
     ) {
-        // Conexión con retry_after=360 (> timeout=120) y cola `documents` con worker
-        // dedicado, igual que ExtractCoverageDocumentText: la extracción LLM no compite
-        // con el hot-path de WhatsApp ni es reclamada por otro worker mientras corre.
-        $this->onConnection('database_long');
+        // Ingesta local de pólizas: el ingestor corre una vez por día y nadie espera el
+        // resultado. Igual que ExtractCoverageDocumentText, va a `background`, fuera del
+        // hot-path de WhatsApp.
+        $this->onQueue('background');
     }
 
     public function handle(IngestaExtractorAgent $extractor, IngestaDocumentoService $ingesta): void

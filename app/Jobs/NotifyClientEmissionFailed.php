@@ -29,9 +29,14 @@ class NotifyClientEmissionFailed implements ShouldQueue
 
     public int $backoff = 30;
 
+    /** Arma un texto fijo y despacha el envío: no llama al LLM. */
+    public int $timeout = 30;
+
     public function __construct(
         private readonly int $quoteId,
-    ) {}
+    ) {
+        $this->onQueue('whatsapp-outbound');
+    }
 
     public function handle(): void
     {
@@ -73,8 +78,7 @@ class NotifyClientEmissionFailed implements ShouldQueue
         $text = 'Tuvimos un inconveniente al gestionar la emisión de tu póliza con la compañía. '
             .'Ya lo estamos revisando y te confirmamos por acá apenas lo resolvamos. Disculpá la demora.';
 
-        SendWhatsAppMessage::dispatch($phone, $bsuid, $text, $phoneNumberId, $conversation->id)
-            ->onQueue('whatsapp-outbound');
+        SendWhatsAppMessage::dispatch($phone, $bsuid, $text, $phoneNumberId, $conversation->id);
     }
 
     public function failed(\Throwable $exception): void

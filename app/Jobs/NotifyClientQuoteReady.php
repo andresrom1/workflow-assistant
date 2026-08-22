@@ -44,7 +44,7 @@ class NotifyClientQuoteReady implements ShouldQueue
         private readonly int $conversationId,
         private readonly int $quoteId,
     ) {
-        $this->onConnection('database_ai');
+        $this->onQueue('whatsapp-ai');
     }
 
     public function middleware(): array

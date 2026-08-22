@@ -36,9 +36,7 @@ class ApiQuoteResolution implements QuoteResolutionStrategyInterface
             // 4. Notificar al cliente por WhatsApp (único canal activo).
             $quote->loadMissing('conversation');
 
-            NotifyClientQuoteReady::dispatch($quote->conversation->id, $quote->id)
-                ->onConnection('database_ai')
-                ->onQueue('whatsapp-ai');
+            NotifyClientQuoteReady::dispatch($quote->conversation->id, $quote->id);
 
         } catch (Throwable $e) {
             Log::error('[ApiQuoteResolution] Fallo: '.$e->getMessage(), [

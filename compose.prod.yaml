@@ -30,6 +30,22 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    # Dimensionado para un VM chico (2-4 GB), compartido con PHP. Los defaults de la imagen
+    # asumen una maquina dedicada: 100 conexiones es mas de lo que la app puede abrir (3 queue
+    # workers + hasta 6 hijos de php-fpm + los subprocesos del scheduler) y deja un techo de
+    # memoria mucho mas alto del necesario.
+    command:
+      - postgres
+      - -c
+      - max_connections=50
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=768MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=64MB
     environment:
       POSTGRES_DB: ${DB_DATABASE}
       POSTGRES_USER: ${DB_USERNAME}

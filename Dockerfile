@@ -15,7 +15,7 @@ RUN addgroup -g 1000 www && adduser -u 1000 -G www -s /bin/sh -D www
 # 2. Dependencias del sistema
 RUN apk add --no-cache \
 nginx supervisor curl zip unzip git sqlite libzip-dev linux-headers postgresql-dev \
-&& docker-php-ext-install pdo pdo_mysql pdo_pgsql pcntl zip
+&& docker-php-ext-install pdo pdo_mysql pdo_pgsql pcntl zip opcache
 
 # 3. Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -51,6 +51,19 @@ RUN chmod +x /start.sh
 # 8b. php.ini de producción (límites de upload 100M para PDFs de aseguradoras).
 # Va en conf.d para sobrescribir los defaults de php:8.4-fpm-alpine (~2M).
 COPY --chown=root:root docker/prod/php.ini /usr/local/etc/php/conf.d/zz-prod.ini
+
+# Directorio del `opcache.file_cache` (ver docker/prod/php.ini). 1777 porque lo escriben dos
+# usuarios distintos: los queue workers y el scheduler corren como root, php-fpm como www.
+# El que llega primero se queda con el subdirectorio; el otro simplemente no usa el file cache
+# y compila normal — en la practica gana root, que es el que corre las migraciones y el
+# config:cache en start.sh, y es tambien el unico que necesita el beneficio (php-fpm es un
+# proceso largo y le alcanza con la memoria compartida).
+RUN mkdir -p /tmp/opcache \n && chmod 1777 /tmp/opcache
+
+# 8c. Pool de php-fpm acotado. El default de la imagen es `pm=dynamic` con hasta 5 hijos
+# permanentes; en un box chico eso es RAM reservada para un panel de admin que usa una sola
+# persona. Con `ondemand` los hijos nacen cuando hay request y mueren a los 30s de ocio.
+COPY --chown=root:root docker/prod/www-pool.conf /usr/local/etc/php-fpm.d/zz-pool.conf
 
 # Usuarios de servicios
 RUN sed -i 's/user = www-data/user = www/g' /usr/local/etc/php-fpm.d/www.conf \

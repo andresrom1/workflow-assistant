@@ -312,7 +312,7 @@ class ConversationController extends Controller
             config('services.whatsapp.phone_number_id'),
             $conversation->id,
             'human'
-        )->onQueue('whatsapp-outbound');
+        );
 
         return back()->with('success', 'Mensaje enviado.');
     }

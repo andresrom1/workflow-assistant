@@ -27,6 +27,9 @@ class SendWhatsAppTemplate implements ShouldQueue
 
     public int $backoff = 10;
 
+    /** Un POST de template a la Cloud API. */
+    public int $timeout = 30;
+
     /**
      * @param  string  $waId  Destinatario en E.164 SIN el "+"
      * @param  list<string>  $bodyParams  Variables posicionales del body del template
@@ -37,7 +40,9 @@ class SendWhatsAppTemplate implements ShouldQueue
         private readonly string $language,
         private readonly array $bodyParams,
         private readonly string $phoneNumberId,
-    ) {}
+    ) {
+        $this->onQueue('whatsapp-outbound');
+    }
 
     public function handle(WhatsAppOutboundService $waService): void
     {

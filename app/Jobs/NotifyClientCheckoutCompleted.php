@@ -18,10 +18,16 @@ class NotifyClientCheckoutCompleted implements ShouldQueue
 
     public int $backoff = 30;
 
+    /**
+     * Comparte cola y worker con {@see ProcessConversationInbox} aunque no llame al LLM, así que
+     * hereda su techo. Por debajo del `retry_after` de la conexión `database_ai` (200s).
+     */
+    public int $timeout = 180;
+
     public function __construct(
         private readonly int $quoteId,
     ) {
-        $this->onConnection('database_ai');
+        $this->onQueue('whatsapp-ai');
     }
 
     /**
@@ -64,8 +70,7 @@ class NotifyClientCheckoutCompleted implements ShouldQueue
             .'Te confirmamos por acá apenas esté lista, junto con la documentación. '
             .'Cualquier duda, escribime por acá.';
 
-        SendWhatsAppMessage::dispatch($phone, $bsuid, $text, $phoneNumberId, $conversation->id)
-            ->onQueue('whatsapp-outbound');
+        SendWhatsAppMessage::dispatch($phone, $bsuid, $text, $phoneNumberId, $conversation->id);
     }
 
     public function failed(\Throwable $exception): void

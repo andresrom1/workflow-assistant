@@ -416,9 +416,7 @@ class WhatsAppAdapter implements AIProviderAdapterInterface
             // Las alternativas ya están, pero CoveragePreferenceAgent no tiene `get_quote`: no
             // puede presentarlas en este turno. Este job abre uno nuevo, y para ese turno
             // `coverage_set` ya está en true, así que el orquestador entrega QuoteAgent.
-            NotifyClientQuoteReady::dispatch($conversation->id, $quoteEnCurso->id)
-                ->onConnection('database_ai')
-                ->onQueue('whatsapp-ai');
+            NotifyClientQuoteReady::dispatch($conversation->id, $quoteEnCurso->id);
         }
 
         $guardada = "Preferencia '{$data['preference']}' guardada para {$vehicle->patente}.";

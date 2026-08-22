@@ -23,10 +23,10 @@ class ExtractCoverageDocumentText implements ShouldQueue
     public function __construct(
         public CoverageDocument $document,
     ) {
-        // Conexión con retry_after=360 (> timeout=300) y cola `documents` con worker
-        // dedicado, para que la transcripción larga por LLM no sea reclamada mientras
-        // corre ni bloquee el worker del hot-path de WhatsApp.
-        $this->onConnection('database_long');
+        // Transcripción de un manual de compañía por LLM: pasa una vez por documento y por
+        // compañía. Va a `background`, que no tiene worker residente — lo levanta el scheduler
+        // cuando hay algo que hacer. Fuera del hot-path de WhatsApp.
+        $this->onQueue('background');
     }
 
     public function handle(): void

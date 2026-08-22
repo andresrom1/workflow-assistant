@@ -41,15 +41,18 @@ class EmitInvoice implements ShouldQueue
     public int $backoff = 15;
 
     /**
-     * Por debajo del `retry_after` (90s) de la conexión `database`, para que la cola no reclame el
-     * job mientras todavía corre — que es la falla que arrancó el incidente del 2026-08-04.
+     * Por debajo del `retry_after` de la conexión `database` (200s), para que la cola no reclame
+     * el job mientras todavía corre — que es la falla que arrancó el incidente del 2026-08-04.
      */
     public int $timeout = 60;
 
     public function __construct(
         public readonly int $invoiceId,
         public readonly int $ptoVta,
-    ) {}
+    ) {
+        // Facturación contra AFIP: el cliente no la ve en tiempo real.
+        $this->onQueue('background');
+    }
 
     /**
      * @return array<int, object>

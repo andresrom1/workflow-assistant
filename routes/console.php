@@ -24,3 +24,35 @@ Schedule::command('conversations:follow-up-stalled')
     ->timezone('America/Argentina/Buenos_Aires')
     ->between('8:00', '20:00')
     ->withoutOverlapping();
+
+/*
+|--------------------------------------------------------------------------
+| El worker de `background`, bajo demanda
+|--------------------------------------------------------------------------
+|
+| Emisión de póliza, facturación, extracción de PDF por LLM, análisis semántico y
+| limpieza: todo lento, poco frecuente, y sin nadie esperando del otro lado. No justifica
+| un proceso PHP residente de ~90 MB durmiendo 28.800 veces por día.
+|
+| `--stop-when-empty` hace que el proceso TERMINE cuando la cola se vacía. En un minuto
+| sin trabajo —el 99,9 % de los minutos— arranca, hace un poll, ve la tabla vacía y muere:
+| ~0,3 s de CPU y cero RAM residente. En un minuto con trabajo saca los jobs y recién ahí
+| termina.
+|
+| `--max-time=55` corta ENTRE jobs, nunca mata uno en curso: una extracción de PDF de 300 s
+| termina igual. `withoutOverlapping(10)` evita que el tick del minuto siguiente levante un
+| segundo proceso sobre la misma cola, con un mutex que expira holgadamente por encima del
+| job más largo. `runInBackground()` evita que un job largo bloquee las otras tareas del
+| mismo tick del scheduler.
+|
+| `documents` y `semantic-analysis` están en la lista sólo para drenar lo que haya quedado
+| en vuelo con los nombres viejos; los jobs ya se despachan a `background`.
+|
+| Para volver a un worker residente: borrar esta entrada y agregar un
+| `[program:worker-background]` con `--sleep=20` en .docker/start.sh.
+|
+*/
+Schedule::command('queue:work database_long --queue=background,documents,semantic-analysis --stop-when-empty --max-time=55 --tries=3 --timeout=300')
+    ->everyMinute()
+    ->runInBackground()
+    ->withoutOverlapping(10);

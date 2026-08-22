@@ -27,6 +27,9 @@ class SendWhatsAppMessage implements ShouldQueue
 
     public int $backoff = 10;
 
+    /** Un POST de texto a la Cloud API. */
+    public int $timeout = 30;
+
     /**
      * @param  list<array{id: string, title: string}>|null  $buttons
      */
@@ -39,7 +42,9 @@ class SendWhatsAppMessage implements ShouldQueue
         private readonly ?string $agentName = null,
         private readonly ?int $executionLogId = null,
         private readonly ?array $buttons = null,
-    ) {}
+    ) {
+        $this->onQueue('whatsapp-outbound');
+    }
 
     public function handle(
         WhatsAppOutboundService $waService,

@@ -15,10 +15,17 @@ class DeleteOrphanPhoto implements ShouldQueue
 
     public int $backoff = 60; // segundos de espera entre reintentos
 
+    /** Un DELETE contra R2. */
+    public int $timeout = 30;
+
     /**
      * Create a new job instance.
      */
-    public function __construct(public string $publicId) {}
+    public function __construct(public string $publicId)
+    {
+        // Borrado en R2, best-effort.
+        $this->onQueue('background');
+    }
 
     /**
      * Execute the job.
