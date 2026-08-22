@@ -173,6 +173,71 @@ Webhook → ProcessWhatsAppMessage (default)
 
 **Regla crítica:** `processed_at` se setea ANTES de llamar al AI. Si el job falla y reintenta, encuentra el inbox vacío y sale limpiamente — evita doble llamada al LLM con los mismos mensajes.
 
+### Colas y workers — tres procesos residentes, no uno por cola
+
+**Agregar una cola es gratis; agregar un worker cuesta ~90 MB para siempre.** El nombre de la
+cola es una etiqueta de texto en la columna `queue` de la tabla `jobs`; el worker es un proceso
+PHP con el framework y el AI SDK cargados de forma permanente. Hasta el 2026-08-22 había seis
+workers residentes —uno por cola, agregados de a uno con cada feature— para un flujo de bajo
+volumen. **Antes de agregar un `[program:...]` a `.docker/start.sh`, preguntate si la cola nueva
+no entra en un worker que ya existe.**
+
+| Worker | Colas (prioridad) | Conexión (`retry_after`) | Qué corre |
+|---|---|---|---|
+| `worker-ai` | `whatsapp-ai` | `database_ai` (200) | El turno del LLM, 4-95 s. **Aislado**: es el hot path y el cuello de botella. |
+| `worker-realtime` | `default`, `whatsapp-outbound`, `media` | `database` (200) | Ingesta + acuse azul, envíos a Meta, transcripción de notas de voz. Todo ≤60 s. |
+| `worker-quotes` | `quotes` | `database_quotes` (420) | `ResolveQuote`. **Aislado**: retiene el proceso 30-360 s. |
+| *(sin residente)* | `background` | `database_long` (360) | Emisión, facturación, extracción de PDF, análisis semántico, limpieza. |
+
+**`background` no tiene worker residente.** Lo levanta el scheduler cada minuto con
+`queue:work --stop-when-empty` (ver `routes/console.php`): en un minuto sin trabajo el proceso
+arranca, hace un poll, ve la cola vacía y se muere — cero RAM residente. `--stop-when-empty`
+corta **entre** jobs, así que una extracción de PDF de 300 s termina igual. Latencia peor caso:
+60 s desde el dispatch. Para volver a un residente: un `[program:worker-background]` con
+`--sleep=20` en `start.sh` y borrar la entrada del scheduler.
+
+**Qué va en `background` y qué no.** No es "lo poco frecuente", es **lo que no bloquea a nadie**.
+`default` es el camino caliente —`ProcessWhatsAppMessage` manda el acuse de lectura y el
+"escribiendo…"— y un job lento ahí adelante deja al cliente mirando un bot colgado. Ese bug
+existía: `EmitirPoliza` (hasta 2 min contra Visred) vivía en `default`.
+
+### Las dos reglas que hay que respetar al tocar colas
+
+**1. Cada worker recibe su CONEXIÓN como primer argumento.**
+
+```sh
+# ✅
+php artisan queue:work database_ai --queue=whatsapp-ai --timeout=180
+# ❌ cae a queue.default y usa el retry_after de `database`, ignorando el de database_ai
+php artisan queue:work --queue=whatsapp-ai --timeout=180
+```
+
+`retry_after` —cada cuántos segundos la cola da por abandonado un job reservado y lo vuelve a
+entregar— **no viaja con el job**: lo aplica la conexión del worker que lo **saca**, no la del
+código que lo despachó. Las cuatro conexiones de `config/queue.php` apuntan a la **misma tabla
+`jobs` de la misma base**: lo único que las distingue es ese número. Por eso tampoco se usa
+`onConnection()` del lado del despacho — no aísla nada y da una falsa sensación de que sí.
+
+Invariante, por worker: **`retry_after` de su conexión > el `$timeout` más largo de las colas que
+atiende.** Si se viola, la cola re-reserva un job que sigue corriendo y quedan dos en paralelo.
+
+**2. La política del job vive en el job.**
+
+Todo job declara `public int $timeout`, `public int $tries` y su cola con `$this->onQueue(...)` en
+el constructor. El `--timeout`/`--tries` del worker es sólo un techo de seguridad: Laravel
+prioriza el del job (`Worker::timeoutForJob()`, aplicado con `pcntl_alarm`). Heredar del worker
+"funciona" mientras cada cola tenga proceso propio y se rompe en cuanto se comparte, porque un
+proceso tiene un solo `--timeout`.
+
+`tests/Feature/Queue/WorkerConfigTest.php` verifica los cinco invariantes —el mapa completo de
+jobs por cola, que todo job declare su política, que toda cola tenga un worker que la lea, y las
+dos desigualdades de arriba— leyendo `.docker/start.sh` y `routes/console.php`. Si agregás un job
+o un worker sin cerrar el círculo, falla ahí y no en producción.
+
+**Ojo con `Bus::chain()`:** la cadena fija el `chainQueue` con el que se despacha cada eslabón
+siguiente, así que **la cadena tiene que declarar su cola** (`->onQueue('background')`) aunque
+cada job ya la declare en su constructor.
+
 ### Agrupar la seguidilla: dos mecanismos, dos momentos
 
 El cliente manda tres burbujas y espera **una** respuesta. Se agrupa en dos puntos distintos de
@@ -320,7 +385,8 @@ y `failed()`— y es idempotente por `quote_id`.
 
 `poll_budget` (240s) < `ResolveQuote::$timeout` (360s) < `retry_after` de `database_quotes` (420s).
 El worker de la cola `quotes` vive en `.docker/start.sh`: **si no está, los jobs se encolan y no los
-corre nadie**, y el síntoma es idéntico al bug viejo (aviso y después silencio).
+corre nadie**, y el síntoma es idéntico al bug viejo (aviso y después silencio). Eso último ya no
+puede pasar sin que se entere alguien: `WorkerConfigTest` falla si una cola queda sin lector.
 
 ### Idempotencia
 Use the `wamid` (WhatsApp message ID) as cache key: `processed_wamid_{wamid}`.
