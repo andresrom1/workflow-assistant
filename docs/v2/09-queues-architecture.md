@@ -1,5 +1,28 @@
 # Arquitectura de Queues — workflow-assistant (v2)
 
+> ## ⚠️ SUPERADO — 2026-08-22
+>
+> **La verdad actual está en [`../colas-y-workers.md`](../colas-y-workers.md).** Este documento
+> describe el diseño anterior: **un worker residente por cola** (seis), que el refactor del
+> 2026-08-22 reemplazó por **tres workers residentes + una cola `background` bajo demanda**.
+>
+> Qué cambió, concretamente:
+>
+> | Acá dice | Hoy |
+> |---|---|
+> | Cuatro conexiones, incluida `database_media` | `database_media` **eliminada**; quedan `database`, `database_ai`, `database_quotes`, `database_long`. `database` pasó de `retry_after` 90 a 200. |
+> | Un worker por conexión, con `queue:listen` desde `run.md` | Tres `queue:work` residentes bajo supervisor en `.docker/start.sh`, más un cuarto bajo demanda desde el scheduler. |
+> | La cola `semantic-analysis` sin worker es intencional | Era un defecto **latente**. Mudada a `background`; el feature sigue apagado por flag. |
+> | Las colas `background` y `quotes` no existen | Ambas existen; ver el inventario nuevo. |
+> | El job hereda `--timeout`/`--tries` del worker | Cada job declara los suyos. Un proceso tiene un solo `--timeout`, así que heredar se rompe al compartir worker. |
+> | Deuda: prod sin gestor de procesos (H5) | Cerrada — supervisor en `.docker/start.sh`. |
+>
+> **Se conserva por trazabilidad**, y porque §*Modelo mental* y el incidente de 2026-06-05 siguen
+> siendo la mejor explicación de por qué el invariante `retry_after > timeout` existe. Ese contenido
+> está rescatado y actualizado en el documento nuevo.
+
+---
+
 > Cómo se reparte el trabajo asíncrono: **conexiones**, **colas**, **workers** y el invariante
 > `retry_after > timeout` que mantiene todo correcto. Driver: `database` (tabla `jobs` en PostgreSQL).
 > El estado de ejecución y la deuda viven en [`../../ROADMAP.md`](../../ROADMAP.md).

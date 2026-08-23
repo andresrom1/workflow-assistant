@@ -22,6 +22,7 @@
 |---|---|
 | [despliegue.md](despliegue.md) | El despliegue actual en GCP paso a paso: VM, DNS/TLS, `.env.production`, secretos fuera de git, presupuesto y el script de reintento de Oracle. |
 | [migracion-tier.md](migracion-tier.md) | **Planificado, sin ejecutar.** Bajar de tier de VM para cobrar el ahorro del refactor de colas: datos medidos (reposo), qué falta medir (el pico), opciones con el eje de latencia geográfica, procedimiento de corte y verificación. |
+| [colas-y-workers.md](colas-y-workers.md) | **Fuente viva** de la arquitectura de colas: conexiones, los dos invariantes, la topología de 3 workers residentes + `background` bajo demanda, inventario de jobs, el pipeline de inbox de WhatsApp y el costo medido. Supera a `v2/09`. |
 | [configuracion-hardcodeada.md](configuracion-hardcodeada.md) | Registro de la configuración marcada con `// opcion-de-configuracion`. |
 
 ## Contexto de la arquitectura v2
@@ -49,7 +50,7 @@ Canales consumidores que se usan como etiqueta en toda la doc:
 | 06 | [06-adapters.md](v2/06-adapters.md) | Adapters de proveedor de IA + el Adapter Visred pendiente. |
 | 07 | [07-consolidado-v1.md](v2/07-consolidado-v1.md) | Consolidación de toda la doc v1 + tabla "qué cambió de v1 a v2". |
 | 08 | [08-visred-quote-adapter.md](v2/08-visred-quote-adapter.md) | Diseño del patrón Adapter para enchufar la cotización contra Visred (lado Visred verificado contra el schema; lado workflow-assistant pendiente). |
-| 09 | [09-queues-architecture.md](v2/09-queues-architecture.md) | Arquitectura de queues: conexiones, colas, workers, el invariante `retry_after > timeout`, inventario de jobs y el pipeline de inbox WhatsApp. |
+| 09 | [09-queues-architecture.md](v2/09-queues-architecture.md) | **⚠️ Superado (2026-08-22)** — describe el diseño de *un worker por cola*. La verdad actual está en [colas-y-workers.md](colas-y-workers.md); este queda como registro histórico con la tabla de qué cambió. |
 | 10 | [10-modelo-dominio-cotizacion-emision.md](v2/10-modelo-dominio-cotizacion-emision.md) | Modelo de dominio **agnóstico de proveedor** para cotización + emisión: límites de contexto (compañía = system of record), puertos `QuotationProvider`/`EmissionProvider`, modelo temporal, referencia mínima + on-demand. **Fase 0 (gate) de la integración Visred.** |
 | 11 | [11-modelo-cliente-consolidacion-datos.md](v2/11-modelo-cliente-consolidacion-datos.md) | El `Customer` como **fuente de verdad** consolidada: captura multi-fuente (chat + checkout), modelo de pesos por fuente (checkout ≈ admin > chat), provenance + audit log + divergencias, y el domicilio tomador/riesgo con mapeo en el adapter (CP de guarda = el que tarifa). |
 | 12 | [12-deduplicacion-merge-clientes.md](v2/12-deduplicacion-merge-clientes.md) | **Dedup/merge de filas `Customer` duplicadas** (misma persona en dos filas por canales distintos). Causa raíz, data-fix aplicado (caso checkout #4), `CustomerMergeService` vs `CustomerConsolidationService`, reconciliación solo por claves fuertes (dni/email, no teléfono) y plan de implementación pendiente. |
