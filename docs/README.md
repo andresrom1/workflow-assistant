@@ -16,6 +16,14 @@
 
 > **¿Dónde estamos?** El estado de ejecución vive en [`../ROADMAP.md`](../ROADMAP.md) — fuente de verdad del avance y la deuda abierta.
 
+## Operación
+
+| Documento | Qué cubre |
+|---|---|
+| [despliegue.md](despliegue.md) | El despliegue actual en GCP paso a paso: VM, DNS/TLS, `.env.production`, secretos fuera de git, presupuesto y el script de reintento de Oracle. |
+| [migracion-tier.md](migracion-tier.md) | **Planificado, sin ejecutar.** Bajar de tier de VM para cobrar el ahorro del refactor de colas: datos medidos (reposo), qué falta medir (el pico), opciones con el eje de latencia geográfica, procedimiento de corte y verificación. |
+| [configuracion-hardcodeada.md](configuracion-hardcodeada.md) | Registro de la configuración marcada con `// opcion-de-configuracion`. |
+
 ## Contexto de la arquitectura v2
 
 Cambios estructurales respecto de v1:
