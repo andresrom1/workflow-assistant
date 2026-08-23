@@ -58,7 +58,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --queue=whatsapp-ai,whatsapp-outbound,media,default --tries=3 --timeout=180\" \"npm run dev\" --names=server,queue,vite --kill-others-on-fail"
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#fdba74\" \"php artisan serve\" \"php artisan queue:listen database_quotes --queue=whatsapp-ai,default,whatsapp-outbound,media,quotes,background,documents --tries=3 --timeout=360\" \"npm run dev\" --names=server,queue,vite --kill-others-on-fail"
         ],
         "test": [
             "@php artisan config:clear --ansi",

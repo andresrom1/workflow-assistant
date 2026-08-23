@@ -305,6 +305,40 @@ Es la única de las fuentes de verdad de este documento que **no se puede ignora
 
 ---
 
+## 11. Levantarlo en local
+
+En dev va `queue:listen` y no `queue:work` a propósito: rebootea el framework por job, así que recoge
+cambios de código sin reiniciar el proceso.
+
+**Un solo proceso, cubre todas las colas** — lo cómodo para el día a día:
+
+```sh
+php artisan queue:listen database_quotes --queue=whatsapp-ai,default,whatsapp-outbound,media,quotes,background,documents --tries=3 --timeout=360
+```
+
+Es lo que corre `composer run dev`. **La conexión no es decorativa:** `database_quotes` tiene
+`retry_after = 420`, lo único por encima del job más largo (`ResolveQuote`, 360 s). Con `database` o
+`database_ai` (200) se viola el invariante de §2.1 y una cotización lenta se ejecuta dos veces.
+
+La contra de un solo proceso: una cotización de 174 s bloquea todo lo demás. En dev suele ser
+aceptable —y a veces revelador—, pero si molesta, la otra opción es **espejar producción** con cuatro
+terminales:
+
+```sh
+php artisan queue:listen database_ai     --queue=whatsapp-ai                     --tries=3 --timeout=180
+php artisan queue:listen database        --queue=default,whatsapp-outbound,media --tries=3 --timeout=60
+php artisan queue:listen database_quotes --queue=quotes                          --tries=2 --timeout=360
+php artisan queue:listen database_long   --queue=background,documents            --tries=3 --timeout=300
+```
+
+> **Trampa conocida:** hasta el 2026-08-22 el script `dev` de `composer.json` no incluía `quotes`,
+> `background` ni `documents`. En local no se resolvía ninguna cotización, no se emitía ninguna
+> póliza y no se extraía ningún PDF — sin ningún error, porque los jobs se encolaban y nadie los
+> sacaba. Si agregás una cola, **acordate de agregarla también acá**: el `WorkerConfigTest` lee
+> `.docker/start.sh` y `routes/console.php`, pero **no** lee `composer.json`.
+
+---
+
 ## Referencias
 
 - [`../CLAUDE.md`](../CLAUDE.md) § *Colas y workers* — las reglas al editar.
