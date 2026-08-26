@@ -86,14 +86,7 @@ TXT;
             $alt = QuoteAlternative::find($altId);
 
             if ($alt instanceof QuoteAlternative) {
-                $instructions .= "\n\n## DATOS DEL PRODUCTO (fuente primaria)\n\n"
-                    ."Aseguradora: {$alt->aseguradora}\n"
-                    ."Plan: {$alt->titulo} — {$alt->descripcion}\n"
-                    ."Nivel: {$alt->normalized_grade}\n"
-                    .'Features incluidas: '.implode(', ', $alt->features_tags ?? [])."\n"
-                    ."Detalle:\n"
-                    .collect($alt->full_details ?? [])
-                        ->map(fn (mixed $v, string $k): string => "- {$k}: {$v}")->implode("\n");
+                $instructions .= $this->productBlock($alt);
             }
         }
 
@@ -112,5 +105,43 @@ TXT;
             .($antiguedad !== 'desconocida' ? "\nAntiguedad vehiculo: {$antiguedad} anios" : '');
 
         return $agent->prompt($prompt)->text;
+    }
+
+    /**
+     * Bloque `DATOS DEL PRODUCTO` que se le inyecta al experto.
+     *
+     * Tiene dos formas, y la diferencia es la que evita afirmar sin dato: la negación por
+     * ausencia sólo vale si la enumeración de coberturas VINO. Visred manda algunos covers
+     * con `features` vacío — `Auto Max 15` y `Garage` de Sancor, 31 de 2002 alternativas en
+     * producción. `Auto Max 15` se vende a $67.737, así que "no cubre nada" es falso; con la
+     * regla vieja ("feature ausente = no cubierta") el agente lo afirmaba para cualquier
+     * pregunta, porque con la lista vacía TODA feature está ausente.
+     */
+    private function productBlock(QuoteAlternative $alt): string
+    {
+        $encabezado = "\n\n## DATOS DEL PRODUCTO (fuente primaria)\n\n"
+            ."Aseguradora: {$alt->aseguradora}\n"
+            ."Plan: {$alt->titulo} — {$alt->descripcion}\n";
+
+        $features = $alt->features_tags ?? [];
+
+        if ($features === []) {
+            return $encabezado
+                ."\nENUMERACION DE COBERTURAS: NO DISPONIBLE para este plan.\n\n"
+                .'El proveedor no envio la lista de coberturas de este producto. NO es que el plan '
+                ."no cubra nada: es que el dato falta.\n"
+                .'PROHIBIDO negar por ausencia en este caso — no digas que una cobertura no esta '
+                ."incluida, porque no tenes con que saberlo.\n"
+                .'Solo podes afirmar lo que encuentres en la documentacion de la compania.';
+        }
+
+        return $encabezado
+            ."Nivel: {$alt->normalized_grade}\n"
+            .'Features incluidas: '.implode(', ', $features)."\n"
+            ."Detalle:\n"
+            .collect($alt->full_details ?? [])
+                ->map(fn (mixed $v, string $k): string => "- {$k}: {$v}")->implode("\n")
+            ."\n\nEsta enumeracion esta COMPLETA: es la lista de riesgos que cubre el plan. "
+            .'Una cobertura que no figura aca, no esta incluida.';
     }
 }
