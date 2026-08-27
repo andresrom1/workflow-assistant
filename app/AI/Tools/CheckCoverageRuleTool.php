@@ -4,9 +4,11 @@ namespace App\AI\Tools;
 
 use App\AI\Concerns\HasRealReplay;
 use App\Models\AgentPrompt;
+use App\Models\CoverageDocument;
 use App\Models\QuoteAlternative;
 use App\Traits\ConditionalLogger;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Contracts\Tool;
@@ -32,12 +34,22 @@ COMO LLAMARLA:
 - Mapeo de normalized_grade a codigo: liability->A, basic->B, third_party_complete->C, third_party_complete_plus->C, all_risk->D. Si no sabes cual aplica, usa "no_definida".
 
 COMO RESPONDER AL CLIENTE tras la tool:
-- Directo, sin hedges. El resultado de la tool es lo que decis.
+
+La tool devuelve uno de dos resultados, y se responden distinto.
+
+1. RESPUESTA FUNDADA: directo, sin hedges. El resultado de la tool es lo que decis.
 - MAL: "No te lo puedo confirmar de memoria, si queres te lo verifico..."
 - MAL: "Queres que te lo verifique?"
-- MAL: "No puedo asegurarte que X tenga Y" (si tenes el resultado de la tool, el resultado ES la seguridad).
 - BIEN: "La grua no esta incluida en esa cobertura."
 - BIEN: "Si, esa cobertura incluye grua hasta 100 km."
+
+2. LA TOOL DICE QUE NO LO TIENE VERIFICADO: transmitilo tal cual, en tus palabras, y
+   ofrece averiguarlo. NO lo completes, NO lo deduzcas del nombre del plan, NO uses lo que
+   sepas del mercado. Es un resultado valido y frecuente: los manuales no cubren todo, y
+   una respuesta inventada compromete a la agencia con algo que la compania no valido.
+- MAL: inventar un numero, un plazo o un tope que la tool no devolvio.
+- MAL: contestar igual "en general es asi".
+- BIEN: "Ese dato puntual no lo tengo confirmado, dejame chequearlo y te digo."
 TXT;
     }
 
@@ -82,29 +94,123 @@ TXT;
         }
 
         // 2. Inject product data (full_details) if available
+        $plan = 'no identificado';
+
         if ($altId > 0) {
             $alt = QuoteAlternative::find($altId);
 
             if ($alt instanceof QuoteAlternative) {
                 $instructions .= $this->productBlock($alt);
+                $plan = $alt->titulo;
             }
         }
 
-        // 3. Expert Agent WITH RAG search tool
+        // 3. Documentación de la compañía: entera si entra, RAG sólo como salida.
+        $docs = CoverageDocument::activeForCompany($aseguradora);
+        $instructions .= $this->documentationBlock($docs);
+
         $agent = new AnonymousAgent(
             instructions: $instructions,
             messages: [],
-            tools: [new SearchCompanyDocumentationTool],
+            tools: $this->needsSearchFallback($docs) ? [new SearchCompanyDocumentationTool] : [],
         );
 
         // 4. Structured prompt to Expert
         $prompt = 'Evento consultado: '.($all['evento'] ?? '')
+            ."\nPlan cotizado: {$plan}"
             ."\nCobertura: ".($all['cobertura'] ?? 'no_definida')
             ."\nAseguradora: {$aseguradora}"
             ."\nCompany slug: ".Str::slug($aseguradora)
             .($antiguedad !== 'desconocida' ? "\nAntiguedad vehiculo: {$antiguedad} anios" : '');
 
         return $agent->prompt($prompt)->text;
+    }
+
+    /**
+     * Techo de caracteres de documentación que se inyecta entera.
+     *
+     * Hoy la compañía más grande son 37.040 caracteres sin curar (Sancor) y la estimación
+     * curada más alta son ~92.000 (San Cristóbal, sus 3 documentos). 120.000 ≈ 38k tokens,
+     * holgado contra los 128k de contexto, y deja margen para que un manual crezca sin que
+     * el turno se caiga. Por encima de esto se vuelve al RAG, que es peor pero acotado.
+     */
+    private const DOC_BUDGET_CHARS = 120_000;
+
+    /**
+     * ¿Hay que darle la tool de búsqueda al experto?
+     *
+     * Sólo cuando la documentación NO entra en contexto. Con documentos que entran, la
+     * búsqueda es estrictamente peor: el experto ve el manual completo, así que puede
+     * ubicar la columna de SU plan y —lo que el RAG no permite— determinar que un plan
+     * NO figura. Con 4 fragmentos nunca ve lo que no recuperó.
+     *
+     * Y sin documentos tampoco tiene sentido: la búsqueda tampoco tiene dónde buscar.
+     *
+     * @param  Collection<int, CoverageDocument>  $docs
+     */
+    private function needsSearchFallback(Collection $docs): bool
+    {
+        return $docs->isNotEmpty() && $this->totalChars($docs) > self::DOC_BUDGET_CHARS;
+    }
+
+    /** @param  Collection<int, CoverageDocument>  $docs */
+    private function totalChars(Collection $docs): int
+    {
+        return (int) $docs->sum(fn (CoverageDocument $d): int => mb_strlen((string) $d->extracted_content));
+    }
+
+    /**
+     * Documentación de la compañía, entera, con la regla de lectura.
+     *
+     * Reemplaza a la búsqueda por similitud, que se midió y no sirve acá: sobre 7 consultas
+     * cuyo dato SÍ estaba en la documentación, los dos aciertos quedaron MÁS LEJOS (0,3890 y
+     * 0,4034 de distancia coseno) que todos los fallos (0,2608 a 0,3766). No existe umbral que
+     * los separe — el fallo típico es de especificidad, no de tema: una pregunta de granizo
+     * sobre un auto devolvía el cuadro de camiones de Triunfo, que también habla de granizo.
+     *
+     * @param  Collection<int, CoverageDocument>  $docs
+     */
+    private function documentationBlock(Collection $docs): string
+    {
+        $encabezado = "\n\n## DOCUMENTACION DE LA COMPANIA\n\n";
+
+        if ($docs->isEmpty()) {
+            return $encabezado
+                ."NO HAY DOCUMENTACION CARGADA para esta compania.\n\n"
+                .'No tenes con que responder topes, montos, cantidades de eventos, kilometros ni '
+                .'condiciones por antiguedad. Decilo: no lo tenes verificado. NO lo deduzcas del '
+                .'nombre del plan ni del conocimiento general del mercado.';
+        }
+
+        if ($this->needsSearchFallback($docs)) {
+            return $encabezado
+                .'La documentacion de esta compania no entra completa en contexto, asi que tenes '
+                ."la tool `search_company_documentation` para buscar fragmentos.\n"
+                .'CUIDADO: la busqueda devuelve lo mas parecido, NO necesariamente lo que responde. '
+                .'Verifica que el fragmento hable del plan y del tipo de vehiculo que te preguntan '
+                .'antes de usarlo.';
+        }
+
+        $cuerpo = $docs->map(fn (CoverageDocument $d): string => sprintf(
+            "### %s — %s%s\n\n%s",
+            $d->document_type,
+            $d->original_filename,
+            $d->version !== null && $d->version !== '' ? " (version {$d->version})" : '',
+            (string) $d->extracted_content,
+        ))->implode("\n\n---\n\n");
+
+        return $encabezado
+            ."Esto es TODA la documentacion cargada de la compania. No hay nada mas.\n\n"
+            ."COMO LEERLA:\n"
+            .'- Ubica la fila/columna del PLAN COTIZADO que figura en la consulta. Los cuadros '
+            ."tienen una columna por plan y el nombre puede diferir del de la cotizacion.\n"
+            .'- Si el plan cotizado NO figura en el cuadro, decilo: no tenes respaldo para ese '
+            ."plan. NO uses la columna de al lado.\n"
+            .'- Fijate en el segmento: si el cuadro es de camiones o acoplados y te preguntan por '
+            ."un auto, NO aplica.\n"
+            .'- Si el dato no esta en este texto, NO esta especificado. Decilo asi. No lo '
+            ."completes con lo que sabes del mercado.\n\n"
+            .$cuerpo;
     }
 
     /**
