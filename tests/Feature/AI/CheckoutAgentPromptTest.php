@@ -1,6 +1,7 @@
 <?php
 
 use App\AI\Tools\CheckCoverageRuleTool;
+use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 
 /**
  * Regression tests for CheckoutAgent.md prompt invariants.
@@ -143,7 +144,32 @@ it('CheckCoverageRuleTool description contains the usage rules', function () {
         ->toContain('REGLA ABSOLUTA')
         ->toContain('NO avises que vas a consultar')
         ->toContain('Parametros obligatorios')
-        ->toContain('liability->A')
         ->toContain('MAL:')
         ->toContain('BIEN:');
+});
+
+/**
+ * El grado colapsa productos distintos: en San Cristóbal `C - Auto Plus` (12 coberturas, sin
+ * granizo) y `Auto Plus +` (15, con granizo) son los dos "C". La tool ya recibe
+ * `quote_alternative_id`, que identifica la fila exacta — el grado sobra y desinforma.
+ */
+it('CheckCoverageRuleTool ya no pide el grado ni la letra de cobertura', function () {
+    $tool = new CheckCoverageRuleTool;
+
+    expect($tool->description())
+        ->not->toContain('liability->A')
+        ->not->toContain('third_party_complete->C')
+        ->toContain('quote_alternative_id es el parametro que importa')
+        ->toContain('NO mandes el grado');
+
+    expect(array_keys($tool->schema(new JsonSchemaTypeFactory)))
+        ->not->toContain('cobertura')
+        ->toContain('quote_alternative_id');
+});
+
+it('CheckCoverageRuleTool le explica al frontal los estados de salida', function () {
+    expect((new CheckCoverageRuleTool)->description())
+        ->toContain('no_especificado')
+        ->toContain('sin_verificar')
+        ->toContain('NO LO TIENE VERIFICADO');
 });

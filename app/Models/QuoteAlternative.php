@@ -83,4 +83,47 @@ class QuoteAlternative extends Model
 
         return in_array($this->payment_method_id, (array) config('quotes.medios_de_pago_ofrecibles', []), true);
     }
+
+    /**
+     * Franquicia en pesos, cuando el proveedor la expresa como porcentaje en el título.
+     *
+     * El payload de Visred NO trae un campo de franquicia: viaja adentro del nombre del
+     * producto — `Todo Riesgo Franquicia 7,5% suma asegurada`, `Todo Riesgo 8% Suma Aseg,
+     * Franquicia`, `T37 - Todo Riesgo Franq 7% Suma Aseg`. Con `sum_asegurada` alcanza para
+     * resolverla sin ir al manual, y se calcula acá en vez de pedírselo al modelo: es
+     * aritmética, no criterio.
+     *
+     * Devuelve null cuando el título no la expresa así — `Franquicia Fija`, `Franquicia
+     * Variable` y los planes sin franquicia caen acá. En ese caso el dato sale del manual o
+     * no sale: **null no significa "sin franquicia"**, significa "no derivable del título".
+     *
+     * @return array{porcentaje: float, monto: float, origen: string}|null
+     */
+    public function franquicia(): ?array
+    {
+        $titulo = (string) $this->titulo;
+        $suma = (float) $this->sum_asegurada;
+
+        if ($suma <= 0.0) {
+            return null;
+        }
+
+        // Exige la palabra franquicia/franq en el título: sin ella, un porcentaje suelto
+        // puede ser cualquier otra cosa (bonificación, tope de inundación).
+        if (! preg_match('/franq/iu', $titulo)) {
+            return null;
+        }
+
+        if (! preg_match('/(\d{1,2})(?:[.,](\d{1,2}))?\s*%/u', $titulo, $m)) {
+            return null;
+        }
+
+        $porcentaje = (float) ($m[1].'.'.($m[2] ?? '0'));
+
+        return [
+            'porcentaje' => $porcentaje,
+            'monto' => round($suma * $porcentaje / 100, 2),
+            'origen' => $titulo,
+        ];
+    }
 }

@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Responses\StructuredAgentResponse;
+use Laravel\Ai\StructuredAnonymousAgent;
 use Laravel\Ai\Tools\Request;
 
 class CheckCoverageRuleTool implements Tool
@@ -26,24 +28,29 @@ Consulta las reglas de la poliza para saber si un evento o siniestro especifico 
 
 CUANDO USAR: cada vez que el cliente pregunta "esto cubre X?", "incluye grua?", "me cubre si me pasa Y?", "que pasa si...?", o cualquier variante donde necesites confirmar si un evento especifico esta dentro de una cobertura. Tambien cuando tu propia informacion en memoria o en el payload (features_tags, glosario) no alcanza para responder con certeza.
 
-REGLA ABSOLUTA: nunca respondas sobre coberturas de memoria. Si el cliente pregunta, llama esta tool. Si dudas, llama esta tool. El resultado de la tool ES la fuente de verdad.
+REGLA ABSOLUTA: nunca respondas sobre coberturas de memoria. Si el cliente pregunta, llama esta tool. Si dudas, llama esta tool. El resultado de la tool ES la fuente de verdad, INCLUIDO cuando dice que no lo tiene verificado.
 
 COMO LLAMARLA:
 - NO avises que vas a consultar. NO pidas permiso. NO digas "dejame verificar". Simplemente ejecuta la tool y responde con el resultado.
-- Parametros obligatorios: evento (el evento exacto que menciono el cliente), cobertura (codigo A/B/C/C+/CM/D, o "no_definida"), aseguradora (nombre de la compania, o "no especificada"), quote_alternative_id (ID de la alternativa en contexto, o "0"), antiguedad_vehiculo (anios del vehiculo, o "desconocida").
-- Mapeo de normalized_grade a codigo: liability->A, basic->B, third_party_complete->C, third_party_complete_plus->C, all_risk->D. Si no sabes cual aplica, usa "no_definida".
+- Parametros obligatorios: evento (el evento exacto que menciono el cliente), aseguradora (nombre de la compania, o "no especificada"), quote_alternative_id (ID de la alternativa en contexto, o "0"), antiguedad_vehiculo (anios del vehiculo, o "desconocida").
+- **quote_alternative_id es el parametro que importa.** Identifica el plan exacto con SUS coberturas. Pasa el id de la alternativa de la que habla el cliente; si hay varias en juego, la ultima que menciono. Con "0" el experto se queda sin el producto y solo puede responder generalidades de la compania.
+- NO mandes el grado ni la letra de cobertura. Dos planes con la misma letra cubren cosas distintas: en San Cristobal "C - Auto Plus" NO trae granizo y "Auto Plus +" SI, y los dos son "C".
+
+QUE DEVUELVE: un JSON con `veredicto`, `respuesta`, `fuente`, `cita` y `verificado`.
+- `respuesta` es el texto que le pasas al cliente (reformulalo con tu tono, no lo pegues crudo).
+- `veredicto` es `cubierto`, `no_cubierto`, `no_especificado` o `sin_verificar`.
+- `cita` es la frase textual del material que sostiene la respuesta. NO se la muestres al
+  cliente salvo que aporte (un monto, un tope); esta para que quede registrada.
 
 COMO RESPONDER AL CLIENTE tras la tool:
 
-La tool devuelve uno de dos resultados, y se responden distinto.
-
-1. RESPUESTA FUNDADA: directo, sin hedges. El resultado de la tool es lo que decis.
+1. `cubierto` / `no_cubierto` — RESPUESTA FUNDADA: directo, sin hedges.
 - MAL: "No te lo puedo confirmar de memoria, si queres te lo verifico..."
 - MAL: "Queres que te lo verifique?"
 - BIEN: "La grua no esta incluida en esa cobertura."
 - BIEN: "Si, esa cobertura incluye grua hasta 100 km."
 
-2. LA TOOL DICE QUE NO LO TIENE VERIFICADO: transmitilo tal cual, en tus palabras, y
+2. `no_especificado` / `sin_verificar` — NO LO TIENE VERIFICADO: transmitilo en tus palabras y
    ofrece averiguarlo. NO lo completes, NO lo deduzcas del nombre del plan, NO uses lo que
    sepas del mercado. Es un resultado valido y frecuente: los manuales no cubren todo, y
    una respuesta inventada compromete a la agencia con algo que la compania no valido.
@@ -61,9 +68,6 @@ TXT;
         return [
             'evento' => $schema->string()
                 ->description('El evento o siniestro que pregunta el cliente. Ej: "robo de espejos", "granizo", "choque propio".')
-                ->required(),
-            'cobertura' => $schema->string()
-                ->description('Codigo de cobertura: A, B, C, C+, CM, D, o "no_definida".')
                 ->required(),
             'aseguradora' => $schema->string()
                 ->description('Nombre de la aseguradora. Ej: "San Cristobal", "Triunfo". Usar "no especificada" si no se conoce.')
@@ -93,37 +97,149 @@ TXT;
             $instructions = (string) file_get_contents(resource_path('prompts/agents/CoverageCheckAgent.md'));
         }
 
-        // 2. Inject product data (full_details) if available
+        // 2. Producto: el plan exacto que se esta cotizando.
         $plan = 'no identificado';
+        $alt = $altId > 0 ? QuoteAlternative::find($altId) : null;
+        $producto = '';
 
-        if ($altId > 0) {
-            $alt = QuoteAlternative::find($altId);
-
-            if ($alt instanceof QuoteAlternative) {
-                $instructions .= $this->productBlock($alt);
-                $plan = $alt->titulo;
-            }
+        if ($alt instanceof QuoteAlternative) {
+            $producto = $this->productBlock($alt);
+            $plan = (string) $alt->titulo;
         }
 
-        // 3. Documentación de la compañía: entera si entra, RAG sólo como salida.
+        // 3. Documentacion de la compania: entera si entra, busqueda solo como salida.
         $docs = CoverageDocument::activeForCompany($aseguradora);
-        $instructions .= $this->documentationBlock($docs);
+        $documentacion = $this->documentationBlock($docs);
 
-        $agent = new AnonymousAgent(
-            instructions: $instructions,
-            messages: [],
-            tools: $this->needsSearchFallback($docs) ? [new SearchCompanyDocumentationTool] : [],
-        );
+        // Lo citable: es contra esto que se verifica la cita del experto.
+        $material = $producto."\n".$documentacion;
+        $instructions .= $material;
 
-        // 4. Structured prompt to Expert
         $prompt = 'Evento consultado: '.($all['evento'] ?? '')
             ."\nPlan cotizado: {$plan}"
-            ."\nCobertura: ".($all['cobertura'] ?? 'no_definida')
             ."\nAseguradora: {$aseguradora}"
             ."\nCompany slug: ".Str::slug($aseguradora)
             .($antiguedad !== 'desconocida' ? "\nAntiguedad vehiculo: {$antiguedad} anios" : '');
 
-        return $agent->prompt($prompt)->text;
+        // 4a. Camino de busqueda: salida estructurada y tools son excluyentes en DeepSeek
+        // (`Providers/DeepSeek/Handlers/Structured.php` no mapea tools), asi que aca se
+        // conserva la prosa y el resultado se marca como NO verificado, en vez de fingir
+        // una garantia que no se dio. Hoy no lo toma ninguna compania.
+        if ($this->needsSearchFallback($docs)) {
+            $texto = (new AnonymousAgent($instructions, [], [new SearchCompanyDocumentationTool]))
+                ->prompt($prompt)->text;
+
+            return $this->encode([
+                'veredicto' => 'sin_verificar',
+                'respuesta' => $texto,
+                'fuente' => 'busqueda',
+                'cita' => '',
+                'verificado' => false,
+            ]);
+        }
+
+        // 4b. Camino normal: salida estructurada, para poder chequear el fundamento.
+        $agent = new StructuredAnonymousAgent(
+            instructions: $instructions,
+            messages: [],
+            tools: [],
+            schema: fn (JsonSchema $s): array => [
+                'veredicto' => $s->string()
+                    ->description('cubierto | no_cubierto | no_especificado. Usa no_especificado si no podes respaldar la respuesta con una frase textual del material.')
+                    ->required(),
+                'respuesta' => $s->string()
+                    ->description('La respuesta para el cliente, 4-5 lineas, directa y sin hedges.')
+                    ->required(),
+                'fuente' => $s->string()
+                    ->description('enumeracion (lista de coberturas del plan) | alcance (descripcion de una cobertura) | documentacion (manual de la compania) | ninguna.')
+                    ->required(),
+                'cita' => $s->string()
+                    ->description('La frase TEXTUAL del material en la que se apoya la respuesta, copiada tal cual. Vacia solo si veredicto es no_especificado.')
+                    ->required(),
+            ],
+        );
+
+        $respuestaAgente = $agent->prompt($prompt);
+
+        // Si por lo que sea no vino estructurada, el array vacio degrada a `no_especificado`
+        // en `verificarFundamento()`. Falla hacia el silencio, no hacia una afirmacion.
+        $salida = $respuestaAgente instanceof StructuredAgentResponse
+            ? $respuestaAgente->structured
+            : [];
+
+        return $this->encode($this->verificarFundamento($salida, $alt, $material));
+    }
+
+    /**
+     * Degrada a `no_especificado` toda respuesta que no pueda sostener su propia cita.
+     *
+     * Esta es la diferencia entre pedirlo por prompt y garantizarlo: el ROADMAP registra que
+     * el prompt v7 prohibia una promesa y el modelo la hacia igual en 3 de 4 conversaciones.
+     * Aca el chequeo corre en codigo y el modelo no lo puede desobedecer.
+     *
+     * Atrapa la cita **inventada**. NO atrapa la cita **mal atribuida** —un fragmento real
+     * pero de otro plan o de otro segmento—: contra eso juega el documento completo, que le
+     * deja ver de que columna y de que vehiculo habla cada cuadro.
+     *
+     * @param  array<string, mixed>  $salida
+     * @return array<string, mixed>
+     */
+    private function verificarFundamento(array $salida, ?QuoteAlternative $alt, string $material): array
+    {
+        $veredicto = is_string($salida['veredicto'] ?? null) ? $salida['veredicto'] : 'no_especificado';
+        $cita = is_string($salida['cita'] ?? null) ? trim($salida['cita']) : '';
+        $fuente = is_string($salida['fuente'] ?? null) ? $salida['fuente'] : 'ninguna';
+        $respuesta = is_string($salida['respuesta'] ?? null) ? $salida['respuesta'] : '';
+
+        $degradar = fn (string $motivo): array => [
+            'veredicto' => 'no_especificado',
+            'respuesta' => $respuesta,
+            'fuente' => 'ninguna',
+            'cita' => '',
+            'verificado' => true,
+            'degradado_por' => $motivo,
+        ];
+
+        if (! in_array($veredicto, ['cubierto', 'no_cubierto', 'no_especificado'], true)) {
+            return $degradar('veredicto fuera del vocabulario');
+        }
+
+        if ($veredicto === 'no_especificado') {
+            return ['veredicto' => $veredicto, 'respuesta' => $respuesta, 'fuente' => 'ninguna', 'cita' => '', 'verificado' => true];
+        }
+
+        if ($cita === '') {
+            return $degradar('afirmo sin cita');
+        }
+
+        if (! str_contains($this->normalizar($material), $this->normalizar($cita))) {
+            return $degradar('la cita no aparece en el material');
+        }
+
+        // La regla de la Fase 1, ahora en codigo: negar por ausencia exige que la
+        // enumeracion haya venido.
+        if ($veredicto === 'no_cubierto' && $fuente === 'enumeracion'
+            && ($alt === null || ($alt->features_tags ?? []) === [])) {
+            return $degradar('nego por ausencia sin enumeracion');
+        }
+
+        return ['veredicto' => $veredicto, 'respuesta' => $respuesta, 'fuente' => $fuente, 'cita' => $cita, 'verificado' => true];
+    }
+
+    /**
+     * Normaliza para comparar la cita contra el material: el modelo reproduce el texto con
+     * otro espaciado y otra caja, y exigir igualdad byte a byte degradaria respuestas buenas
+     * (la celda de "venta perdida"). Los acentos NO se tocan: sacarlos aflojaria demasiado.
+     */
+    private function normalizar(string $texto): string
+    {
+        return mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $texto)));
+    }
+
+    /** @param  array<string, mixed>  $payload */
+    private function encode(array $payload): string
+    {
+        return json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -214,6 +330,39 @@ TXT;
     }
 
     /**
+     * Suma asegurada y, si el título la expresa, la franquicia ya resuelta en pesos.
+     *
+     * La aritmética se hace acá y no la hace el modelo. Antes el bloque no incluía siquiera
+     * `sum_asegurada`, así que una pregunta por el monto de la franquicia era literalmente
+     * incontestable con lo que el experto tenía: el porcentaje viaja en el título y la base
+     * no viajaba.
+     */
+    private function sumaYFranquicia(QuoteAlternative $alt): string
+    {
+        $suma = (float) $alt->sum_asegurada;
+
+        if ($suma <= 0.0) {
+            return '';
+        }
+
+        $linea = 'Suma asegurada: $'.number_format($suma, 0, ',', '.')."\n";
+        $franquicia = $alt->franquicia();
+
+        if ($franquicia === null) {
+            return $linea
+                .'Franquicia: no se puede derivar del titulo de este plan. Si el cliente pregunta '
+                ."por el monto, sale de la documentacion; si no esta ahi, no lo tenes.\n";
+        }
+
+        return $linea.sprintf(
+            "Franquicia: %s%% de la suma asegurada = $%s (segun el titulo del plan: \"%s\")\n",
+            rtrim(rtrim(number_format($franquicia['porcentaje'], 1, ',', ''), '0'), ','),
+            number_format($franquicia['monto'], 0, ',', '.'),
+            $franquicia['origen'],
+        );
+    }
+
+    /**
      * Bloque `DATOS DEL PRODUCTO` que se le inyecta al experto.
      *
      * Tiene dos formas, y la diferencia es la que evita afirmar sin dato: la negación por
@@ -227,7 +376,8 @@ TXT;
     {
         $encabezado = "\n\n## DATOS DEL PRODUCTO (fuente primaria)\n\n"
             ."Aseguradora: {$alt->aseguradora}\n"
-            ."Plan: {$alt->titulo} — {$alt->descripcion}\n";
+            ."Plan: {$alt->titulo} — {$alt->descripcion}\n"
+            .$this->sumaYFranquicia($alt);
 
         $features = $alt->features_tags ?? [];
 

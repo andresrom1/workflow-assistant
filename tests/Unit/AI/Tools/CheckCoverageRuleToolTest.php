@@ -137,3 +137,123 @@ it('concatena los documentos de la compañía separándolos', function (): void 
         ->toContain('### insert')
         ->toContain('### asistencia');
 });
+
+// ── Verificación del fundamento ─────────────────────────────────────────────────
+
+/**
+ * @param  array<string, mixed>  $salida
+ * @return array<string, mixed>
+ */
+function verificar(array $salida, string $material, ?QuoteAlternative $alt = null): array
+{
+    return (fn (array $s, ?QuoteAlternative $a, string $m): array => $this->verificarFundamento($s, $a, $m))
+        ->call(new CheckCoverageRuleTool, $salida, $alt, $material);
+}
+
+const MATERIAL = 'Granizo: Danos parciales consecuencia del granizo. Cerraduras (1) $300.000';
+
+it('deja pasar la afirmación cuya cita está en el material', function (): void {
+    $r = verificar([
+        'veredicto' => 'cubierto',
+        'respuesta' => 'Si, cubre granizo.',
+        'fuente' => 'alcance',
+        'cita' => 'Danos parciales consecuencia del granizo',
+    ], MATERIAL);
+
+    expect($r)->toMatchArray(['veredicto' => 'cubierto', 'verificado' => true])
+        ->and($r)->not->toHaveKey('degradado_por');
+});
+
+it('tolera diferencias de espaciado y de caja en la cita', function (): void {
+    expect(verificar([
+        'veredicto' => 'cubierto', 'respuesta' => 'Si.', 'fuente' => 'alcance',
+        'cita' => "DAÑOS  PARCIALES\n  consecuencia   del GRANIZO",
+    ], 'Granizo: Daños parciales consecuencia del granizo.'))
+        ->toMatchArray(['veredicto' => 'cubierto']);
+});
+
+it('degrada la afirmación cuya cita no aparece en el material', function (): void {
+    expect(verificar([
+        'veredicto' => 'cubierto',
+        'respuesta' => 'Si, cubre granizo hasta $500.000.',
+        'fuente' => 'documentacion',
+        'cita' => 'Granizo hasta la suma asegurada de $500.000',
+    ], MATERIAL))
+        ->toMatchArray([
+            'veredicto' => 'no_especificado',
+            'cita' => '',
+            'degradado_por' => 'la cita no aparece en el material',
+        ]);
+});
+
+it('degrada la afirmación sin cita', function (): void {
+    expect(verificar(['veredicto' => 'no_cubierto', 'respuesta' => 'No.', 'fuente' => 'enumeracion', 'cita' => '  '], MATERIAL))
+        ->toMatchArray(['veredicto' => 'no_especificado', 'degradado_por' => 'afirmo sin cita']);
+});
+
+it('degrada un veredicto que no está en el vocabulario', function (): void {
+    expect(verificar(['veredicto' => 'quizas', 'respuesta' => 'Mmm.', 'fuente' => 'alcance', 'cita' => 'Granizo'], MATERIAL))
+        ->toMatchArray(['veredicto' => 'no_especificado', 'degradado_por' => 'veredicto fuera del vocabulario']);
+});
+
+it('degrada a no_especificado cuando el modelo no devolvió nada', function (): void {
+    expect(verificar([], MATERIAL))->toMatchArray(['veredicto' => 'no_especificado', 'verificado' => true]);
+});
+
+it('conserva no_especificado sin exigirle cita', function (): void {
+    expect(verificar([
+        'veredicto' => 'no_especificado',
+        'respuesta' => 'No tengo ese dato verificado.',
+        'fuente' => 'ninguna', 'cita' => '',
+    ], MATERIAL))
+        ->toMatchArray(['veredicto' => 'no_especificado', 'verificado' => true])
+        ->and(verificar(['veredicto' => 'no_especificado', 'respuesta' => 'x', 'fuente' => 'ninguna', 'cita' => ''], MATERIAL))
+        ->not->toHaveKey('degradado_por');
+});
+
+it('impide negar por ausencia cuando la enumeración no vino, aunque el prompt lo permita', function (): void {
+    $sinCoberturas = QuoteAlternative::factory()->sinCoberturas()->make(['quote_id' => 1]);
+
+    // El modelo desobedece el prompt y niega igual. El código lo degrada.
+    expect(verificar([
+        'veredicto' => 'no_cubierto',
+        'respuesta' => 'No, ese plan no cubre granizo.',
+        'fuente' => 'enumeracion',
+        'cita' => 'Granizo',
+    ], MATERIAL, $sinCoberturas))
+        ->toMatchArray(['veredicto' => 'no_especificado', 'degradado_por' => 'nego por ausencia sin enumeracion']);
+
+    // Con enumeración, la misma negación es legítima.
+    expect(verificar([
+        'veredicto' => 'no_cubierto',
+        'respuesta' => 'No, ese plan no cubre granizo.',
+        'fuente' => 'enumeracion',
+        'cita' => 'Granizo',
+    ], MATERIAL, QuoteAlternative::factory()->make(['quote_id' => 1])))
+        ->toMatchArray(['veredicto' => 'no_cubierto']);
+});
+
+// ── Suma asegurada y franquicia en el bloque de producto ────────────────────────
+
+it('resuelve la franquicia en pesos dentro del bloque de producto', function (): void {
+    $alt = QuoteAlternative::factory()->make([
+        'quote_id' => 1,
+        'titulo' => 'Todo Riesgo Franquicia 7,5% suma asegurada',
+        'sum_asegurada' => 28_140_000,
+    ]);
+
+    expect(bloqueDeProducto($alt))
+        ->toContain('Suma asegurada: $28.140.000')
+        ->toContain('Franquicia: 7,5% de la suma asegurada = $2.110.500');
+});
+
+it('avisa cuando la franquicia no se puede derivar del título', function (): void {
+    $alt = QuoteAlternative::factory()->make([
+        'quote_id' => 1, 'titulo' => 'C Mega', 'sum_asegurada' => 28_140_000,
+    ]);
+
+    expect(bloqueDeProducto($alt))
+        ->toContain('Suma asegurada: $28.140.000')
+        ->toContain('no se puede derivar del titulo')
+        ->not->toContain('Franquicia: 0');
+});
