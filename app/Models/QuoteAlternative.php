@@ -114,6 +114,16 @@ class QuoteAlternative extends Model
             return null;
         }
 
+        // Y exige que la base declarada sea la suma asegurada. Sin este filtro, dos familias
+        // de títulos reales de producción darían un número equivocado dicho con seguridad:
+        //   `Todo Riesgo Franquicia 10% suma 0KM`        → la base es el valor 0km, no la SA
+        //   `D3 - Todo Riesgo Franq 10% - Min $ 400.000` → hay un piso que el porcentaje no
+        //                                                   expresa, y puede ganarle
+        // Los dos quedan afuera por no decir "suma aseg". Caen a null, o sea al manual.
+        if (! preg_match('/suma\s*aseg/iu', $titulo)) {
+            return null;
+        }
+
         if (! preg_match('/(\d{1,2})(?:[.,](\d{1,2}))?\s*%/u', $titulo, $m)) {
             return null;
         }

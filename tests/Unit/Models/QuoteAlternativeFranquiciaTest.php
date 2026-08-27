@@ -28,6 +28,24 @@ it('deriva la franquicia del título por la suma asegurada', function (string $t
     // Río Uruguay abrevia y antepone un código
     'Río Uruguay 7%' => ['T37 - Todo Riesgo Franq 7% Suma Aseg', 7.0, 1_969_800.0],
     'Río Uruguay 1,5%' => ['T38 - Todo Riesgo Franq 1,5% Suma Aseg', 1.5, 422_100.0],
+    'Triunfo D4' => ['D4 - Franquicia 5% Suma Asegurada', 5.0, 1_407_000.0],
+]);
+
+/**
+ * Títulos reales de producción donde HAY un porcentaje pero la cuenta daría un número
+ * equivocado. Es el peor error posible acá: una cifra dicha con seguridad. Caen a null, o sea
+ * al manual.
+ */
+it('no deriva cuando el porcentaje no es sobre la suma asegurada', function (string $titulo): void {
+    expect(alternativaConTitulo($titulo)->franquicia())->toBeNull();
+})->with([
+    // La base es el valor del 0km, no la suma asegurada del vehículo usado.
+    'San Cristóbal sobre 0KM' => 'Todo Riesgo Franquicia 10% suma 0KM',
+    'San Cristóbal 1% sobre 0KM' => 'Todo Riesgo Franquicia 1% suma 0KM',
+    // Hay un piso en pesos que el porcentaje no expresa y que puede ganarle.
+    'Triunfo con mínimo' => 'D3 - Todo Riesgo Franq 10% - Min $ 400.000',
+    // Franquicia en pesos, sin porcentaje.
+    'Triunfo en pesos' => 'D2 - Todo Riesgo Franq 30.000/50.000',
 ]);
 
 it('no inventa franquicia cuando el título no la expresa', function (string $titulo): void {

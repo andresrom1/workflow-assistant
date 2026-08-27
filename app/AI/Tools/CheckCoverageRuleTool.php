@@ -167,7 +167,7 @@ TXT;
             ? $respuestaAgente->structured
             : [];
 
-        return $this->encode($this->verificarFundamento($salida, $alt, $material));
+        return $this->encode($this->verificarFundamento($salida, $alt, $material, $documentacion, $producto));
     }
 
     /**
@@ -182,15 +182,20 @@ TXT;
      * deja ver de que columna y de que vehiculo habla cada cuadro.
      *
      * @param  array<string, mixed>  $salida
+     * @param  string  $material  todo lo citable (producto + documentacion)
+     * @param  string  $documentacion  solo el manual: el titulo del plan se busca ACA, no en $material,
+     *                                 porque el bloque de producto siempre lo contiene
      * @return array<string, mixed>
      */
-    private function verificarFundamento(array $salida, ?QuoteAlternative $alt, string $material): array
+    private function verificarFundamento(array $salida, ?QuoteAlternative $alt, string $material, string $documentacion, string $producto = ''): array
     {
         $veredicto = is_string($salida['veredicto'] ?? null) ? $salida['veredicto'] : 'no_especificado';
         $cita = is_string($salida['cita'] ?? null) ? trim($salida['cita']) : '';
         $fuente = is_string($salida['fuente'] ?? null) ? $salida['fuente'] : 'ninguna';
         $respuesta = is_string($salida['respuesta'] ?? null) ? $salida['respuesta'] : '';
 
+        // La cita rechazada se CONSERVA: sin ella no se puede diagnosticar por que se degrado,
+        // y calibrar el chequeo a ciegas es como no tenerlo.
         $degradar = fn (string $motivo): array => [
             'veredicto' => 'no_especificado',
             'respuesta' => $respuesta,
@@ -198,6 +203,8 @@ TXT;
             'cita' => '',
             'verificado' => true,
             'degradado_por' => $motivo,
+            'cita_rechazada' => $cita,
+            'fuente_rechazada' => $fuente,
         ];
 
         if (! in_array($veredicto, ['cubierto', 'no_cubierto', 'no_especificado'], true)) {
@@ -216,6 +223,17 @@ TXT;
             return $degradar('la cita no aparece en el material');
         }
 
+        $enProducto = $producto !== '' && str_contains($this->normalizar($producto), $this->normalizar($cita));
+
+        // El piso de longitud aplica SOLO cuando la cita se sostiene en el manual. Ahi el texto
+        // es largo y una cadena corta matchea por azar. En el bloque de producto no hace falta:
+        // el nombre de una cobertura ES una cita valida, y medido, exigir 25 caracteres
+        // degradaba 3 de 3 corridas de "si me roban el auto?" sobre el plan de RC, cuya cita
+        // legitima es "Responsabilidad Civil" (20 caracteres utiles).
+        if (! $enProducto && mb_strlen($this->normalizar($cita)) < 25) {
+            return $degradar('cita demasiado corta para sostener la afirmacion');
+        }
+
         // La regla de la Fase 1, ahora en codigo: negar por ausencia exige que la
         // enumeracion haya venido.
         if ($veredicto === 'no_cubierto' && $fuente === 'enumeracion'
@@ -223,17 +241,47 @@ TXT;
             return $degradar('nego por ausencia sin enumeracion');
         }
 
+        // Si la cita SALE del manual, el plan cotizado tiene que estar EN el manual.
+        //
+        // La condición mira DÓNDE vive la cita, no qué `fuente` declaró el modelo: medido, el
+        // modelo etiqueta `documentacion` una línea que está en el bloque de producto (la
+        // franquicia), y confiar en la etiqueta degradaba una respuesta correcta en 2 de 3
+        // corridas.
+        // Medido con `ai:probe-coverage-qa`: los tres fallos graves eran el mismo — cita real,
+        // plan equivocado. `Auto Max 15` no figura en el manual de Sancor y el modelo respondio
+        // con una clausula de otros AUTO MAX; `C2 FUll` no figura en las secciones de Triunfo y
+        // respondio con un tope de $500.000 de otra clausula. El prompt ya lo prohibe y el
+        // modelo lo desobedecio en 6 de 6 corridas.
+        $citaSaleDelManual = ! $enProducto && $documentacion !== ''
+            && str_contains($this->normalizar($documentacion), $this->normalizar($cita));
+
+        if ($citaSaleDelManual && $alt instanceof QuoteAlternative) {
+            $titulo = $this->normalizar((string) $alt->titulo);
+
+            if ($titulo !== '' && ! str_contains($this->normalizar($documentacion), $titulo)) {
+                return $degradar('el plan no figura en la documentacion');
+            }
+        }
+
         return ['veredicto' => $veredicto, 'respuesta' => $respuesta, 'fuente' => $fuente, 'cita' => $cita, 'verificado' => true];
     }
 
     /**
-     * Normaliza para comparar la cita contra el material: el modelo reproduce el texto con
-     * otro espaciado y otra caja, y exigir igualdad byte a byte degradaria respuestas buenas
-     * (la celda de "venta perdida"). Los acentos NO se tocan: sacarlos aflojaria demasiado.
+     * Deja solo letras y digitos, en minuscula, para comparar la cita contra el material.
+     *
+     * Medido con `ai:probe-coverage-qa`: el modelo REFORMATEA las filas de tabla. El material
+     * trae `| **Rotura de Cerraduras (3 acontecimientos...**)** | $300.000 |` y el modelo cita
+     * `Rotura de Cerraduras (3 acontecimientos...): $300.000` — mismas palabras, mismo numero,
+     * sin pipes y con dos puntos agregados. Con comparacion literal eso se rechazaba en 2 de 3
+     * corridas: una respuesta CORRECTA tirada a la basura.
+     *
+     * Sacar la puntuacion no afloja el chequeo: la comparacion sigue siendo por SUBSTRING, o
+     * sea que el orden de las palabras tiene que ser exacto. Un texto inventado no aparece
+     * igual. Los acentos y los digitos SI se conservan.
      */
     private function normalizar(string $texto): string
     {
-        return mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $texto)));
+        return mb_strtolower((string) preg_replace('/[^\p{L}\p{N}]+/u', '', $texto));
     }
 
     /** @param  array<string, mixed>  $payload */
