@@ -39,6 +39,9 @@ use Throwable;
  *
  * Siempre N corridas: dos corridas idénticas del mismo modelo con el mismo contexto difirieron
  * 1,7× en latencia y tokens (ver ROADMAP, bitácora 2026-08-21). Con n=1 no se concluye nada.
+ *
+ * Cómo leer los números, qué se puede aflojar y cuál es el piso de ruido:
+ * {@see docs/calibracion-coberturas.md}
  */
 class ProbeCoverageQa extends Command
 {
