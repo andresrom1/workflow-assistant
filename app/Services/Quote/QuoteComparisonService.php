@@ -237,7 +237,7 @@ final class QuoteComparisonService
     public function visiblePlans(Collection $alternatives): array
     {
         $conCoberturas = $alternatives->filter(
-            fn (QuoteAlternative $a): bool => ($a->features_tags ?? []) !== []
+            fn (QuoteAlternative $a): bool => $a->hasFeatureTags()
         );
 
         $porVariante = [];

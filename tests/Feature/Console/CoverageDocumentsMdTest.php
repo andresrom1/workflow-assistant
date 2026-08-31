@@ -1,10 +1,7 @@
 <?php
 
 use App\Models\CoverageDocument;
-use App\Models\Quote;
-use App\Models\QuoteAlternative;
 use App\Services\ChunkAndEmbedService;
-use App\Support\CoverageTextMetrics;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 
@@ -150,47 +147,4 @@ it('rechaza un archivo con el cuerpo vacio en vez de borrar el texto bueno', fun
     $this->artisan('coverage:import', ['path' => $this->dir])->assertFailed();
 
     expect($doc->fresh()->extracted_content)->toContain('500.000');
-});
-
-it('no reporta como faltante un plan que figura en otro documento de la misma compania', function (): void {
-    $quote = Quote::factory()->create(['status' => 'processed']);
-    QuoteAlternative::factory()->create([
-        'quote_id' => $quote->id,
-        'aseguradora' => 'Triunfo',
-        'titulo' => 'C2 FUll',
-    ]);
-
-    documentoDeCobertura(['document_type' => 'insert', 'extracted_content' => 'Un insert que no nombra ningun plan.']);
-    documentoDeCobertura(['document_type' => 'manual', 'extracted_content' => 'El plan C2 Full cubre granizo.']);
-
-    $this->artisan('coverage:export', ['--dir' => $this->dir])
-        ->expectsOutputToContain('1/1 planes cotizados')
-        ->doesntExpectOutputToContain('falta C2 FUll')
-        ->assertSuccessful();
-});
-
-it('marca las tablas perdidas con la densidad de pipes', function (): void {
-    $sano = CoverageTextMetrics::medir("| a | b |\n| c | d |", 'triunfo');
-    $plano = CoverageTextMetrics::medir(str_repeat('texto sin tablas ', 200), 'triunfo');
-
-    expect($sano['densidad_pipes'])->toBeGreaterThan(CoverageTextMetrics::DENSIDAD_PIPES_MINIMA)
-        ->and($plano['densidad_pipes'])->toBeLessThan(CoverageTextMetrics::DENSIDAD_PIPES_MINIMA);
-});
-
-it('senala los planes cotizados que no figuran en el texto', function (): void {
-    $quote = Quote::factory()->create(['status' => 'processed']);
-
-    foreach (['C2 FUll', 'B - Robo e Incendio'] as $titulo) {
-        QuoteAlternative::factory()->create([
-            'quote_id' => $quote->id,
-            'aseguradora' => 'Triunfo',
-            'titulo' => $titulo,
-        ]);
-    }
-
-    $m = CoverageTextMetrics::medir('El plan C2 Full cubre granizo.', 'triunfo');
-
-    expect($m['planes_totales'])->toBe(2)
-        ->and($m['planes_presentes'])->toBe(['C2 FUll'])
-        ->and($m['planes_ausentes'])->toBe(['B - Robo e Incendio']);
 });

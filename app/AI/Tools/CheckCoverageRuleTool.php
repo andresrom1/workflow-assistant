@@ -9,6 +9,7 @@ use App\Models\QuoteAlternative;
 use App\Traits\ConditionalLogger;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Contracts\Tool;
@@ -167,27 +168,25 @@ TXT;
             ? $respuestaAgente->structured
             : [];
 
-        return $this->encode($this->verificarFundamento($salida, $alt, $material, $documentacion, $producto));
+        return $this->encode($this->verificarFundamento($salida, $alt, $material));
     }
 
     /**
      * Degrada a `no_especificado` toda respuesta que no pueda sostener su propia cita.
      *
-     * Esta es la diferencia entre pedirlo por prompt y garantizarlo: el ROADMAP registra que
-     * el prompt v7 prohibia una promesa y el modelo la hacia igual en 3 de 4 conversaciones.
-     * Aca el chequeo corre en codigo y el modelo no lo puede desobedecer.
+     * **Decide solo lo que es binario sin criterio**: que el veredicto este en el vocabulario, y
+     * que haya campo de cita. Lo que depende de como el modelo eligio redactar —si la frase que
+     * cito coincide con el texto— se REGISTRA y no descarta, ver {@see self::citaEnElMaterial()}.
      *
-     * Atrapa la cita **inventada**. NO atrapa la cita **mal atribuida** —un fragmento real
-     * pero de otro plan o de otro segmento—: contra eso juega el documento completo, que le
-     * deja ver de que columna y de que vehiculo habla cada cuadro.
+     * Un chequeo binario colgado de una salida no determinista descarta respuestas correctas: para
+     * una misma respuesta buena hay muchas citas validas (la oracion entera, media, la fila de
+     * tabla, las mismas palabras en otro orden), y cual elige el modelo no se puede predecir.
      *
      * @param  array<string, mixed>  $salida
      * @param  string  $material  todo lo citable (producto + documentacion)
-     * @param  string  $documentacion  solo el manual: el titulo del plan se busca ACA, no en $material,
-     *                                 porque el bloque de producto siempre lo contiene
      * @return array<string, mixed>
      */
-    private function verificarFundamento(array $salida, ?QuoteAlternative $alt, string $material, string $documentacion, string $producto = ''): array
+    private function verificarFundamento(array $salida, ?QuoteAlternative $alt, string $material): array
     {
         $veredicto = is_string($salida['veredicto'] ?? null) ? $salida['veredicto'] : 'no_especificado';
         $cita = is_string($salida['cita'] ?? null) ? trim($salida['cita']) : '';
@@ -219,51 +218,44 @@ TXT;
             return $degradar('afirmo sin cita');
         }
 
-        if (! str_contains($this->normalizar($material), $this->normalizar($cita))) {
-            return $degradar('la cita no aparece en el material');
-        }
+        $this->citaEnElMaterial($cita, $material, $alt);
 
-        $enProducto = $producto !== '' && str_contains($this->normalizar($producto), $this->normalizar($cita));
-
-        // El piso de longitud aplica SOLO cuando la cita se sostiene en el manual. Ahi el texto
-        // es largo y una cadena corta matchea por azar. En el bloque de producto no hace falta:
-        // el nombre de una cobertura ES una cita valida, y medido, exigir 25 caracteres
-        // degradaba 3 de 3 corridas de "si me roban el auto?" sobre el plan de RC, cuya cita
-        // legitima es "Responsabilidad Civil" (20 caracteres utiles).
-        if (! $enProducto && mb_strlen($this->normalizar($cita)) < 25) {
-            return $degradar('cita demasiado corta para sostener la afirmacion');
-        }
-
-        // La regla de la Fase 1, ahora en codigo: negar por ausencia exige que la
-        // enumeracion haya venido.
+        // Negar por ausencia exige que la enumeracion haya venido. Hoy no puede saltar —una
+        // alternativa sin `features_tags` no es ofrecible y no llega hasta aca, ver
+        // {@see QuoteAlternative::hasFeatureTags()}— y se queda como ultimo respaldo por si esa
+        // condicion se afloja.
         if ($veredicto === 'no_cubierto' && $fuente === 'enumeracion'
-            && ($alt === null || ($alt->features_tags ?? []) === [])) {
+            && ($alt === null || ! $alt->hasFeatureTags())) {
             return $degradar('nego por ausencia sin enumeracion');
         }
 
-        // Si la cita SALE del manual, el plan cotizado tiene que estar EN el manual.
-        //
-        // La condición mira DÓNDE vive la cita, no qué `fuente` declaró el modelo: medido, el
-        // modelo etiqueta `documentacion` una línea que está en el bloque de producto (la
-        // franquicia), y confiar en la etiqueta degradaba una respuesta correcta en 2 de 3
-        // corridas.
-        // Medido con `ai:probe-coverage-qa`: los tres fallos graves eran el mismo — cita real,
-        // plan equivocado. `Auto Max 15` no figura en el manual de Sancor y el modelo respondio
-        // con una clausula de otros AUTO MAX; `C2 FUll` no figura en las secciones de Triunfo y
-        // respondio con un tope de $500.000 de otra clausula. El prompt ya lo prohibe y el
-        // modelo lo desobedecio en 6 de 6 corridas.
-        $citaSaleDelManual = ! $enProducto && $documentacion !== ''
-            && str_contains($this->normalizar($documentacion), $this->normalizar($cita));
+        return ['veredicto' => $veredicto, 'respuesta' => $respuesta, 'fuente' => $fuente, 'cita' => $cita, 'verificado' => true];
+    }
 
-        if ($citaSaleDelManual && $alt instanceof QuoteAlternative) {
-            $titulo = $this->normalizar((string) $alt->titulo);
-
-            if ($titulo !== '' && ! str_contains($this->normalizar($documentacion), $titulo)) {
-                return $degradar('el plan no figura en la documentacion');
-            }
+    /**
+     * Registra —sin descartar— cuando la frase que el experto dice citar no aparece en el material.
+     *
+     * Fue un chequeo que degradaba la respuesta, y saltaba en 22 de 161 corridas. El problema es
+     * que no mide si la respuesta es correcta: mide si el modelo copio y pego. Se lo deja como
+     * observacion para poder leer los casos reales y decidir con evidencia si vuelve a decidir,
+     * si se reemplaza por un agente que juzgue el fundamento, o si se borra.
+     *
+     * La comparacion ignora mayusculas, acentos y puntuacion porque el modelo reformatea las
+     * filas de tabla: el material trae `| **Rotura de Cerraduras (3 acontecimientos)** | $300.000 |`
+     * y el modelo cita `Rotura de Cerraduras (3 acontecimientos): $300.000`.
+     */
+    private function citaEnElMaterial(string $cita, string $material, ?QuoteAlternative $alt): void
+    {
+        if (str_contains($this->normalizar($material), $this->normalizar($cita))) {
+            return;
         }
 
-        return ['veredicto' => $veredicto, 'respuesta' => $respuesta, 'fuente' => $fuente, 'cita' => $cita, 'verificado' => true];
+        Log::warning('CheckCoverageRule: la cita no aparece en el material', [
+            'quote_alternative_id' => $alt?->id,
+            'aseguradora' => $alt?->aseguradora,
+            'plan' => $alt?->titulo,
+            'cita' => $cita,
+        ]);
     }
 
     /**
@@ -413,35 +405,18 @@ TXT;
     /**
      * Bloque `DATOS DEL PRODUCTO` que se le inyecta al experto.
      *
-     * Tiene dos formas, y la diferencia es la que evita afirmar sin dato: la negación por
-     * ausencia sólo vale si la enumeración de coberturas VINO. Visred manda algunos covers
-     * con `features` vacío — `Auto Max 15` y `Garage` de Sancor, 31 de 2002 alternativas en
-     * producción. `Auto Max 15` se vende a $67.737, así que "no cubre nada" es falso; con la
-     * regla vieja ("feature ausente = no cubierta") el agente lo afirmaba para cualquier
-     * pregunta, porque con la lista vacía TODA feature está ausente.
+     * La enumeración siempre viene: un plan sin `features_tags` no es ofrecible y no llega hasta
+     * acá — sin la lista no se puede explicar contractualmente qué cubre. Ver
+     * {@see QuoteAlternative::esOfrecible()}.
      */
     private function productBlock(QuoteAlternative $alt): string
     {
-        $encabezado = "\n\n## DATOS DEL PRODUCTO (fuente primaria)\n\n"
+        return "\n\n## DATOS DEL PRODUCTO (fuente primaria)\n\n"
             ."Aseguradora: {$alt->aseguradora}\n"
             ."Plan: {$alt->titulo} — {$alt->descripcion}\n"
-            .$this->sumaYFranquicia($alt);
-
-        $features = $alt->features_tags ?? [];
-
-        if ($features === []) {
-            return $encabezado
-                ."\nENUMERACION DE COBERTURAS: NO DISPONIBLE para este plan.\n\n"
-                .'El proveedor no envio la lista de coberturas de este producto. NO es que el plan '
-                ."no cubra nada: es que el dato falta.\n"
-                .'PROHIBIDO negar por ausencia en este caso — no digas que una cobertura no esta '
-                ."incluida, porque no tenes con que saberlo.\n"
-                .'Solo podes afirmar lo que encuentres en la documentacion de la compania.';
-        }
-
-        return $encabezado
+            .$this->sumaYFranquicia($alt)
             ."Nivel: {$alt->normalized_grade}\n"
-            .'Features incluidas: '.implode(', ', $features)."\n"
+            .'Features incluidas: '.implode(', ', $alt->features_tags ?? [])."\n"
             ."Detalle:\n"
             .collect($alt->full_details ?? [])
                 ->map(fn (mixed $v, string $k): string => "- {$k}: {$v}")->implode("\n")

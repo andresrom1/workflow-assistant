@@ -132,8 +132,12 @@ it('el glosario tiene una entrada por cobertura, no una por alternativa', functi
         ->and($payload['glosario']['Cerraduras'])->toBe(CERRADURAS);
 });
 
-/** Una alternativa sin coberturas no tiene que romper el armado del glosario. */
-it('devuelve un glosario vacío cuando ninguna alternativa trae coberturas', function () {
+/**
+ * Un plan sin la enumeración del proveedor no se ofrece: sin ella no se puede explicar
+ * contractualmente qué cubre. Son `Auto Max 15` y `Garage` de Sancor, los dos únicos en
+ * producción. Ver `QuoteAlternative::hasFeatureTags()`.
+ */
+it('no ofrece la alternativa que vino sin coberturas', function () {
     $customer = Customer::factory()->create();
     Vehicle::factory()->create(['customer_id' => $customer->id, 'patente' => 'AB123CD']);
     $conversation = Conversation::factory()->create(['customer_id' => $customer->id]);
@@ -158,5 +162,5 @@ it('devuelve un glosario vacío cuando ninguna alternativa trae coberturas', fun
     $payload = payloadDeGetQuote($conversation, $quote);
 
     expect($payload['glosario'])->toBe([])
-        ->and($payload['alternatives'])->toHaveCount(1);
+        ->and($payload['alternatives'])->toBeEmpty();
 });

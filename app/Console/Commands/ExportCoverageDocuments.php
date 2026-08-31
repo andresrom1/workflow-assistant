@@ -3,11 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Models\CoverageDocument;
-use App\Support\CoverageTextMetrics;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Illuminate\Support\Collection;
 
 /**
  * Saca el texto de los manuales a archivos `.md` para curarlos en un editor.
@@ -50,76 +48,22 @@ class ExportCoverageDocuments extends Command
             return self::SUCCESS;
         }
 
-        $filas = [];
-
         foreach ($documentos as $documento) {
-            $texto = (string) $documento->extracted_content;
             $nombre = "{$documento->company_slug}--{$documento->document_type}.md";
-            file_put_contents($dir.DIRECTORY_SEPARATOR.$nombre, $this->conEncabezado($documento, $texto));
 
-            $m = CoverageTextMetrics::medir($texto, $documento->company_slug);
+            file_put_contents(
+                $dir.DIRECTORY_SEPARATOR.$nombre,
+                $this->conEncabezado($documento, (string) $documento->extracted_content),
+            );
 
-            $filas[] = [
-                $nombre,
-                number_format($m['chars']),
-                $m['densidad_pipes'].($m['densidad_pipes'] < CoverageTextMetrics::DENSIDAD_PIPES_MINIMA ? ' (!)' : ''),
-                $m['headers'],
-                $m['planes_totales'] === 0
-                    ? '—'
-                    : count($m['planes_presentes']).'/'.$m['planes_totales'],
-            ];
+            $this->line("  {$nombre}");
         }
 
         $this->newLine();
         $this->info("Exportados {$documentos->count()} documento(s) a {$dir}");
-        $this->newLine();
-        $this->table(['archivo', 'chars', 'pipes/1k', 'headers', 'planes'], $filas);
-        $this->line('  pipes/1k marcado con (!) esta por debajo de '.CoverageTextMetrics::DENSIDAD_PIPES_MINIMA.': las tablas se perdieron.');
-        $this->line('  planes = cuantos titulos que la compania cotiza aparecen en ESE archivo.');
-
-        $this->planesPorCompania($documentos);
-
-        $this->newLine();
-        $this->info('Cura los .md y volve con: php artisan coverage:import '.$dir);
+        $this->line('Cura los .md contra el PDF y volve con: php artisan coverage:import '.$dir);
 
         return self::SUCCESS;
-    }
-
-    /**
-     * Los planes que faltan, contados **por compania y no por archivo**.
-     *
-     * Es la unica lectura que corresponde: `CheckCoverageRuleTool` le pasa al agente todos los
-     * documentos activos de la compania concatenados, asi que un plan que figura en el manual ya
-     * esta cubierto aunque falte en el insert. Contarlo por archivo exagera el problema.
-     *
-     * @param  Collection<int, CoverageDocument>  $documentos
-     */
-    private function planesPorCompania(mixed $documentos): void
-    {
-        $this->newLine();
-        $this->line('<options=bold>Planes por compania</> (asi lo ve el agente: lee todos sus documentos juntos)');
-
-        foreach ($documentos->groupBy('company_slug') as $slug => $delaCompania) {
-            $texto = $delaCompania->map(fn (CoverageDocument $d): string => (string) $d->extracted_content)->implode('
-
-');
-            $m = CoverageTextMetrics::medir($texto, (string) $slug);
-
-            $this->newLine();
-
-            if ($m['planes_totales'] === 0) {
-                $this->line("  <comment>{$slug}</comment> — sin cotizaciones en esta base, no se puede medir");
-
-                continue;
-            }
-
-            $presentes = count($m['planes_presentes']);
-            $this->line("  <comment>{$slug}</comment> — {$presentes}/{$m['planes_totales']} planes cotizados figuran en su documentacion");
-
-            foreach ($m['planes_ausentes'] as $plan) {
-                $this->line("    <fg=red>falta</> {$plan}");
-            }
-        }
     }
 
     private function conEncabezado(CoverageDocument $documento, string $texto): string

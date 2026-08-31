@@ -77,6 +77,24 @@ class QuoteAlternative extends Model
      */
     public function esOfrecible(): bool
     {
+        return $this->hasFeatureTags() && $this->tieneMedioDePagoOfrecible();
+    }
+
+    /**
+     * ¿Vino la enumeración de coberturas del proveedor?
+     *
+     * Visred manda dos productos de Sancor con la lista vacía — `Auto Max 15` y `Garage`, 35 de
+     * las 2.002 alternativas de producción, y son los únicos. Sin la enumeración no se puede
+     * explicar contractualmente qué cubre el plan, así que no se ofrece hasta que el proveedor
+     * lo corrija.
+     */
+    public function hasFeatureTags(): bool
+    {
+        return ($this->features_tags ?? []) !== [];
+    }
+
+    private function tieneMedioDePagoOfrecible(): bool
+    {
         if ($this->payment_method_id === null) {
             return true;
         }

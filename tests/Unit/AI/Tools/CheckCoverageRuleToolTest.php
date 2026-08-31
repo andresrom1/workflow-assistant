@@ -4,14 +4,13 @@ use App\AI\Tools\CheckCoverageRuleTool;
 use App\Models\CoverageDocument;
 use App\Models\QuoteAlternative;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Log;
 
 /**
- * El bloque `DATOS DEL PRODUCTO` decide si el agente puede negar por ausencia.
+ * El bloque `DATOS DEL PRODUCTO` es lo que el experto lee como fuente primaria.
  *
- * Visred manda algunos covers con `features` vacío — `Auto Max 15` y `Garage` de Sancor, 31 de
- * 2002 alternativas en producción. Con la regla vieja ("feature ausente = no cubierta") el
- * agente afirmaba que `Auto Max 15` —que se vende a $67.737— no cubría nada, para cualquier
- * pregunta, porque con la lista vacía TODA feature está ausente.
+ * Siempre trae la enumeración: un plan sin `features_tags` no es ofrecible y no llega hasta acá.
+ * Ver `QuoteAlternativeOfrecibleTest`.
  */
 function bloqueDeProducto(QuoteAlternative $alt): string
 {
@@ -19,40 +18,19 @@ function bloqueDeProducto(QuoteAlternative $alt): string
         ->call(new CheckCoverageRuleTool, $alt);
 }
 
-it('prohíbe negar por ausencia cuando el proveedor no mandó las coberturas', function (): void {
-    $alt = QuoteAlternative::factory()->sinCoberturas()->make(['quote_id' => 1]);
-
-    $bloque = bloqueDeProducto($alt);
-
-    expect($bloque)
-        ->toContain('ENUMERACION DE COBERTURAS: NO DISPONIBLE')
-        ->toContain('PROHIBIDO negar por ausencia')
-        // Sin esta frase el agente leería la lista vacía como "no cubre nada".
-        ->toContain('NO es que el plan no cubra nada')
-        // Y no debe aparecer el bloque de enumeración, que es el que habilita negar.
-        ->not->toContain('Features incluidas')
-        ->not->toContain('COMPLETA');
-});
-
-it('habilita negar por ausencia cuando la enumeración vino', function (): void {
-    $alt = QuoteAlternative::factory()->make(['quote_id' => 1]);
-
-    $bloque = bloqueDeProducto($alt);
+it('habilita negar por ausencia porque la enumeración es completa', function (): void {
+    $bloque = bloqueDeProducto(QuoteAlternative::factory()->make(['quote_id' => 1]));
 
     expect($bloque)
         ->toContain('Esta enumeracion esta COMPLETA')
         ->toContain('Una cobertura que no figura aca, no esta incluida')
-        ->toContain('Granizo')
-        ->not->toContain('NO DISPONIBLE');
+        ->toContain('Granizo');
 });
 
-it('mantiene aseguradora y plan en las dos formas del bloque', function (): void {
-    $conCoberturas = bloqueDeProducto(QuoteAlternative::factory()->make(['quote_id' => 1]));
-    $sinCoberturas = bloqueDeProducto(QuoteAlternative::factory()->sinCoberturas()->make(['quote_id' => 1]));
-
-    expect($conCoberturas)->toContain('Aseguradora: Sancor')
-        ->and($sinCoberturas)->toContain('Aseguradora: Sancor')
-        ->and($sinCoberturas)->toContain('Garage');
+it('identifica la aseguradora y el plan', function (): void {
+    expect(bloqueDeProducto(QuoteAlternative::factory()->make(['quote_id' => 1])))
+        ->toContain('Aseguradora: Sancor')
+        ->toContain('Features incluidas');
 });
 
 // ── Documentación de la compañía ────────────────────────────────────────────────
@@ -144,15 +122,10 @@ it('concatena los documentos de la compañía separándolos', function (): void 
  * @param  array<string, mixed>  $salida
  * @return array<string, mixed>
  */
-/**
- * `$documentacion` va vacía por defecto a propósito: en producción es SÓLO el manual, y el
- * texto de `full_details` vive en el bloque de producto. Los casos que prueban el manual la
- * pasan explícitamente.
- */
-function verificar(array $salida, string $material, ?QuoteAlternative $alt = null, string $documentacion = '', string $producto = ''): array
+function verificar(array $salida, string $material, ?QuoteAlternative $alt = null): array
 {
-    return (fn (array $s, ?QuoteAlternative $a, string $m, string $d, string $p): array => $this->verificarFundamento($s, $a, $m, $d, $p))
-        ->call(new CheckCoverageRuleTool, $salida, $alt, $material, $documentacion, $producto);
+    return (fn (array $s, ?QuoteAlternative $a, string $m): array => $this->verificarFundamento($s, $a, $m))
+        ->call(new CheckCoverageRuleTool, $salida, $alt, $material);
 }
 
 const MATERIAL = 'Granizo: Danos parciales consecuencia del granizo. Cerraduras (1) $300.000';
@@ -177,18 +150,24 @@ it('tolera diferencias de espaciado y de caja en la cita', function (): void {
         ->toMatchArray(['veredicto' => 'cubierto']);
 });
 
-it('degrada la afirmación cuya cita no aparece en el material', function (): void {
+it('deja pasar la afirmación cuya cita no aparece, y la registra', function (): void {
+    // La cita mide si el modelo copió y pegó, no si la respuesta es correcta: para una misma
+    // respuesta buena hay muchas citas válidas. Un binario colgado de eso tira respuestas
+    // correctas, así que se observa y no decide.
+    Log::spy();
+
     expect(verificar([
         'veredicto' => 'cubierto',
         'respuesta' => 'Si, cubre granizo hasta $500.000.',
         'fuente' => 'documentacion',
         'cita' => 'Granizo hasta la suma asegurada de $500.000',
     ], MATERIAL))
-        ->toMatchArray([
-            'veredicto' => 'no_especificado',
-            'cita' => '',
-            'degradado_por' => 'la cita no aparece en el material',
-        ]);
+        ->toMatchArray(['veredicto' => 'cubierto', 'verificado' => true])
+        ->and(verificar(['veredicto' => 'cubierto', 'respuesta' => 'x', 'fuente' => 'documentacion', 'cita' => 'inventada'], MATERIAL))
+        ->not->toHaveKey('degradado_por');
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn (string $mensaje): bool => str_contains($mensaje, 'la cita no aparece en el material'));
 });
 
 it('degrada la afirmación sin cita', function (): void {
@@ -280,84 +259,45 @@ it('tolera que el modelo reformatee una fila de tabla', function (): void {
         ->toMatchArray(['veredicto' => 'cubierto']);
 });
 
-it('sigue rechazando el texto inventado, aunque se saque la puntuación', function (): void {
+it('registra el texto inventado en vez de rechazarlo', function (): void {
+    Log::spy();
+
     expect(verificar([
         'veredicto' => 'cubierto',
         'respuesta' => 'Te cubre hasta 300 km lineales.',
         'fuente' => 'documentacion',
         'cita' => 'Auxilio mecanico con remolque hasta 300 km lineales por evento',
     ], 'Auxilio mecanico y servicio de grua por averia o accidente, dentro del limite establecido.'))
-        ->toMatchArray(['degradado_por' => 'la cita no aparece en el material']);
+        ->toMatchArray(['veredicto' => 'cubierto'])
+        ->not->toHaveKey('degradado_por');
+
+    Log::shouldHaveReceived('warning');
 });
 
-it('degrada la cita demasiado corta para sostener nada', function (): void {
-    expect(verificar([
-        'veredicto' => 'cubierto', 'respuesta' => 'Si.', 'fuente' => 'alcance', 'cita' => 'Granizo',
-    ], MATERIAL))
-        ->toMatchArray(['degradado_por' => 'cita demasiado corta para sostener la afirmacion']);
-});
-
-it('degrada la respuesta del manual cuando el plan no figura en el manual', function (): void {
-    // El caso medido: `Auto Max 15` no aparece en el manual de Sancor, y el modelo respondió
-    // con una cláusula sobre OTROS planes Auto Max. Cita real, plan equivocado.
-    $alt = QuoteAlternative::factory()->make(['quote_id' => 1, 'titulo' => 'Auto Max 15']);
-    $doc = 'AUTO MAX 1: Responsabilidad Civil. AUTO MAX 3: Responsabilidad Civil - Incendio Parcial y Total.';
-
-    expect(verificar([
-        'veredicto' => 'no_cubierto',
-        'respuesta' => 'No, ese plan no cubre granizo.',
-        'fuente' => 'documentacion',
-        'cita' => 'AUTO MAX 3: Responsabilidad Civil - Incendio Parcial y Total',
-    ], $doc, $alt, $doc))
-        ->toMatchArray(['degradado_por' => 'el plan no figura en la documentacion']);
-});
-
-it('deja pasar la respuesta del manual cuando el plan sí figura', function (): void {
-    $alt = QuoteAlternative::factory()->make(['quote_id' => 1, 'titulo' => 'Sigma']);
-    $doc = 'Tabla Comparativa de Planes SIGMA. Rotura de Cerraduras: $300.000 por acontecimiento.';
-
-    expect(verificar([
-        'veredicto' => 'cubierto',
-        'respuesta' => 'Hasta $300.000.',
-        'fuente' => 'documentacion',
-        'cita' => 'Rotura de Cerraduras: $300.000 por acontecimiento',
-    ], $doc, $alt, $doc))
-        ->toMatchArray(['veredicto' => 'cubierto']);
-});
-
-it('no exige presencia del plan cuando la respuesta no viene del manual', function (): void {
-    // El bloque de producto siempre contiene el título, así que buscarlo ahí no probaría nada:
-    // por eso el chequeo mira sólo la documentación, y sólo si `fuente` es `documentacion`.
-    $alt = QuoteAlternative::factory()->make(['quote_id' => 1, 'titulo' => 'Auto Max 15']);
-
-    expect(verificar([
-        'veredicto' => 'cubierto',
-        'respuesta' => 'Si, cubre granizo.',
-        'fuente' => 'alcance',
-        'cita' => 'Danos parciales consecuencia del granizo',
-    ], MATERIAL, $alt, 'un manual que no nombra el plan'))
-        ->toMatchArray(['veredicto' => 'cubierto']);
-});
-
-it('acepta el nombre de una cobertura como cita cuando sale del bloque de producto', function (): void {
+it('acepta el nombre de una cobertura como cita, sin piso de longitud', function (): void {
     // Medido: exigir 25 caracteres degradaba 3 de 3 corridas de "¿si me roban el auto?" sobre
     // el plan de RC, cuya cita legítima es "Responsabilidad Civil" — 20 caracteres útiles.
-    $producto = 'Features incluidas: Responsabilidad Civil, Sistema Cleas';
-
     expect(verificar([
         'veredicto' => 'no_cubierto',
         'respuesta' => 'No, ese plan sólo cubre daños a terceros.',
         'fuente' => 'enumeracion',
         'cita' => 'Responsabilidad Civil',
-    ], $producto, QuoteAlternative::factory()->make(['quote_id' => 1]), '', $producto))
+    ], 'Features incluidas: Responsabilidad Civil, Sistema Cleas', QuoteAlternative::factory()->make(['quote_id' => 1])))
         ->toMatchArray(['veredicto' => 'no_cubierto']);
 });
 
-it('mantiene el piso de longitud para las citas que salen del manual', function (): void {
-    $doc = 'El plan Sigma cubre granizo, inundación y otros eventos climáticos según el cuadro.';
+it('no le exige al manual que nombre el plan cotizado', function (): void {
+    // El manual se organiza por código de plan y por secciones generales; el título comercial
+    // de Visred casi nunca aparece. Medido sobre producción: 20 de 80 planes figuran.
+    $alt = QuoteAlternative::factory()->make(['quote_id' => 1, 'titulo' => 'C1 - Robo e Incendio Total y Parcial']);
+    $doc = 'Zona de Aplicacion: Republica Argentina y paises limitrofes, sin excepciones.';
 
     expect(verificar([
-        'veredicto' => 'cubierto', 'respuesta' => 'Sí.', 'fuente' => 'documentacion', 'cita' => 'granizo',
-    ], $doc, QuoteAlternative::factory()->make(['quote_id' => 1, 'titulo' => 'Sigma']), $doc))
-        ->toMatchArray(['degradado_por' => 'cita demasiado corta para sostener la afirmacion']);
+        'veredicto' => 'cubierto',
+        'respuesta' => 'Si, cubre en paises limitrofes.',
+        'fuente' => 'documentacion',
+        'cita' => 'Republica Argentina y paises limitrofes',
+    ], $doc, $alt))
+        ->toMatchArray(['veredicto' => 'cubierto'])
+        ->not->toHaveKey('degradado_por');
 });

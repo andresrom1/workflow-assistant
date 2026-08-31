@@ -148,6 +148,7 @@ it('get_quote solo ofrece alternativas que el checkout puede cobrar', function (
             'precio' => $precio,
             'moneda' => 'ARS',
             'payment_method_id' => $medio,
+            'features_tags' => ['Responsabilidad Civil', 'Granizo'],
         ]);
     }
 
@@ -181,6 +182,7 @@ it('get_quote conserva las alternativas sin medio de pago', function () {
         'precio' => 73106.22,
         'moneda' => 'ARS',
         'payment_method_id' => null,
+        'features_tags' => ['Responsabilidad Civil'],
     ]);
 
     $result = app(WhatsAppAdapter::class)->handleToolCall(

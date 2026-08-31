@@ -4,7 +4,6 @@ namespace App\Console\Commands;
 
 use App\Models\CoverageDocument;
 use App\Services\ChunkAndEmbedService;
-use App\Support\CoverageTextMetrics;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -69,15 +68,10 @@ class ImportCoverageDocuments extends Command
                 ->where('is_active', true)
                 ->first();
 
-            $accion = $documento instanceof CoverageDocument ? 'actualiza' : 'crea';
-            $m = CoverageTextMetrics::medir($texto, $slug);
-
             $filas[] = [
                 basename($archivo),
-                $accion,
-                number_format($m['chars']),
-                $m['densidad_pipes'].($m['densidad_pipes'] < CoverageTextMetrics::DENSIDAD_PIPES_MINIMA ? ' (!)' : ''),
-                $m['planes_totales'] === 0 ? '—' : count($m['planes_presentes']).'/'.$m['planes_totales'],
+                $documento instanceof CoverageDocument ? 'actualiza' : 'crea',
+                number_format(mb_strlen($texto)),
                 $seco ? '—' : '',
             ];
 
@@ -104,11 +98,11 @@ class ImportCoverageDocuments extends Command
             ])->save();
 
             $chunks = $chunker->execute($documento);
-            $filas[count($filas) - 1][5] = (string) $chunks;
+            $filas[count($filas) - 1][3] = (string) $chunks;
         }
 
         $this->newLine();
-        $this->table(['archivo', 'accion', 'chars', 'pipes/1k', 'planes', 'chunks'], $filas);
+        $this->table(['archivo', 'accion', 'chars', 'chunks'], $filas);
 
         if ($seco) {
             $this->warn('Modo seco: no se escribio nada. Saca --dry-run para aplicar.');
