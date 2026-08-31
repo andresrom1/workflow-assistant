@@ -70,6 +70,49 @@ Sacar un guard porque nunca saltó es sacar el airbag porque nunca chocaste.
    aparecer mejor y va a disparar menos **solo**. Conviene re-medirlo **después** de curar, no
    antes: hoy su tasa mezcla "el plan no está" con "la extracción se lo comió".
 
+   La columna `planes` de `coverage:export` separa las dos cosas **antes** de gastar una corrida
+   del banco: dice cuántos de los títulos que la compañía efectivamente cotiza aparecen en el
+   texto. Un plan que falta ahí es una consulta que el agente no va a poder contestar aunque la
+   respuesta esté en el manual.
+
+---
+
+## 2 bis. Curar los manuales
+
+El texto de los manuales **se cura a mano, no con un LLM**. Una transcripción automática puede
+comerse o inventar un número en silencio, y ese texto es la fuente de verdad de lo que el agente
+le promete al cliente: es exactamente el modo de falla que todo lo demás intenta evitar. La
+frecuencia lo permite — seis compañías, un manual nuevo por año cada una.
+
+```
+php artisan coverage:export          # saca los .md y mide
+   -> se editan en un editor de texto
+php artisan coverage:import <dir>    # los devuelve a la base y re-indexa
+```
+
+`coverage:export` escribe un `.md` por documento en `storage/app/coverage-md/` (fuera de git) con
+un encabezado YAML que dice a qué documento vuelve. `coverage:import` empareja por
+`company_name` + `document_type`, y **crea el documento si no existe** — que es el caso de
+producción, donde el PDF original nunca se subió. El PDF no hace falta en runtime: el agente solo
+lee `extracted_content`.
+
+### Las tres métricas que reporta
+
+| Métrica | Umbral | Qué detecta |
+|---|---|---|
+| `chars` | — | comparar contra la versión anterior: una caída grande es texto perdido |
+| `pipes/1k` | ≥ 15 en documentos con cuadro | las tablas se aplanaron y los topes quedaron ambiguos |
+| `planes` | todos | planes que la compañía cotiza y no figuran en el manual |
+
+Referencias medidas: Río Uruguay 47,6 · San Cristóbal insert 56,9 · Galicia 26,4 · Sancor 16,6 ·
+Mercantil 11,8 · **Triunfo 0,7** (tablas perdidas).
+
+`planes` es la métrica que importa, porque es la única atada a una consulta real. Las otras dos
+son proxies.
+
+**Lo que ninguna de las tres mide es si los números son correctos.** Eso se verifica leyendo el
+cuadro de coberturas contra el PDF, y es la parte que no se automatiza.
+
 ---
 
 ## 3. El procedimiento
