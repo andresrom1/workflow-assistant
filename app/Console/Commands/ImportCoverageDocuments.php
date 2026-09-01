@@ -8,6 +8,7 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Mete el texto curado de vuelta en `coverage_documents.extracted_content` y re-indexa.
@@ -43,6 +44,7 @@ class ImportCoverageDocuments extends Command
 
         $seco = (bool) $this->option('dry-run');
         $filas = [];
+        $sinIndexar = [];
 
         foreach ($archivos as $archivo) {
             [$meta, $texto] = $this->separarEncabezado((string) file_get_contents($archivo));
@@ -91,14 +93,25 @@ class ImportCoverageDocuments extends Command
             ]);
 
             $documento->fill([
-                'version' => $meta['version'] ?: $documento->version,
+                'version' => ($meta['version'] ?? '') ?: $documento->version,
                 'extracted_content' => $texto,
                 'extraction_status' => 'completed',
                 'extraction_mode' => 'manual',
             ])->save();
 
-            $chunks = $chunker->execute($documento);
-            $filas[count($filas) - 1][3] = (string) $chunks;
+            // El indexado es OPCIONAL y no puede voltear la importacion: el agente lee
+            // `extracted_content`, que ya quedo guardado arriba. Los chunks solo alimentan la
+            // busqueda por similitud, que hoy no se usa —ningun manual supera el presupuesto de
+            // caracteres— y que ademas depende de un proveedor externo: el free tier de Gemini
+            // corta por cuota a mitad de una carga de diez documentos. Se avisa y se sigue;
+            // `coverage:re-embed` los completa despues.
+            try {
+                $filas[count($filas) - 1][3] = (string) $chunker->execute($documento);
+            } catch (Throwable $e) {
+                $filas[count($filas) - 1][3] = 'falló';
+                $sinIndexar[] = $documento->id;
+                $this->warn('  '.basename($archivo).': el texto se guardó, el indexado falló — '.$e->getMessage());
+            }
         }
 
         $this->newLine();
@@ -106,8 +119,19 @@ class ImportCoverageDocuments extends Command
 
         if ($seco) {
             $this->warn('Modo seco: no se escribio nada. Saca --dry-run para aplicar.');
-        } else {
-            $this->info('Listo. El agente ya lee el texto nuevo.');
+
+            return self::SUCCESS;
+        }
+
+        $this->info('Listo. El agente ya lee el texto nuevo.');
+
+        if ($sinIndexar !== []) {
+            $this->newLine();
+            $this->warn(count($sinIndexar).' documento(s) quedaron sin indexar. Para completarlos:');
+
+            foreach ($sinIndexar as $id) {
+                $this->line("  php artisan coverage:re-embed --id={$id}");
+            }
         }
 
         return self::SUCCESS;

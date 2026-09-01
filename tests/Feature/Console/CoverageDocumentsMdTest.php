@@ -148,3 +148,31 @@ it('rechaza un archivo con el cuerpo vacio en vez de borrar el texto bueno', fun
 
     expect($doc->fresh()->extracted_content)->toContain('500.000');
 });
+
+it('guarda el texto aunque falle el indexado', function (): void {
+    // El agente lee `extracted_content`; los chunks solo alimentan la búsqueda por similitud,
+    // que depende de un proveedor externo. El free tier de Gemini corta por cuota a mitad de una
+    // carga de diez documentos, y eso no puede dejar los manuales a medio cargar.
+    $this->mock(ChunkAndEmbedService::class, function ($mock): void {
+        $mock->shouldReceive('execute')->andThrow(new RuntimeException('rate limited'));
+    });
+
+    File::put($this->dir.'/triunfo--manual.md', <<<'MD'
+        ---
+        company_name: Triunfo
+        document_type: manual
+        ---
+
+        ## C2 FULL
+
+        Texto curado.
+        MD);
+
+    $this->artisan('coverage:import', ['path' => $this->dir])
+        ->expectsOutputToContain('el indexado falló')
+        ->expectsOutputToContain('coverage:re-embed --id=')
+        ->assertSuccessful();
+
+    expect(CoverageDocument::where('company_slug', 'triunfo')->sole()->extracted_content)
+        ->toContain('Texto curado.');
+});
