@@ -142,6 +142,12 @@ class PresentQuoteOptionsTool implements Mockable, Tool
         $otherId = (int) collect($alternativeIds)->first(fn (int $id): bool => $id !== $recommendedId);
 
         // Se truncan y no se rechazan: que el modelo escriba de más no justifica romper el turno.
+        //
+        // `presented_at` NO se sella acá: lo sella quien despacha el mensaje, cuando el mensaje
+        // sale. Es la marca por la que `NotifyClientQuoteReady` decide si tiene que presentar, y
+        // si la escribiera esta tool bastaría con que el turno muriera después para que el
+        // reintento la diera por entregada y el cliente no recibiera nada. Pasó en producción:
+        // ver ROADMAP, bitácora 2026-09-02.
         $quote->update([
             'recommended_alternative_id' => $recommendedId,
             'presented_alternative_ids' => [$recommendedId, $otherId],
@@ -149,7 +155,6 @@ class PresentQuoteOptionsTool implements Mockable, Tool
                 (string) $recommendedId => $this->acotar($recommendedReason),
                 (string) $otherId => $this->acotar($alternativeReason),
             ],
-            'presented_at' => now(),
         ]);
 
         // El link a la vista pública sale en un mensaje aparte, inmediatamente después del texto
@@ -172,9 +177,13 @@ class PresentQuoteOptionsTool implements Mockable, Tool
 
         $buttons[] = ['id' => 'question', 'title' => 'Tengo una pregunta'];
 
+        // El sello temporal lo lee `InsuranceOrchestrator::pullPending()` para descartar lo que
+        // quedó huérfano: estos pendientes los consume el final del turno, y si el turno muere en
+        // el medio se quedan acá esperando pegarse al próximo mensaje que salga, sea cual sea.
         $meta = $this->conversation->metadata ?? [];
         $meta['pending_interactive'] = ['buttons' => $buttons];
         $meta['pending_public_link'] = $publicLink;
+        $meta['pending_at'] = now()->toIso8601String();
         $this->conversation->update(['metadata' => $meta]);
 
         $titles = implode(' / ', array_column($buttons, 'title'));

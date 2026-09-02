@@ -10,7 +10,7 @@ set -e
 # nombre de la cola es una etiqueta de texto en una columna— sino la cantidad de procesos
 # PHP residentes, cada uno con el framework y el AI SDK cargados en memoria para siempre.
 #
-#   worker-ai        whatsapp-ai                        el turno del LLM, 4-95s. Aislado.
+#   worker-ai        whatsapp-ai                        el turno del LLM, 4-180s. Aislado.
 #   worker-realtime  default, whatsapp-outbound, media  todo corto y de cara al cliente.
 #   worker-quotes    quotes                             30-360s contra Visred. Aislado.
 #
@@ -33,7 +33,7 @@ set -e
 # INVARIANTE por worker:  retry_after de su conexión  >  su --timeout
 #
 #   database        200  >  60
-#   database_ai     200  >  180
+#   database_ai     450  >  400   (un turno encadenado son dos llamadas al LLM)
 #   database_quotes 420  >  360
 #   database_long   360  >  300   (el de background, en el scheduler)
 #
@@ -47,7 +47,7 @@ set -e
 mkdir -p /var/log/supervisor
 
 echo "[program:worker-ai]
-command=php artisan queue:work database_ai --queue=whatsapp-ai --sleep=3 --tries=3 --timeout=180 --max-time=3600
+command=php artisan queue:work database_ai --queue=whatsapp-ai --sleep=3 --tries=3 --timeout=400 --max-time=3600
 autostart=true
 autorestart=true
 stopwaitsecs=3600

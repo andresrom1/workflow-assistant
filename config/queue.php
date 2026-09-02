@@ -78,15 +78,19 @@ return [
 
         /*
          * El turno conversacional. ProcessConversationInbox y NotifyClientQuoteReady declaran
-         * timeout=180: el margen hasta 200 es lo que evita que la cola dé por abandonado un
+         * timeout=400: el margen hasta 450 es lo que evita que la cola dé por abandonado un
          * turno mientras el LLM todavía está respondiendo.
+         *
+         * Eran 180/200 hasta el 2026-09-02. Un turno encadenado son DOS llamadas al LLM, y el
+         * par no entraba: el alarm mataba el proceso a mitad de la segunda, sin excepción, sin
+         * log y sin fila en `failed_jobs`. Ver ROADMAP.
          */
         'database_ai' => [
             'driver' => 'database',
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => 'whatsapp-ai',
-            'retry_after' => 200,
+            'retry_after' => 450,
             'after_commit' => false,
         ],
 

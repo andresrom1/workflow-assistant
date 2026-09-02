@@ -192,7 +192,9 @@ it('persiste qué se presentó, cuál se recomendó y por qué', function () {
             (string) $alt2->id => 'La franquicia más baja de las dos.',
             (string) $alt1->id => 'Sale menos por mes.',
         ])
-        ->and($quote->presented_at)->not->toBeNull();
+        // `presented_at` NO lo sella la tool: lo sella el despacho del mensaje. Ver
+        // `DespachaRespuestaDelAgente::sellarPresentacionEntregada()` y ROADMAP 2026-09-02.
+        ->and($quote->presented_at)->toBeNull();
 });
 
 it('mintea el token de la vista pública', function () {

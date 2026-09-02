@@ -19,16 +19,39 @@ use App\AI\Tools\PresentQuoteOptionsTool;
 use App\AI\Tools\ProvideVehicleFactTool;
 use App\AI\Tools\RevertStageTool;
 use App\AI\Tools\SiniestroGuidanceTool;
+use App\Jobs\ProcessConversationInbox;
 use App\Jobs\ProcessWhatsAppMessage;
 use App\Models\AgentExecutionLog;
 use App\Models\AgentPrompt;
 use App\Models\Conversation;
+use App\Support\MemoriaDelAgente;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Responses\AgentResponse;
 
 class InsuranceOrchestrator
 {
+    /**
+     * Mensajes con los que el orquestador abre un turno encadenado. No son mensajes del
+     * cliente: entran a la memoria como el pedido que el agente tiene que atender.
+     */
+    private const DISPARADOR_COTIZACIONES_LISTAS = 'Cotizaciones listas';
+
+    private const DISPARADOR_COBERTURA_PENDIENTE = 'El vehículo quedó registrado y la consulta a las compañías ya está corriendo. '
+        .'Si el cliente ya dijo qué cobertura quiere en algún mensaje anterior, registrala ahora con coverage_preference '
+        .'sin volver a preguntársela; si no la dijo, preguntásela.';
+
+    /**
+     * Cuánto vale un pendiente dejado por una tool. Lo consume el final del mismo turno,
+     * o sea segundos; el techo real es el `$timeout` del job (400s). Diez minutos deja
+     * margen de sobra y marca como basura cualquier cosa más vieja.
+     */
+    private const PENDIENTE_VIGENCIA_MINUTOS = 10;
+
+    private const MARCA_ENCADENADO = '[NO ENTREGADO al cliente: el turno siguió con otro agente y salió ese mensaje en lugar de éste. El cliente NUNCA leyó esto — no lo des por dicho ni lo cites.]';
+
     public function __construct(private readonly WhatsAppAdapter $adapter) {}
 
     /**
@@ -40,6 +63,10 @@ class InsuranceOrchestrator
      *
      * El estado se actualiza dentro de cada Tool al ejecutarse exitosamente,
      * por lo que en el próximo mensaje el orquestador derivará al siguiente agente.
+     *
+     * Salvo que la transición deje la conversación sin nadie esperando un mensaje del
+     * cliente: ahí el turno se encadena y corre un segundo agente antes de contestar.
+     * Ver {@see self::cadenaAEncadenar()}.
      *
      * @return array{text: string, agent: string, execution_log_ids: int[], buttons: list<array{id: string, title: string}>|null, public_link: string|null}
      */
@@ -59,14 +86,147 @@ class InsuranceOrchestrator
         $waUser = (object) ['id' => $conversation->id];
         $agent = $this->resolveAgent($stateBefore, $conversation);
 
+        [$response, $durationMs] = $this->correrAgente($agent, $waUser, $message, $conversation, $stateBefore, $step);
+
+        $conversation->refresh();
+        $stateAfter = $conversation->aiState();
+
+        $cadena = $this->cadenaAEncadenar($stateBefore, $stateAfter, $conversation);
+
+        if ($cadena !== null) {
+            $primerLog = $this->registrarTurno($agent, $conversation, $stateBefore, $stateAfter, $step, true, $response, $durationMs);
+
+            // El cliente nunca va a leer lo que escribió este agente: sale el mensaje del
+            // encadenado. Sin la marca, el modelo lo da por dicho y lo cita en el turno
+            // siguiente ("como te preguntaba recién...").
+            if ($cadena['marcar']) {
+                MemoriaDelAgente::marcarNoEntregada($conversation, self::MARCA_ENCADENADO);
+            }
+
+            $segundoAgente = $this->resolveAgent($stateAfter, $conversation);
+            $segundoStep = $this->stepFromState($stateAfter);
+
+            // El par de líneas es el rastro del turno encadenado. Un proceso que muere en el
+            // alarm del job no puede loguear su propia muerte —no hay excepción, no hay fila en
+            // `failed_jobs`—, así que la señal es un "encadenando" sin su "encadenado listo" al
+            // lado. Sin esto, el turno perdido del 2026-09-02 no dejó una sola línea.
+            Log::info('Orquestador: encadenando turno', [
+                'conversation_id' => $conversation->id,
+                'de' => class_basename($agent),
+                'a' => class_basename($segundoAgente),
+            ]);
+
+            [$segundaResponse, $segundaDuracion] = $this->correrAgente($segundoAgente, $waUser, $cadena['disparador'], $conversation, $stateAfter, $segundoStep);
+
+            Log::info('Orquestador: encadenado listo', [
+                'conversation_id' => $conversation->id,
+                'a' => class_basename($segundoAgente),
+                'duration_ms' => $segundaDuracion,
+            ]);
+
+            $conversation->refresh();
+            $stateFinal = $conversation->aiState();
+
+            $segundoLog = $this->registrarTurno($segundoAgente, $conversation, $stateAfter, $stateFinal, $segundoStep, false, $segundaResponse, $segundaDuracion);
+
+            $pendienteEncadenado = $this->pullPending($conversation);
+
+            return [
+                'text' => $segundaResponse->text,
+                'agent' => class_basename($segundoAgente),
+                'execution_log_ids' => [$primerLog->id, $segundoLog->id],
+                'buttons' => $pendienteEncadenado['buttons'],
+                'public_link' => $pendienteEncadenado['public_link'],
+            ];
+        }
+
+        $log = $this->registrarTurno($agent, $conversation, $stateBefore, $stateAfter, $step, false, $response, $durationMs);
+
+        $pendiente = $this->pullPending($conversation);
+
+        return [
+            'text' => $response->text,
+            'agent' => class_basename($agent),
+            'execution_log_ids' => [$log->id],
+            'buttons' => $pendiente['buttons'],
+            'public_link' => $pendiente['public_link'],
+        ];
+    }
+
+    /**
+     * ¿Este turno tiene que seguir con otro agente antes de contestarle al cliente?
+     *
+     * Se encadena cuando la transición de estado deja la conversación **sin nadie esperando
+     * un mensaje del cliente**: el texto del primer agente se descarta y sale el del segundo,
+     * que es el dueño de la etapa nueva y tiene las tools de esa etapa.
+     *
+     * @param  array<string, bool>  $stateBefore
+     * @param  array<string, bool>  $stateAfter
+     * @return array{disparador: string, marcar: bool}|null
+     */
+    private function cadenaAEncadenar(array $stateBefore, array $stateAfter, Conversation $conversation): ?array
+    {
+        // Cotización presentada: QuoteAgent ya mostró las alternativas, sigue el cierre.
+        // No marca la respuesta descartada — es como venía funcionando, y cambiarlo altera el
+        // contexto de un camino que ya corre en producción.
+        if (! $stateBefore['quote_ready'] && $stateAfter['quote_ready']) {
+            return ['disparador' => self::DISPARADOR_COTIZACIONES_LISTAS, 'marcar' => false];
+        }
+
+        // Vehículo cotizable registrado: el turno cerraría prometiendo las opciones, sin
+        // pregunta abierta, y la cobertura sigue sin registrar. Si el cliente no vuelve a
+        // escribir —y no tiene por qué, le acabamos de decir que espere— nadie la registra
+        // nunca, y NotifyClientQuoteReady se niega a presentar sin ella. Ver ROADMAP,
+        // bitácora 2026-09-02.
+        //
+        // `vehicle_identified` sólo flipea en VehicleIdentifierAgent (el único con
+        // identify_vehicle), y la quote sólo existe en la rama Quotable: NeedsFact y
+        // NotQuotable cierran preguntando algo, así que no entran acá.
+        if (! $stateBefore['vehicle_identified'] && $stateAfter['vehicle_identified']
+            && ! $stateAfter['coverage_set']
+            && $this->cotizacionEnCurso($conversation)) {
+            return ['disparador' => self::DISPARADOR_COBERTURA_PENDIENTE, 'marcar' => true];
+        }
+
+        return null;
+    }
+
+    /**
+     * ¿Quedó una cotización esperando en esta conversación?
+     *
+     * `pending` es la consulta en vuelo; `processed` y vigente cubre el caso raro de que las
+     * compañías hayan contestado dentro del mismo turno. Mismo criterio que
+     * {@see WhatsAppAdapter::cotizacionVigenteDe()}.
+     */
+    private function cotizacionEnCurso(Conversation $conversation): bool
+    {
+        if ($conversation->quotes()->where('status', 'pending')->exists()) {
+            return true;
+        }
+
+        return $conversation->quotes()->where('status', 'processed')->vigente()->exists();
+    }
+
+    /**
+     * Corre un agente cronometrado. Si explota, deja el log de error y propaga.
+     *
+     * @param  array<string, bool>  $stateBefore
+     * @return array{0: AgentResponse, 1: int}
+     */
+    private function correrAgente(
+        Agent&Conversational $agent,
+        object $waUser,
+        string $message,
+        Conversation $conversation,
+        array $stateBefore,
+        int $step,
+    ): array {
         $start = hrtime(true);
 
         try {
             /** @var AgentResponse $response */
             $response = $agent->continueLastConversation($waUser)->prompt($message);
         } catch (\Throwable $e) {
-            $durationMs = (int) round((hrtime(true) - $start) / 1e6);
-
             AgentExecutionLog::create([
                 'conversation_id' => $conversation->id,
                 'agent_name' => class_basename($agent),
@@ -78,7 +238,7 @@ class InsuranceOrchestrator
                 'chained' => false,
                 'status' => 'error',
                 'error_message' => $e->getMessage(),
-                'duration_ms' => $durationMs,
+                'duration_ms' => (int) round((hrtime(true) - $start) / 1e6),
                 'inbound_message_ids' => null,
                 'outbound_message_id' => null,
                 'input_tokens' => null,
@@ -89,84 +249,34 @@ class InsuranceOrchestrator
             throw $e;
         }
 
-        $durationMs = (int) round((hrtime(true) - $start) / 1e6);
+        return [$response, (int) round((hrtime(true) - $start) / 1e6)];
+    }
 
-        // Detectar transición de estado: si quote_ready flipeó durante la ejecución,
-        // descartar la respuesta de QuoteAgent y encadenar a CheckoutAgent.
-        $conversation->refresh();
-        $stateAfter = $conversation->aiState();
+    /**
+     * Deja el rastro de un turno exitoso. `$chained` marca que este turno siguió con otro
+     * agente — {@see ProcessConversationInbox} lo usa para no descartar una
+     * respuesta que ya arrastró dos turnos de memoria.
+     *
+     * @param  array<string, bool>  $stateBefore
+     * @param  array<string, bool>  $stateAfter
+     */
+    private function registrarTurno(
+        Agent&Conversational $agent,
+        Conversation $conversation,
+        array $stateBefore,
+        array $stateAfter,
+        int $step,
+        bool $chained,
+        AgentResponse $response,
+        int $durationMs,
+    ): AgentExecutionLog {
         $stateChanges = array_filter(
             $stateAfter,
             fn (bool $val, string $key): bool => $val !== ($stateBefore[$key] ?? false),
             ARRAY_FILTER_USE_BOTH
         );
 
-        if (! $stateBefore['quote_ready'] && $stateAfter['quote_ready']) {
-            $quoteLog = AgentExecutionLog::create([
-                'conversation_id' => $conversation->id,
-                'agent_name' => class_basename($agent),
-                'agent_prompt_id' => $this->resolveAgentPromptId($agent),
-                'step' => $step,
-                'state_before' => $stateBefore,
-                'state_after' => $stateAfter,
-                'state_changes' => $stateChanges,
-                'chained' => true,
-                'status' => 'success',
-                'duration_ms' => $durationMs,
-                'inbound_message_ids' => null,
-                'outbound_message_id' => null,
-                'input_tokens' => $this->extractInputTokens($response),
-                'output_tokens' => $this->extractOutputTokens($response),
-                'tool_calls' => $this->extractToolCalls($response),
-            ]);
-
-            $checkoutStateBefore = $stateAfter;
-            $checkoutAgent = $this->resolveAgent($checkoutStateBefore, $conversation);
-            $checkoutStep = $this->stepFromState($checkoutStateBefore);
-            $checkoutStart = hrtime(true);
-
-            /** @var AgentResponse $checkoutResponse */
-            $checkoutResponse = $checkoutAgent->continueLastConversation($waUser)->prompt('Cotizaciones listas');
-            $checkoutDurationMs = (int) round((hrtime(true) - $checkoutStart) / 1e6);
-
-            $conversation->refresh();
-            $checkoutStateAfter = $conversation->aiState();
-            $checkoutStateChanges = array_filter(
-                $checkoutStateAfter,
-                fn (bool $val, string $key): bool => $val !== ($checkoutStateBefore[$key] ?? false),
-                ARRAY_FILTER_USE_BOTH
-            );
-
-            $checkoutLog = AgentExecutionLog::create([
-                'conversation_id' => $conversation->id,
-                'agent_name' => class_basename($checkoutAgent),
-                'agent_prompt_id' => $this->resolveAgentPromptId($checkoutAgent),
-                'step' => $checkoutStep,
-                'state_before' => $checkoutStateBefore,
-                'state_after' => $checkoutStateAfter,
-                'state_changes' => $checkoutStateChanges,
-                'chained' => false,
-                'status' => 'success',
-                'duration_ms' => $checkoutDurationMs,
-                'inbound_message_ids' => null,
-                'outbound_message_id' => null,
-                'input_tokens' => $this->extractInputTokens($checkoutResponse),
-                'output_tokens' => $this->extractOutputTokens($checkoutResponse),
-                'tool_calls' => $this->extractToolCalls($checkoutResponse),
-            ]);
-
-            $pendienteEncadenado = $this->pullPending($conversation);
-
-            return [
-                'text' => $checkoutResponse->text,
-                'agent' => class_basename($checkoutAgent),
-                'execution_log_ids' => [$quoteLog->id, $checkoutLog->id],
-                'buttons' => $pendienteEncadenado['buttons'],
-                'public_link' => $pendienteEncadenado['public_link'],
-            ];
-        }
-
-        $log = AgentExecutionLog::create([
+        return AgentExecutionLog::create([
             'conversation_id' => $conversation->id,
             'agent_name' => class_basename($agent),
             'agent_prompt_id' => $this->resolveAgentPromptId($agent),
@@ -174,7 +284,7 @@ class InsuranceOrchestrator
             'state_before' => $stateBefore,
             'state_after' => $stateAfter,
             'state_changes' => $stateChanges,
-            'chained' => false,
+            'chained' => $chained,
             'status' => 'success',
             'duration_ms' => $durationMs,
             'inbound_message_ids' => null,
@@ -183,16 +293,6 @@ class InsuranceOrchestrator
             'output_tokens' => $this->extractOutputTokens($response),
             'tool_calls' => $this->extractToolCalls($response),
         ]);
-
-        $pendiente = $this->pullPending($conversation);
-
-        return [
-            'text' => $response->text,
-            'agent' => class_basename($agent),
-            'execution_log_ids' => [$log->id],
-            'buttons' => $pendiente['buttons'],
-            'public_link' => $pendiente['public_link'],
-        ];
     }
 
     /**
@@ -210,9 +310,28 @@ class InsuranceOrchestrator
         $buttons = data_get($meta, 'pending_interactive.buttons');
         $publicLink = data_get($meta, 'pending_public_link');
 
-        if ($buttons !== null || $publicLink !== null) {
-            unset($meta['pending_interactive'], $meta['pending_public_link']);
-            $conversation->update(['metadata' => $meta]);
+        if ($buttons === null && $publicLink === null) {
+            return ['buttons' => null, 'public_link' => null];
+        }
+
+        // Un pendiente viejo es basura de un turno que murió entre la tool y el despacho: los
+        // botones de una presentación que el cliente nunca recibió, esperando para pegarse al
+        // próximo mensaje que salga, sea cual sea. Se limpia igual que uno consumido. Pasó en
+        // producción el 2026-09-02: ver ROADMAP.
+        $sello = data_get($meta, 'pending_at');
+        $vencido = $sello === null
+            || Carbon::parse((string) $sello)->addMinutes(self::PENDIENTE_VIGENCIA_MINUTOS)->isPast();
+
+        unset($meta['pending_interactive'], $meta['pending_public_link'], $meta['pending_at']);
+        $conversation->update(['metadata' => $meta]);
+
+        if ($vencido) {
+            Log::warning('Orquestador: pendientes vencidos descartados', [
+                'conversation_id' => $conversation->id,
+                'pending_at' => $sello,
+            ]);
+
+            return ['buttons' => null, 'public_link' => null];
         }
 
         return ['buttons' => $buttons, 'public_link' => $publicLink];

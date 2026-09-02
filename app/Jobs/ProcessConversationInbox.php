@@ -7,6 +7,7 @@ use App\Models\AgentExecutionLog;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Services\WhatsApp\WhatsAppOutboundService;
+use App\Support\MemoriaDelAgente;
 use App\Traits\DespachaRespuestaDelAgente;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -32,31 +33,37 @@ class ProcessConversationInbox implements ShouldQueue
      * 1. La ventana deslizante se implementa con `release()`, y cada release consume un intento.
      *    Con `tries = 3` el job se mataba solo esperando a un cliente que seguía escribiendo.
      * 2. Esperar el lock `inbox:{id}` también gasta intentos, a razón de uno cada
-     *    `releaseAfter(5)`. El lock lo puede retener hasta 180s ({@see $timeout}, y lo mismo
-     *    {@see NotifyClientQuoteReady} presentando una cotización), así que el presupuesto de
-     *    espera tiene que superar eso: 44 × 5s = 220s. Con `tries = 10` daba 45s y el mensaje
-     *    del cliente se descartaba en silencio.
+     *    `releaseAfter(5)`. El presupuesto se mide contra el `expireAfter` del lock (450s), NO
+     *    contra el `$timeout` del job: un job que muere —al proceso lo mata el alarm del
+     *    timeout— **no suelta el lock**, lo suelta el vencimiento. Se vio en prod el 2026-09-02:
+     *    nueve intentos rebotando cada 12s hasta que el lock del job muerto expiró.
+     *    94 × 5s = 470s > 450s. Con `tries = 10` daba 45s y el mensaje del cliente se
+     *    descartaba en silencio.
      *
      * Los fallos reales los acota `maxExceptions`, no esto.
      */
-    public int $tries = 45;
+    public int $tries = 95;
 
     public int $maxExceptions = 3;
 
     public int $backoff = 60;
 
     /**
-     * Por debajo del `retry_after` de la conexión `database_ai` (200s): si el job lo superara,
+     * Por debajo del `retry_after` de la conexión `database_ai` (450s): si el job lo superara,
      * la cola lo re-reserva y quedan dos corriendo sobre la misma conversación.
+     *
+     * 400s y no 180s porque un turno puede encadenar DOS llamadas al LLM ({@see
+     * \App\AI\InsuranceOrchestrator::cadenaAEncadenar()}) y cada una tiene su propio tope de
+     * 180s. Con 180s de presupuesto total, el alarm mataba el proceso a mitad del segundo turno.
      */
-    public int $timeout = 180;
+    public int $timeout = 400;
 
     public function __construct(
         private readonly int $conversationId,
         private readonly ?string $waId,
         private readonly string $phoneNumberId,
     ) {
-        // La lee el worker de la conexión `database_ai` (retry_after 200s > timeout 180s), que
+        // La lee el worker de la conexión `database_ai` (retry_after 450s > timeout 400s), que
         // tolera las llamadas largas al LLM sin que la cola re-reserve el job mientras corre.
         $this->onQueue('whatsapp-ai');
     }
@@ -66,9 +73,9 @@ class ProcessConversationInbox implements ShouldQueue
         return [
             (new WithoutOverlapping("inbox:{$this->conversationId}"))
                 ->releaseAfter(5)
-                // Cubre el peor turno medido (95s) más las intercepciones: si el lock expirara
-                // antes, otro job entraría en paralelo sobre la misma conversación.
-                ->expireAfter(300),
+                // Tiene que superar el `$timeout` del job (400s): si el lock expirara antes,
+                // otro job entraría en paralelo sobre la misma conversación.
+                ->expireAfter(450),
         ];
     }
 
@@ -221,7 +228,7 @@ class ProcessConversationInbox implements ShouldQueue
                 'nuevos' => $nuevos->count(),
             ]);
 
-            $this->marcarNoEntregado($conversation);
+            MemoriaDelAgente::marcarNoEntregada($conversation, self::MARCA_NO_ENTREGADO);
             $this->marcarProcesados($nuevos);
 
             $inboundIds = array_merge($inboundIds, $nuevos->pluck('id')->all());
@@ -292,33 +299,6 @@ class ProcessConversationInbox implements ShouldQueue
         }
 
         return true;
-    }
-
-    /**
-     * Marca en la memoria del agente la respuesta que se generó pero nunca salió.
-     *
-     * Se marca y no se borra: la fila del assistant carga también `tool_calls` y
-     * `tool_results`, y el contexto del modelo se reconstruye desde ahí. Borrarla le sacaría
-     * el registro de que la tool ya corrió y qué devolvió, y el redo tendería a re-ejecutarla.
-     * La marca va en `content` porque `meta` no se reconstruye en el contexto.
-     */
-    private function marcarNoEntregado(Conversation $conversation): void
-    {
-        $fila = DB::table('agent_conversation_messages')
-            ->where('user_id', $conversation->id)
-            ->where('role', 'assistant')
-            ->orderByDesc('id')
-            ->first(['id', 'content']);
-
-        if (! $fila) {
-            return;
-        }
-
-        DB::table('agent_conversation_messages')
-            ->where('id', $fila->id)
-            ->update([
-                'content' => self::MARCA_NO_ENTREGADO."\n".$fila->content,
-            ]);
     }
 
     /**
