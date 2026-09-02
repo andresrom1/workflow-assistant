@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -59,6 +60,9 @@ class CheckoutController extends Controller
             'alternative' => [
                 'id' => $alternative->id,
                 'aseguradora' => $alternative->aseguradora,
+                // Misma derivacion que QuoteComparisonService::plan(), para que el frontend
+                // resuelva el logo con la misma clave en el comparador y en el checkout.
+                'companiaSlug' => Str::slug((string) $alternative->aseguradora),
                 'titulo' => $alternative->titulo,
                 'descripcion' => $alternative->descripcion,
                 'precio' => $alternative->precio,

@@ -61,15 +61,13 @@
 
         <div class="p-3.5">
           <div class="flex items-start gap-2.5">
-            <span
-              class="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold text-white"
-              :style="{ background: colorDeCompania(item.plan.companiaSlug) }"
-            >
-              {{ item.plan.aseguradora.charAt(0) }}
-            </span>
             <div class="min-w-0 flex-1">
-              <p class="mg-heading text-[15px] leading-tight">{{ item.plan.aseguradora }}</p>
-              <p class="text-[12.5px] leading-tight" style="color: var(--mg-fg-dim)">
+              <LogoCompania
+                :slug="item.plan.companiaSlug"
+                :nombre="item.plan.aseguradora"
+                :alto="22"
+              />
+              <p class="text-[12.5px] leading-tight mt-1" style="color: var(--mg-fg-dim)">
                 {{ item.plan.titulo }}
               </p>
             </div>
@@ -162,15 +160,9 @@
         class="w-full mg-card px-3.5 py-3 mb-2 flex items-center gap-3 text-left"
         @click="abrirCompania(c.slug)"
       >
-        <span
-          class="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold text-white"
-          :style="{ background: colorDeCompania(c.slug) }"
-        >
-          {{ c.nombre.charAt(0) }}
-        </span>
         <div class="min-w-0 flex-1">
-          <p class="mg-heading text-[14px] leading-tight">{{ c.nombre }}</p>
-          <p class="text-[12px] mt-0.5" style="color: var(--mg-fg-dim)">
+          <LogoCompania :slug="c.slug" :nombre="c.nombre" :alto="22" />
+          <p class="text-[12px] mt-1" style="color: var(--mg-fg-dim)">
             {{ c.planes.length }} {{ c.planes.length === 1 ? 'plan' : 'planes' }} · desde
             ${{ formatPrecio(c.desde) }}
           </p>
@@ -224,15 +216,13 @@
         </button>
 
         <div class="flex items-start gap-3 pt-1">
-          <span
-            class="flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-[15px] font-bold text-white"
-            :style="{ background: colorDeCompania(planActivo.companiaSlug) }"
-          >
-            {{ planActivo.aseguradora.charAt(0) }}
-          </span>
           <div class="min-w-0 flex-1">
-            <p class="mg-display text-[19px] leading-tight">{{ planActivo.aseguradora }}</p>
-            <p class="text-[13px]" style="color: var(--mg-fg-dim)">{{ planActivo.titulo }}</p>
+            <LogoCompania
+              :slug="planActivo.companiaSlug"
+              :nombre="planActivo.aseguradora"
+              :alto="28"
+            />
+            <p class="text-[13px] mt-1" style="color: var(--mg-fg-dim)">{{ planActivo.titulo }}</p>
           </div>
           <span
             v-if="esRecomendada(planActivo.id)"
@@ -338,15 +328,13 @@
     <BottomSheet :open="sheet === 'company'" @close="cerrar">
       <div v-if="companiaActiva" class="px-4 pb-5">
         <div class="flex items-center gap-3 pt-1">
-          <span
-            class="flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-[15px] font-bold text-white"
-            :style="{ background: colorDeCompania(companiaActiva.slug) }"
-          >
-            {{ companiaActiva.nombre.charAt(0) }}
-          </span>
           <div>
-            <p class="mg-display text-[19px] leading-tight">{{ companiaActiva.nombre }}</p>
-            <p class="text-[12px]" style="color: var(--mg-fg-dim)">
+            <LogoCompania
+              :slug="companiaActiva.slug"
+              :nombre="companiaActiva.nombre"
+              :alto="28"
+            />
+            <p class="text-[12px] mt-1" style="color: var(--mg-fg-dim)">
               {{ companiaActiva.planes.length }}
               {{ companiaActiva.planes.length === 1 ? 'plan' : 'planes' }}<template
                 v-if="vista.cobertura.label"
@@ -661,9 +649,9 @@ import { computed, ref } from 'vue'
 import MangoLogo from '@/components/Mango/MangoLogo.vue'
 import BottomSheet from '@/components/Mango/BottomSheet.vue'
 import ChatIcon from '@/components/Mango/ChatIcon.vue'
+import LogoCompania from '@/components/Mango/LogoCompania.vue'
 import ContratarModal from './ContratarModal.vue'
 import { useContratar } from './useContratar'
-import { colorDeCompania } from './companyColors'
 import {
   coberturasDe,
   companiaDe,
