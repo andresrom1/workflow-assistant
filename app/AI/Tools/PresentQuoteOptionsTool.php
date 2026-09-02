@@ -9,6 +9,7 @@ use App\Models\Quote;
 use App\Models\QuoteAlternative;
 use App\Traits\ConditionalLogger;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Collection;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 
@@ -185,6 +186,7 @@ class PresentQuoteOptionsTool implements Mockable, Tool
             'tool_output' => "Botones preparados: {$titles}. Tu próxima respuesta va a salir acompañada de esos botones. "
                 .'Las razones quedaron guardadas. '
                 .'Escribí SOLO el texto de presentación: ambas opciones con sus features, marcando la recomendada y por qué. '
+                ."\n\n".$this->comoNombrarlas($ordered)."\n\n"
                 .'Justo después de tu mensaje le llega al cliente, en un mensaje aparte, el link a la comparación '
                 .'completa de las opciones. Ya está encolado: no escribas ninguna URL ni lo prometas como algo que '
                 .'vas a mandar. Si te sirve, podés cerrar con algo del estilo "abajo te paso el detalle completo".',
@@ -209,6 +211,42 @@ class PresentQuoteOptionsTool implements Mockable, Tool
      * nombre de la aseguradora no entra, se trunca — sendInteractiveButtons()
      * vuelve a truncar como red de seguridad.
      */
+    /**
+     * Le entrega al agente el nombre exacto de cada opción, armado desde el dominio.
+     *
+     * El texto de presentación lo escribe el LLM, y sin esto escribe el NIVEL de cobertura
+     * —"Galicia Terceros Completos"— en vez del producto —"Galicia C Clima"—. El cliente se queda
+     * sin saber cómo se llama su plan, y cuando vuelve a preguntar por él no puede nombrarlo:
+     * en la conversación 25 preguntó por "la cobertura premium", el agente lo resolvió contra las
+     * 137 alternativas de la cotización y contestó sobre `Premium Max` de OTRA compañía. Hicieron
+     * falta tres turnos para desarmarlo.
+     *
+     * Va acá y no en el prompt porque el `tool_output` es el canal que mejor obedece —ver
+     * CLAUDE.md, el aviso de espera de la cotización— y porque así el modelo no redacta el
+     * nombre: lo copia.
+     *
+     * No va en el botón: WhatsApp corta los títulos en 20 caracteres y `buttonTitle()` ya gasta
+     * 5 en el precio. De los 71 títulos distintos de producción, 41 pasan los 20 caracteres, así
+     * que `Todo Riesgo Franquicia 4%` quedaría en `Todo Riesgo Fra`.
+     *
+     * @param  Collection<int, QuoteAlternative>  $ordered  la recomendada primero
+     */
+    private function comoNombrarlas(Collection $ordered): string
+    {
+        $listado = $ordered
+            ->values()
+            ->map(fn (QuoteAlternative $alt, int $i): string => '  '
+                .($i + 1).'. '.trim("{$alt->aseguradora} {$alt->titulo}")
+                .($i === 0 ? '  (la recomendada)' : ''))
+            ->implode("\n");
+
+        return "Nombrá cada opción EXACTAMENTE así, que es como la identifica la compañía:\n"
+            .$listado."\n"
+            .'No los abrevies ni los reemplaces por el nivel de cobertura ("Terceros Completos", '
+            .'"Todo Riesgo"). Si el cliente no ve el nombre del producto, después no puede preguntar '
+            .'por él.';
+    }
+
     private function buttonTitle(string $aseguradora, string $precio): string
     {
         $priceNum = (float) $precio;
