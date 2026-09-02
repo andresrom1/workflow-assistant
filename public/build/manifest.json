@@ -1,6 +1,6 @@
 {
   "resources/css/app.css": {
-    "file": "assets/app-BuvlBSoc.css",
+    "file": "assets/app-DtFuwXaY.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -9,12 +9,54 @@
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-8d3KnIqk.js",
+    "file": "assets/app-BQF7fMpj.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true,
     "css": [
-      "assets/app-E9EnoHng.css"
+      "assets/app-OJeiIvPh.css"
+    ],
+    "assets": [
+      "assets/experta-BvMd-sz5.png",
+      "assets/galicia-BTEV5lJe.png",
+      "assets/mercantil-andina-B5AKC94F.png",
+      "assets/rio-uruguay-DT9EanRB.png",
+      "assets/san-cristobal-CBtZMx3J.png",
+      "assets/san-cristobal-negativo-BozYYr1q.png",
+      "assets/sancor-D-iIcE-7.png",
+      "assets/triunfo-Clt2nHl9.png"
     ]
+  },
+  "resources/js/assets/logos/experta.png": {
+    "file": "assets/experta-BvMd-sz5.png",
+    "src": "resources/js/assets/logos/experta.png"
+  },
+  "resources/js/assets/logos/galicia.png": {
+    "file": "assets/galicia-BTEV5lJe.png",
+    "src": "resources/js/assets/logos/galicia.png"
+  },
+  "resources/js/assets/logos/mercantil-andina.png": {
+    "file": "assets/mercantil-andina-B5AKC94F.png",
+    "src": "resources/js/assets/logos/mercantil-andina.png"
+  },
+  "resources/js/assets/logos/rio-uruguay.png": {
+    "file": "assets/rio-uruguay-DT9EanRB.png",
+    "src": "resources/js/assets/logos/rio-uruguay.png"
+  },
+  "resources/js/assets/logos/san-cristobal-negativo.png": {
+    "file": "assets/san-cristobal-negativo-BozYYr1q.png",
+    "src": "resources/js/assets/logos/san-cristobal-negativo.png"
+  },
+  "resources/js/assets/logos/san-cristobal.png": {
+    "file": "assets/san-cristobal-CBtZMx3J.png",
+    "src": "resources/js/assets/logos/san-cristobal.png"
+  },
+  "resources/js/assets/logos/sancor.png": {
+    "file": "assets/sancor-D-iIcE-7.png",
+    "src": "resources/js/assets/logos/sancor.png"
+  },
+  "resources/js/assets/logos/triunfo.png": {
+    "file": "assets/triunfo-Clt2nHl9.png",
+    "src": "resources/js/assets/logos/triunfo.png"
   }
 }
