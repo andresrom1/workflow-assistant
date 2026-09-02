@@ -392,9 +392,9 @@ class VisredQuotationProvider implements QuotationProvider
             return [];
         }
 
-        // Descuento elegido para ESTA compañía (máximo por defecto). Se aplica al
-        // fee acá (cotizar no acepta discount_id) y su ref se persiste para mandarlo
-        // en la emisión → el precio cotizado coincide con el cobrado.
+        // Descuento elegido para ESTA compañía (el máximo bajo el tope del productor).
+        // Solo se usa su REF, que se persiste para mandarla en la emisión: el `fee` que
+        // devuelve `cotizar/` ya viene bonificado. Ver mapCover().
         $discount = $companyId !== '' ? $this->companyDiscount($companyId) : null;
 
         $alternatives = [];
@@ -402,7 +402,7 @@ class VisredQuotationProvider implements QuotationProvider
             if (! is_array($result)) {
                 continue;
             }
-            $alternative = $this->mapCover($result, $companyName, $companyId, $discount);
+            $alternative = $this->mapCover($result, $companyName, $companyId, $discount['ref'] ?? null);
             if ($alternative !== null) {
                 $alternatives[] = $alternative;
             }
@@ -453,10 +453,11 @@ class VisredQuotationProvider implements QuotationProvider
      *
      * @param  array<string, mixed>  $coverResult
      * @param  string  $companyId  Slug opaco de la compañía (lo persiste saveResults).
-     * @param  array{ref: string, percent: float}|null  $discount  Bonificación elegida (se aplica al fee).
+     * @param  string|null  $discountRef  Ref de la bonificación elegida. Es SOLO un token
+     *                                    para la emisión: no se aplica al precio.
      * @return array<string, mixed>|null
      */
-    private function mapCover(array $coverResult, string $companyName, string $companyId, ?array $discount): ?array
+    private function mapCover(array $coverResult, string $companyName, string $companyId, ?string $discountRef): ?array
     {
         $cover = is_array($coverResult['cover'] ?? null) ? $coverResult['cover'] : [];
         $coverName = is_scalar($cover['name'] ?? null) ? (string) $cover['name'] : '';
@@ -472,11 +473,19 @@ class VisredQuotationProvider implements QuotationProvider
         $coverId = is_scalar($cover['id'] ?? null) ? (string) $cover['id'] : '';
         $insuredAmount = (int) ($coverResult['insured_amount'] ?? 0);
 
-        // Aplica la bonificación al fee (aproximación: % lineal sobre el premio
-        // cotizado; el premio bonificado exacto lo fija la compañía al emitir).
-        $baseFee = round((float) ($coverResult['fee'] ?? 0), 2);
-        $percent = $discount['percent'] ?? 0.0;
-        $precio = $percent > 0 ? round($baseFee * (1 - $percent / 100), 2) : $baseFee;
+        // El `fee` es el precio final: YA VIENE BONIFICADO por la compañía. Hasta el
+        // 2026-08-05 se le volvía a aplicar el % del catálogo de descuentos, asumiendo
+        // que era el premio sin bonificar — o sea, se descontaba dos veces y se cotizaba
+        // POR DEBAJO de lo que la compañía después cobraba, que es el peor sentido
+        // posible del error. Confirmado contra lo que Triunfo efectivamente cobra.
+        //
+        // Solo Triunfo tenía tope > 0 en `visred.max_discount_percent`, así que era la
+        // única compañía afectada — y es justo aquella sobre la que hay confirmación.
+        //
+        // El supuesto es DE TRIUNFO, no del proveedor: cada compañía tiene su esquema
+        // de bonificación y son independientes entre sí. Si mañana se le pone tope a
+        // otra, verificar SU fee antes de dar por hecho que también viene bonificado.
+        $precio = round((float) ($coverResult['fee'] ?? 0), 2);
 
         // Las features alimentan tres campos (los tags, el detalle y el grade), así que se
         // extraen una sola vez.
@@ -489,7 +498,7 @@ class VisredQuotationProvider implements QuotationProvider
             'external_quote_id' => (string) ($coverResult['quotation_result_id'] ?? ''),
             'external_code' => $coverId,
             'company_id' => $companyId,
-            'discount_id' => $discount['ref'] ?? null,
+            'discount_id' => $discountRef,
             'requires_inspection_before_emission' => ($coverResult['require_inspection_before_emission'] ?? false) === true,
             'aseguradora' => $companyName,
             'titulo' => $coverName,

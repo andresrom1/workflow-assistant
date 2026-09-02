@@ -452,7 +452,12 @@ it('omite fuel_type_id cuando el combustible no se reconoce (sin asumir uno)', f
     Http::assertSent(fn (Request $r) => $r->url() === COTIZAR_URL && ! isset($r['vehicle']['fuel_type_id']));
 });
 
-it('aplica el máximo descuento dentro del tope del productor y persiste el discount_id', function () {
+it('elige el máximo descuento bajo el tope y lo persiste SIN tocar el precio', function () {
+    // Regresión del doble descuento (2026-08-05): el `fee` de Visred ya viene
+    // bonificado. Aplicarle además el % del catálogo cotizaba POR DEBAJO de lo que la
+    // compañía cobraba — acá daba 850 cuando el precio real es 1000. La bonificación
+    // elegida sigue viajando como `discount_id` a la emisión; lo que no hace es
+    // modificar el precio.
     config()->set('visred.max_discount_percent', ['default' => 20]); // tope del productor (sancor → default)
 
     Http::fake([
@@ -469,8 +474,8 @@ it('aplica el máximo descuento dentro del tope del productor y persiste el disc
     ]);
 
     $alt = app(VisredQuotationProvider::class)->generateAlternatives(snapshotWithToken())['parsed_alternatives'][0];
-    expect($alt['precio'])->toBe(850.0)          // 1000 * (1 - 15/100): 15% es el máx ≤ 20%
-        ->and($alt['discount_id'])->toBe('5');   // NO el 30% (supera el tope)
+    expect($alt['precio'])->toBe(1000.0)         // el fee tal cual: NO 850
+        ->and($alt['discount_id'])->toBe('5');   // el 15%, NO el 30% (supera el tope)
 });
 
 it('sin bonificaciones de la compañía: el fee queda sin tocar y discount_id nulo', function () {
