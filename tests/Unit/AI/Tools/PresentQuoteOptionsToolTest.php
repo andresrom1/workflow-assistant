@@ -321,3 +321,79 @@ it('trunca una razón demasiado larga en vez de fallar', function () {
         ->and(mb_strlen($guardada))->toBe(600)
         ->and($guardada)->toEndWith('…');
 });
+
+/**
+ * El texto de presentación lo escribe el LLM, y sin el nombre servido desde el dominio escribe el
+ * NIVEL de cobertura ("Galicia Terceros Completos") en vez del producto ("Galicia C Clima"). El
+ * cliente se queda sin saber cómo se llama su plan: en la conversación 25 volvió a preguntar por
+ * "la cobertura premium" y el agente contestó sobre un plan de otra compañía.
+ *
+ * No va en el botón — WhatsApp corta en 20 caracteres y 41 de los 71 títulos de producción los
+ * pasan.
+ */
+it('le pasa al agente el nombre exacto de cada plan, con la recomendada primero', function () {
+    ['quote' => $quote, 'alt1' => $alt1, 'alt2' => $alt2, 'conversation' => $conversation] = quoteWithTwoAlternatives();
+
+    $alt1->update(['aseguradora' => 'Galicia', 'titulo' => 'C Clima']);
+    $alt2->update(['aseguradora' => 'Galicia', 'titulo' => 'Todo Riesgo Franquicia 4%']);
+
+    $tool = new PresentQuoteOptionsTool($conversation);
+    $result = json_decode($tool->handle(new Request([
+        'quote_id' => $quote->id,
+        'alternative_ids' => [$alt1->id, $alt2->id],
+        'recommended_alternative_id' => $alt1->id,
+        'recommended_reason' => 'Cubre granizo y cristales, que fue lo que pediste.',
+        'alternative_reason' => 'Suma daños propios con franquicia del 4%.',
+    ])), true);
+
+    $salida = $result['tool_output'];
+
+    expect($salida)
+        ->toContain('1. Galicia C Clima  (la recomendada)')
+        ->toContain('2. Galicia Todo Riesgo Franquicia 4%')
+        // Sin esto el agente escribe el nivel de cobertura y el nombre no llega nunca al cliente.
+        ->toContain('No los abrevies ni los reemplaces por el nivel de cobertura');
+});
+
+it('nombra los planes aunque las dos opciones sean de compañías distintas', function () {
+    ['quote' => $quote, 'alt1' => $alt1, 'alt2' => $alt2, 'conversation' => $conversation] = quoteWithTwoAlternatives();
+
+    $alt1->update(['aseguradora' => 'Sancor', 'titulo' => 'Premium Max']);
+    $alt2->update(['aseguradora' => 'Rio Uruguay', 'titulo' => 'Sigma']);
+
+    $tool = new PresentQuoteOptionsTool($conversation);
+    $result = json_decode($tool->handle(new Request([
+        'quote_id' => $quote->id,
+        'alternative_ids' => [$alt1->id, $alt2->id],
+        'recommended_alternative_id' => $alt2->id,
+        'recommended_reason' => 'Sale menos y cubre lo mismo.',
+        'alternative_reason' => 'Más cara, con asistencia sin tope de kilómetros.',
+    ])), true);
+
+    expect($result['tool_output'])
+        ->toContain('1. Rio Uruguay Sigma  (la recomendada)')
+        ->toContain('2. Sancor Premium Max');
+});
+
+it('no mete el nombre del plan en el boton, que Meta corta en 20 caracteres', function () {
+    ['quote' => $quote, 'alt1' => $alt1, 'alt2' => $alt2, 'conversation' => $conversation] = quoteWithTwoAlternatives();
+
+    $alt1->update(['aseguradora' => 'Galicia', 'titulo' => 'Todo Riesgo Franquicia 4%', 'precio' => 107274]);
+    $alt2->update(['aseguradora' => 'Galicia', 'titulo' => 'C Clima', 'precio' => 80984]);
+
+    $tool = new PresentQuoteOptionsTool($conversation);
+    $tool->handle(new Request([
+        'quote_id' => $quote->id,
+        'alternative_ids' => [$alt1->id, $alt2->id],
+        'recommended_alternative_id' => $alt2->id,
+        'recommended_reason' => 'Cubre lo que pediste a menor precio.',
+        'alternative_reason' => 'Suma daños propios.',
+    ]));
+
+    $conversation->refresh();
+
+    foreach ($conversation->metadata['pending_interactive']['buttons'] as $boton) {
+        expect(mb_strlen($boton['title']))->toBeLessThanOrEqual(20)
+            ->and($boton['title'])->not->toContain('Todo Riesgo');
+    }
+});
