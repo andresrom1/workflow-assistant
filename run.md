@@ -2,30 +2,7 @@ php artisan serve --host=0.0.0.0 --port=8001
 
 npm run dev -- --host (debe levantar ebn localhost:5147)
 
-php artisan reverb:start --host=0.0.0.0 --port=8081 --debug   
-
-php artisan queue:work o php artisan queue:work --sleep=3 --tries=3
-
-<!-- php artisan queue:listen --queue=default --tries=3
-
-php artisan queue:listen --queue=whatsapp-ai --tries=3 --timeout=180 -->
-
-<!-- QUEUES — un proceso por conexión (cada worker bindea UNA conexión) -->
-
-<!-- IA pesada (LLM). DEBE correr sobre la conexión database_ai (retry_after=200 > timeout=180)
-     para que un job de LLM lento NO sea reclamado mientras corre → evita doble llamada al LLM. -->
-php artisan queue:listen database_ai --queue=whatsapp-ai --tries=3 --timeout=180
-
-<!-- Liviano: respuestas WhatsApp + jobs varios (conexión database, retry_after=90). -->
-php artisan queue:listen --queue=whatsapp-outbound,default --tries=3 --timeout=60
-
-<!-- Media (descarga + STT). Conexión database_media (retry_after=150 > timeout=120). -->
-php artisan queue:listen database_media --tries=3 --timeout=120
-
-<!-- Documentos (extracción PDF + chunking/embeddings RAG). Poco frecuente — solo al subir/
-     actualizar un manual de producto. Conexión database_long (retry_after=360 > timeout=300).
-     Ocioso casi siempre; aislado para no bloquear el worker liviano. -->
-php artisan queue:listen database_long --tries=2 --timeout=300
+php artisan queue:listen database_quotes --queue=whatsapp-ai,default,whatsapp-outbound,media,quotes,background,documents --tries=3 --timeout=360
 
 ngrok http 8001
 
@@ -61,3 +38,27 @@ docker compose --env-file .env.production -f compose.prod.yaml \exec app tail -f
 
 # sonda de prueba para el agente: 21-08
 sudo docker exec workflow-assistant-app-1 php artisan ai:probe-presentation --conversation=23 --runs=1
+
+gcloud compute ssh mango-prod --zone=us-central1-a --command="sudo docker exec workflow-assistant-app-1 php artisan ai:probe-presentation --conversation=23 --runs=10 --json=/tmp/presentacion.json"
+Turno de cobertura — ¿qué escribe y avisa de la espera?
+
+gcloud compute ssh mango-prod --zone=us-central1-a --command="sudo docker exec workflow-assistant-app-1 php artisan ai:probe-coverage-turn --conversation=24 --runs=10 --json=/tmp/cobertura.json"
+Caché de prefijos — ¿el prompt de sistema cachea y cuánto ahorra?
+
+gcloud compute ssh mango-prod --zone=us-central1-a --command="sudo docker exec workflow-assistant-app-1 php artisan ai:probe-cache checkout_closer"
+
+## Si ya estás dentro de la VM
+
+docker exec workflow-assistant-app-1 php artisan ai:probe-coverage-turn --runs=10
+Las opciones que valen la pena
+Opción	Sondas	Para qué
+--runs=N	presentación, cobertura	Menos corridas para tantear, más para concluir. Con menos de 5 no se decide nada.
+--conversation=N	presentación, cobertura	Qué contexto histórico reproducir. Por defecto 23 y 24.
+--model=deepseek-v4-flash	presentación, cobertura	Probar otro tier sin tocar la config.
+--prompt-id=17	presentación	Reevaluar con una versión histórica del prompt del closer.
+--tool-output="..."	cobertura	Probar otra redacción del tool_output sin desplegar nada.
+--json=/tmp/x.json	presentación, cobertura	Volcar las corridas crudas — es donde van las razones completas.
+checkout_closer	caché	Argumento posicional: cualquier agent_key.
+
+## Bajar un volcado para leerlo
+gcloud compute ssh mango-prod --zone=us-central1-a --command="sudo docker exec workflow-assistant-app-1 cat /tmp/cobertura.json" > cobertura.json
