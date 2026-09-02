@@ -77,19 +77,19 @@
               @click="seleccionar(item.plan.id)"
             >
               <div class="flex items-start gap-2.5">
-                <span
-                  class="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold text-white"
-                  :style="{ background: colorDeCompania(item.plan.companiaSlug) }"
-                >{{ item.plan.aseguradora.charAt(0) }}</span>
                 <div class="min-w-0 flex-1">
-                  <p class="mg-heading text-[14px] leading-tight flex items-center gap-1.5">
-                    {{ item.plan.aseguradora }}
+                  <div class="flex items-center gap-1.5">
+                    <LogoCompania
+                      :slug="item.plan.companiaSlug"
+                      :nombre="item.plan.aseguradora"
+                      :alto="22"
+                    />
                     <span
                       v-if="i === 0"
                       class="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
                       :style="{ background: 'var(--mg-mango)', color: '#fff' }"
                     >Recomendada</span>
-                  </p>
+                  </div>
                   <p class="text-[11.5px] mt-1" :style="{ color: 'var(--mg-leaf)' }">
                     {{ item.plan.franquicia ? `Franquicia ${item.plan.franquicia}` : item.plan.titulo }}
                   </p>
@@ -124,11 +124,7 @@
 
           <div v-for="c in vista.companias" :key="c.slug" class="mb-5">
             <div class="flex items-center gap-2 mb-1.5">
-              <span
-                class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10.5px] font-bold text-white"
-                :style="{ background: colorDeCompania(c.slug) }"
-              >{{ c.nombre.charAt(0) }}</span>
-              <span class="text-[12.5px] font-semibold">{{ c.nombre }}</span>
+              <LogoCompania :slug="c.slug" :nombre="c.nombre" :alto="18" />
               <span v-if="c.sumaAsegurada !== null" class="text-[11px]" style="color: var(--mg-fg-faint)">
                 {{ formatSuma(c.sumaAsegurada) }}
               </span>
@@ -163,13 +159,13 @@
           <!-- Detalle de un plan -->
           <article v-if="panel === 'plan' && planActivo" class="mg-card p-6">
             <div class="flex items-start gap-4">
-              <span
-                class="flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center text-[19px] font-bold text-white"
-                :style="{ background: colorDeCompania(planActivo.companiaSlug) }"
-              >{{ planActivo.aseguradora.charAt(0) }}</span>
               <div class="min-w-0 flex-1">
-                <p class="mg-display text-[26px] leading-tight">{{ planActivo.aseguradora }}</p>
-                <p class="text-[14px]" style="color: var(--mg-fg-dim)">{{ planActivo.titulo }}</p>
+                <LogoCompania
+                  :slug="planActivo.companiaSlug"
+                  :nombre="planActivo.aseguradora"
+                  :alto="34"
+                />
+                <p class="text-[14px] mt-1.5" style="color: var(--mg-fg-dim)">{{ planActivo.titulo }}</p>
               </div>
               <div class="flex-shrink-0 text-right leading-none">
                 <span class="mg-display text-[34px]">${{ formatPrecio(planActivo.precio) }}</span>
@@ -287,20 +283,20 @@
               :style="{ background: 'var(--mg-surface-2)', border: '1.5px solid var(--mg-mango)' }"
             >
               <div class="flex items-start gap-2.5">
-                <span
-                  class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold text-white"
-                  :style="{ background: colorDeCompania(planArriba.companiaSlug) }"
-                >{{ planArriba.aseguradora.charAt(0) }}</span>
                 <div class="min-w-0 flex-1">
-                  <p class="text-[13.5px] font-semibold leading-tight flex items-center gap-1.5">
-                    {{ planArriba.aseguradora }}
+                  <div class="flex items-center gap-1.5">
+                    <LogoCompania
+                      :slug="planArriba.companiaSlug"
+                      :nombre="planArriba.aseguradora"
+                      :alto="20"
+                    />
                     <span
                       v-if="esPrincipal(planArriba.id)"
                       class="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
                       :style="{ background: 'var(--mg-mango)', color: '#fff' }"
                     >Recomendada</span>
-                  </p>
-                  <p class="text-[11.5px] leading-tight" style="color: var(--mg-fg-dim)">{{ planArriba.titulo }}</p>
+                  </div>
+                  <p class="text-[11.5px] leading-tight mt-1" style="color: var(--mg-fg-dim)">{{ planArriba.titulo }}</p>
                 </div>
                 <div class="flex-shrink-0 text-right leading-none">
                   <span class="mg-display text-[24px]">${{ formatPrecio(planArriba.precio) }}</span>
@@ -395,20 +391,20 @@
               :style="{ background: 'var(--mg-surface-2)', border: '1px solid var(--mg-hairline)' }"
             >
               <div class="flex items-start gap-2.5">
-                <span
-                  class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold text-white"
-                  :style="{ background: colorDeCompania(planAbajo.companiaSlug) }"
-                >{{ planAbajo.aseguradora.charAt(0) }}</span>
                 <div class="min-w-0 flex-1">
-                  <p class="text-[13.5px] font-semibold leading-tight flex items-center gap-1.5">
-                    {{ planAbajo.aseguradora }}
+                  <div class="flex items-center gap-1.5">
+                    <LogoCompania
+                      :slug="planAbajo.companiaSlug"
+                      :nombre="planAbajo.aseguradora"
+                      :alto="20"
+                    />
                     <span
                       v-if="esPrincipal(planAbajo.id)"
                       class="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
                       :style="{ background: 'var(--mg-mango)', color: '#fff' }"
                     >Recomendada</span>
-                  </p>
-                  <p class="text-[11.5px] leading-tight" style="color: var(--mg-fg-dim)">{{ planAbajo.titulo }}</p>
+                  </div>
+                  <p class="text-[11.5px] leading-tight mt-1" style="color: var(--mg-fg-dim)">{{ planAbajo.titulo }}</p>
                 </div>
                 <div class="flex-shrink-0 text-right leading-none">
                   <span class="mg-display text-[24px]">${{ formatPrecio(planAbajo.precio) }}</span>
@@ -509,15 +505,13 @@
                   border: i === 0 ? '1.5px solid var(--mg-mango)' : '1px solid var(--mg-hairline)',
                 }"
               >
-                <div class="flex items-center gap-2.5">
-                  <span
-                    class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold text-white"
-                    :style="{ background: colorDeCompania(item.plan.companiaSlug) }"
-                  >{{ item.plan.aseguradora.charAt(0) }}</span>
-                  <div class="min-w-0">
-                    <p class="text-[13.5px] font-semibold leading-tight">{{ item.plan.aseguradora }}</p>
-                    <p class="text-[11.5px] leading-tight" style="color: var(--mg-fg-dim)">{{ item.plan.titulo }}</p>
-                  </div>
+                <div class="min-w-0">
+                  <LogoCompania
+                    :slug="item.plan.companiaSlug"
+                    :nombre="item.plan.aseguradora"
+                    :alto="18"
+                  />
+                  <p class="text-[11.5px] leading-tight mt-1" style="color: var(--mg-fg-dim)">{{ item.plan.titulo }}</p>
                 </div>
                 <p class="mg-display text-[28px] mt-3 leading-none">${{ formatPrecio(item.plan.precio) }}</p>
                 <p class="text-[11px] mt-1" style="color: var(--mg-fg-faint)">por mes</p>
@@ -655,9 +649,9 @@
 import { computed, ref } from 'vue'
 import MangoLogo from '@/components/Mango/MangoLogo.vue'
 import ChatIcon from '@/components/Mango/ChatIcon.vue'
+import LogoCompania from '@/components/Mango/LogoCompania.vue'
 import ContratarModal from './ContratarModal.vue'
 import { useContratar } from './useContratar'
-import { colorDeCompania } from './companyColors'
 import {
   coberturasDe,
   formatPrecio,

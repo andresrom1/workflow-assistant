@@ -48,7 +48,12 @@
       </div>
       <div class="flex items-end justify-between gap-3">
         <div class="min-w-0">
-          <p class="mg-heading text-[15px] truncate">{{ alternative.aseguradora }} — {{ alternative.titulo }}</p>
+          <LogoCompania
+            :slug="alternative.companiaSlug"
+            :nombre="alternative.aseguradora"
+            :alto="20"
+          />
+          <p class="mg-heading text-[15px] truncate mt-1">{{ alternative.titulo }}</p>
           <p class="text-xs mt-0.5 truncate" style="color: var(--mg-fg-dim)">{{ vehicle.marca }} {{ vehicle.modelo }}
             {{ vehicle.year }} <span v-if="vehicle.patente">· {{ vehicle.patente }}</span></p>
         </div>
@@ -455,6 +460,7 @@ import { ref, reactive, computed, defineComponent, h, onMounted, onUnmounted, wa
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/UI/select'
 import MangoLayout from '@/layouts/MangoLayout.vue'
 import MangoLogo from '@/components/Mango/MangoLogo.vue'
+import LogoCompania from '@/components/Mango/LogoCompania.vue'
 import { esDispositivoMovil } from '@/lib/dispositivo'
 
 // ─── Componentes inline ────────────────────────────────────────────────────────
@@ -489,7 +495,7 @@ const ReadOnlyField = defineComponent({
 const props = defineProps<{
   quote: { id: number; status: string }
   alternative: {
-    id: number; aseguradora: string; titulo: string; descripcion: string
+    id: number; aseguradora: string; companiaSlug: string; titulo: string; descripcion: string
     precio: number; moneda: string; marketing_title: string
     features_tags: string[]; normalized_grade: string
   }
