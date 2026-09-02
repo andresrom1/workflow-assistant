@@ -15,7 +15,14 @@
  *     correr. Si se viola, la cola re-reserva un job que sigue corriendo y quedan dos en paralelo.
  */
 
+use App\AI\Agents\CheckoutAgent;
+use App\AI\Agents\CoveragePreferenceAgent;
+use App\AI\Agents\QuoteAgent;
+use App\AI\Agents\VehicleIdentifierAgent;
+use App\Jobs\NotifyClientQuoteReady;
+use App\Jobs\ProcessConversationInbox;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Laravel\Ai\Attributes\Timeout as TimeoutAttribute;
 
 /**
  * Todos los workers del despliegue: los residentes que arranca supervisor y el de
@@ -197,5 +204,119 @@ it('el techo del worker no queda por debajo de un job que atiende', function ():
                 'tiene un job más largo. El job gana igual, pero el techo declarado miente.',
             );
         }
+    }
+});
+
+/**
+ * Jobs que se serializan por conversación con `WithoutOverlapping`, con los números del lock.
+ *
+ * @return array<class-string, array{tries: int, timeout: int, releaseAfter: int, expireAfter: int}>
+ */
+function locksDeclarados(): array
+{
+    $locks = [];
+
+    foreach (glob(app_path('Jobs/*.php')) ?: [] as $path) {
+        $fuente = (string) file_get_contents($path);
+
+        // Solo el lock de la conversación. `EmitInvoice` también usa WithoutOverlapping, pero por
+        // punto de venta de AFIP y con su propia reconciliación: otra historia y otros números.
+        if (! str_contains($fuente, 'WithoutOverlapping("inbox:')) {
+            continue;
+        }
+
+        if (! preg_match('/->releaseAfter\((\d+)\)/', $fuente, $r)) {
+            continue;
+        }
+
+        preg_match('/->expireAfter\((\d+)\)/', $fuente, $e);
+
+        $clase = 'App\\Jobs\\'.basename($path, '.php');
+        $defaults = (new ReflectionClass($clase))->getDefaultProperties();
+
+        $locks[$clase] = [
+            'tries' => (int) ($defaults['tries'] ?? 0),
+            'timeout' => (int) ($defaults['timeout'] ?? 0),
+            'releaseAfter' => (int) $r[1],
+            'expireAfter' => (int) ($e[1] ?? 0),
+        ];
+    }
+
+    return $locks;
+}
+
+/** El tope de la llamada al LLM de un agente: su `#[Timeout]`, o el default del SDK. */
+function topeLlmDe(string $agente): int
+{
+    $atributos = (new ReflectionClass($agente))->getAttributes(TimeoutAttribute::class);
+
+    return $atributos === [] ? 60 : $atributos[0]->newInstance()->value;
+}
+
+/**
+ * El lock no puede vencer mientras el job que lo tomó sigue corriendo: si vence, entra otro job
+ * en paralelo sobre la misma conversación.
+ */
+it('el lock de conversación dura más que el job que lo toma', function (): void {
+    foreach (locksDeclarados() as $clase => $l) {
+        expect($l['expireAfter'])->toBeGreaterThan(
+            $l['timeout'],
+            "`{$clase}` puede correr {$l['timeout']}s pero su lock vence a los {$l['expireAfter']}s.",
+        );
+    }
+});
+
+/**
+ * El presupuesto de espera se mide contra el VENCIMIENTO del lock, no contra el `$timeout` del
+ * job que lo tiene: al job que se pasa del timeout lo mata el alarm, y un proceso muerto no
+ * suelta nada — el lock queda tomado hasta que expira. El 2026-09-02 se vio en producción:
+ * `NotifyClientQuoteReady` gastó nueve intentos rebotando cada 12s contra el lock de un job
+ * muerto, y recién entró cuando venció. Si el presupuesto no llega hasta ahí, el job se muere
+ * esperando y el cliente no recibe nada.
+ */
+it('el presupuesto de espera del lock supera su vencimiento', function (): void {
+    foreach (locksDeclarados() as $clase => $l) {
+        $presupuesto = ($l['tries'] - 1) * $l['releaseAfter'];
+
+        expect($presupuesto)->toBeGreaterThan(
+            $l['expireAfter'],
+            "`{$clase}` espera el lock hasta {$presupuesto}s (".($l['tries'] - 1)." × {$l['releaseAfter']}s) ".
+            "pero el lock de otro job muerto dura {$l['expireAfter']}s: se queda sin intentos antes de entrar.",
+        );
+    }
+});
+
+/**
+ * Un turno encadenado son DOS llamadas al LLM adentro del mismo job. Si la suma de sus topes se
+ * pasa del `$timeout` del job, el alarm mata el proceso antes de que el tope del SDK pueda cortar
+ * la llamada — y una muerte por alarm no deja excepción, ni log, ni fila en `failed_jobs`. Es
+ * exactamente lo que pasó el 2026-09-02: CheckoutAgent tenía `#[Timeout(360)]` dentro de un job
+ * de 180s.
+ */
+it('los topes del LLM de un turno encadenado entran en el timeout del job', function (): void {
+    // Los dos únicos jobs que corren un turno capaz de encadenar: el resto de `whatsapp-ai` no
+    // llama al orquestador, o lo llama en una etapa donde ningún flag puede flipear.
+    $jobsQueEncadenan = array_intersect_key(jobsDeclarados(), array_flip([
+        ProcessConversationInbox::class,
+        NotifyClientQuoteReady::class,
+    ]));
+
+    expect($jobsQueEncadenan)->toHaveCount(2);
+
+    $presupuesto = min(array_column($jobsQueEncadenan, 'timeout'));
+
+    $cadenas = [
+        [QuoteAgent::class, CheckoutAgent::class],
+        [VehicleIdentifierAgent::class, CoveragePreferenceAgent::class],
+    ];
+
+    foreach ($cadenas as [$primero, $segundo]) {
+        $suma = topeLlmDe($primero) + topeLlmDe($segundo);
+
+        expect($suma)->toBeLessThan(
+            $presupuesto,
+            class_basename($primero).' + '.class_basename($segundo)." pueden esperar {$suma}s al LLM, ".
+            "pero el job que los corre se muere a los {$presupuesto}s.",
+        );
     }
 });

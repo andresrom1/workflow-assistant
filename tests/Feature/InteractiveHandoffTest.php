@@ -56,6 +56,8 @@ it('pulls and clears pending_interactive from conversation metadata on handle()'
             ],
             'pending_interactive' => ['buttons' => [['id' => 'alt:9', 'title' => 'Test $1K']]],
             'pending_public_link' => 'https://mango.test/cotizaciones/abcdefghijklmnop',
+            // Sin el sello, `pullPending()` los toma por basura de un turno muerto.
+            'pending_at' => now()->toIso8601String(),
         ],
     ]);
 

@@ -3,6 +3,7 @@
 use App\Adapters\AIProviders\WhatsAppAdapter;
 use App\AI\Tools\RevertStageTool;
 use App\Jobs\NotifyClientQuoteReady;
+use App\Jobs\ResolveQuote;
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\Conversation;
 use App\Models\Customer;
@@ -67,7 +68,10 @@ it('reverting to vehicle invalidates vehicle onward and expires the open quote',
 });
 
 it('does not dispatch the outbound notification for an expired quote', function () {
-    Bus::fake([SendWhatsAppMessage::class]);
+    // `ResolveQuote` también se falsea: `identifyVehicle()` lo despacha, y corriendo inline
+    // resuelve la cotización y dispara la notificación real antes de que este test expire la
+    // quote — con lo cual el turno que se está midiendo no sería el que dispara el test.
+    Bus::fake([SendWhatsAppMessage::class, ResolveQuote::class]);
 
     $adapter = app(WhatsAppAdapter::class);
     $result = $adapter->identifyVehicle([

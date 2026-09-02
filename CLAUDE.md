@@ -184,7 +184,7 @@ no entra en un worker que ya existe.**
 
 | Worker | Colas (prioridad) | Conexión (`retry_after`) | Qué corre |
 |---|---|---|---|
-| `worker-ai` | `whatsapp-ai` | `database_ai` (200) | El turno del LLM, 4-95 s. **Aislado**: es el hot path y el cuello de botella. |
+| `worker-ai` | `whatsapp-ai` | `database_ai` (450) | El turno del LLM, 4-180 s, y hasta dos turnos si encadena. **Aislado**: es el hot path y el cuello de botella. |
 | `worker-realtime` | `default`, `whatsapp-outbound`, `media` | `database` (200) | Ingesta + acuse azul, envíos a Meta, transcripción de notas de voz. Todo ≤60 s. |
 | `worker-quotes` | `quotes` | `database_quotes` (420) | `ResolveQuote`. **Aislado**: retiene el proceso 30-360 s. |
 | *(sin residente)* | `background` | `database_long` (360) | Emisión, facturación, extracción de PDF, análisis semántico, limpieza. |
@@ -229,10 +229,19 @@ prioriza el del job (`Worker::timeoutForJob()`, aplicado con `pcntl_alarm`). Her
 "funciona" mientras cada cola tenga proceso propio y se rompe en cuanto se comparte, porque un
 proceso tiene un solo `--timeout`.
 
-`tests/Feature/Queue/WorkerConfigTest.php` verifica los cinco invariantes —el mapa completo de
-jobs por cola, que todo job declare su política, que toda cola tenga un worker que la lea, y las
-dos desigualdades de arriba— leyendo `.docker/start.sh` y `routes/console.php`. Si agregás un job
-o un worker sin cerrar el círculo, falla ahí y no en producción.
+`tests/Feature/Queue/WorkerConfigTest.php` verifica los invariantes —el mapa completo de jobs por
+cola, que todo job declare su política, que toda cola tenga un worker que la lea, las dos
+desigualdades de arriba, las dos del lock de conversación (ver más abajo) y que los topes de LLM de
+un turno encadenado entren en el `$timeout` del job— leyendo `.docker/start.sh` y
+`routes/console.php`. Si agregás un job o un worker sin cerrar el círculo, falla ahí y no en
+producción.
+
+**El tope del LLM de cada agente entra en esa cuenta.** Lo declara el atributo
+`#[Laravel\Ai\Attributes\Timeout(n)]` de la clase del agente (sin atributo, el SDK usa 60 s), y un
+turno encadenado gasta el de los dos agentes dentro del mismo job. Si la suma se pasa del
+`$timeout` del job, el alarm mata el proceso antes de que el tope del SDK pueda cortar la llamada —
+y una muerte por alarm no deja excepción, ni log, ni fila en `failed_jobs`. `CheckoutAgent` tenía
+`#[Timeout(360)]` dentro de un job de 180 s; ver Bitácora 2026-09-02 en el ROADMAP.
 
 **Ojo con `Bus::chain()`:** la cadena fija el `chainQueue` con el que se despacha cada eslabón
 siguiente, así que **la cadena tiene que declarar su cola** (`->onQueue('background')`) aunque
@@ -311,14 +320,19 @@ llega segundo espera con `release()`, y **cada release consume un intento**. La 
 
 > `(tries − 1) × releaseAfter` **>** el máximo que el otro job puede retener el lock.
 
-Ese máximo es el `timeout` del job (180s en los dos, por debajo del `retry_after` de `database_ai`
-que es 200s). De ahí `tries = 45` × 5s = 220s en el inbox y `tries = 25` × 10s = 240s en la
-notificación. Con los valores viejos (10 intentos) el presupuesto era de 45s y 90s: **un turno largo
-hacía que el mensaje del cliente se descartara en silencio**. Los fallos reales los sigue acotando
-`maxExceptions = 3`, que cuenta excepciones, no releases.
+**Ese máximo es el `expireAfter` del lock (450s), no el `timeout` del job.** Al job que se pasa del
+timeout lo mata el alarm, y un proceso muerto no suelta nada: el lock queda tomado hasta que vence.
+Se vio en producción el 2026-09-02 — `NotifyClientQuoteReady` gastó nueve intentos rebotando cada
+12s contra el lock de un job muerto y recién entró cuando expiró. De ahí `tries = 95` × 5s = 470s en
+el inbox y `tries = 47` × 10s = 460s en la notificación. Con los valores viejos (10 intentos) el
+presupuesto era de 45s y 90s: **un turno largo hacía que el mensaje del cliente se descartara en
+silencio**. Los fallos reales los sigue acotando `maxExceptions = 3`, que cuenta excepciones, no
+releases.
 
-El `expireAfter` del lock tiene que superar el `timeout` del job por el mismo motivo — si expira
-antes, otro job entra en paralelo sobre la misma conversación.
+El `expireAfter` del lock tiene que superar el `timeout` del job (450 > 400) — si expira antes, otro
+job entra en paralelo sobre la misma conversación.
+
+Las dos desigualdades las verifica `WorkerConfigTest`.
 
 ### La cotización corre en paralelo, fuera del turno
 
@@ -346,11 +360,52 @@ adelantó pueden cumplirse en cualquier orden.
 | Situación | Quién dispara |
 |---|---|
 | Termina la cotización, cobertura ya elegida | `ApiQuoteResolution` |
-| Termina la cotización, cobertura **no** elegida | nadie — el guard de `coverage_set` lo hace salir limpio |
+| Termina la cotización, cobertura **no** elegida | `NotifyClientQuoteReady` no presenta: abre un turno para **pedir** la cobertura |
 | El cliente elige cobertura, quote ya `processed` | `coveragePreference()` |
 
 Sin el guard, una cotización rápida presenta las alternativas **salteándose la pregunta de
-cobertura**.
+cobertura**. Pero el guard tampoco puede salir en silencio, que es lo que hacía hasta el
+2026-09-02: si el turno que dejó la cotización en vuelo cerró prometiendo las opciones —porque el
+cliente ya había dicho la cobertura y no había nada que preguntarle— no hay ningún mensaje
+entrante por venir, y la conversación queda muerta con la cotización lista. Pedirla es la red de
+seguridad; el camino normal lo cubre el encadenamiento de turno del orquestador (ver abajo). No
+se abre el turno si la IA está pausada por un takeover humano.
+
+#### El estado no es la entrega
+
+Los flags de `ai_state` los prenden las tools **a mitad del turno**; el mensaje sale al final. Entre
+las dos cosas el proceso puede morir, y ahí el estado dice que el trabajo está hecho mientras el
+cliente no recibió nada. Por eso el guard de `NotifyClientQuoteReady` mira **`quotes.presented_at`**
+y no `quote_ready`: esa marca la sella `DespachaRespuestaDelAgente::sellarPresentacionEntregada()`
+cuando el mensaje se despacha, no `PresentQuoteOptionsTool` cuando la tool corre.
+
+Si el job encuentra `quote_ready` en true con `presented_at` en null, el turno anterior murió en el
+medio: vuelve el flag a false y rehace la presentación completa (con `quote_ready` en false el
+orquestador entrega QuoteAgent, el único con `get_quote`).
+
+La misma regla vale para los pendientes que la tool deja en `metadata` (`pending_interactive`,
+`pending_public_link`): van sellados con `pending_at`, y `pullPending()` descarta los que superan
+`PENDIENTE_VIGENCIA_MINUTOS`. Sin eso, los botones de una presentación que el cliente nunca recibió
+se pegan al próximo mensaje que salga, sea cual sea. Pasó con la conversación 26 el 2026-09-02.
+
+#### El turno del vehículo cotizable se encadena con el de cobertura
+
+`coverage_preference` vive en `CoveragePreferenceAgent`, y `identify_vehicle` en
+`VehicleIdentifierAgent`: la cobertura que el cliente adelanta **en el mismo mensaje que los
+datos del auto** no la puede registrar el agente que está corriendo. Normalmente no importa —cada
+etapa cierra preguntando algo, y la respuesta del cliente abre el turno donde el agente dueño de
+la etapa lee la historia y la registra—, pero la rama Quotable del vehículo cierra **prometiendo
+las opciones**, sin pregunta.
+
+Por eso `InsuranceOrchestrator::cadenaAEncadenar()` encadena cuando `vehicle_identified` flipea y
+quedó una quote en curso: se descarta el texto del VehicleIdentifierAgent, se lo marca como no
+entregado en la memoria (`Support\MemoriaDelAgente`, compartido con la intercepción del inbox) y
+corre CoveragePreferenceAgent en el mismo turno. Es el mismo mecanismo que ya existía para
+`quote_ready` → CheckoutAgent.
+
+Corre en **toda** identificación cotizable, no sólo cuando el cliente se adelanta: cuesta una
+llamada extra al LLM (~4-6 s) contra los 30-174 s que ya tarda la consulta. Las ramas NeedsFact y
+NotQuotable no encadenan — no crean quote y cierran preguntando algo.
 
 `coveragePreference()` despacha el job en vez de presentar directo porque
 **`CoveragePreferenceAgent` no tiene `get_quote`** (la tiene solo `QuoteAgent`). El job abre un
