@@ -16,6 +16,7 @@ use App\Repositories\ConversationRepository;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -106,7 +107,11 @@ class ConversationController extends Controller
                     'ai_provider' => $m->ai_provider,
                     'attachment' => $att ? [
                         'duration_seconds' => $att->duration_seconds,
-                        'storage_url' => $att->storage_url,
+                        // Firmada al vuelo: el bucket es privado. `storage_url` quedó como
+                        // dato viejo de cuando era público y ya no resuelve.
+                        'storage_url' => $att->storage_path
+                            ? Storage::disk('r2')->temporaryUrl($att->storage_path, now()->addMinutes(15))
+                            : null,
                         'transcription' => $att->transcription,
                     ] : null,
                     'created_at' => $m->created_at->toIso8601String(),

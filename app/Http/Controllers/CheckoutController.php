@@ -126,13 +126,14 @@ class CheckoutController extends Controller
                 ->where('photo_key', $photoKey)
                 ->first();
 
-            // 2. Subir nueva foto a R2
+            // 2. Subir nueva foto a R2, SIN visibilidad pública: el path es determinístico
+            // (quote_id secuencial + una de las 10 claves conocidas), así que un objeto
+            // público se puede recorrer entero con un for. Se sirve con URL firmada.
             $storagePath = "checkout/{$quote->id}/photos/photo_{$photoKey}.jpg";
             Storage::disk('r2')->putFileAs(
                 "checkout/{$quote->id}/photos",
                 $photo,
                 "photo_{$photoKey}.jpg",
-                'public'
             );
             $storageUrl = Storage::disk('r2')->url($storagePath);
 
@@ -156,10 +157,11 @@ class CheckoutController extends Controller
                 DeleteOrphanPhoto::dispatch($existing->storage_path);
             }
 
+            // Sin la URL: el front nunca la usó —guarda `public_id` y muestra un thumbnail
+            // de 64px— y devolverla le entregaba el dominio del bucket a cada cliente.
             return response()->json([
                 'success' => true,
                 'public_id' => $storagePath,
-                'url' => $storageUrl,
             ]);
 
         } catch (\Exception $e) {
@@ -343,7 +345,9 @@ class CheckoutController extends Controller
                         'cc_expiry_encrypted' => Crypt::encryptString($validated['cc_expiry']),
                         'cc_holder_name_encrypted' => Crypt::encryptString($validated['cc_holder_name']),
                         'cc_holder_dni_encrypted' => Crypt::encryptString($validated['cc_holder_dni']),
-                        'photo_paths' => $fotos->pluck('storage_url')->all(),
+                        // Paths, no URLs: la URL se firma al mostrarla. Mapa por clave de foto,
+                        // que es lo que la vista de auditoría espera para etiquetarlas.
+                        'photo_paths' => $fotos->pluck('storage_path', 'photo_key')->all(),
                         'submitted_at' => now(),
                     ]
                 );

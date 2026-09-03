@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\CheckoutSession;
+use App\Models\InspectionPhoto;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -66,7 +68,16 @@ class CheckoutAuditController extends Controller
                 'cc_processed_at' => $checkoutSession->cc_processed_at?->toIso8601String(),
                 'cc_processed_by' => $checkoutSession->processedBy?->name,
                 // Fotos
-                'photo_paths' => $checkoutSession->photo_paths ?? [],
+                // Se resuelven desde las filas de la cotización y no desde `photo_paths`,
+                // que en sesiones viejas guarda URLs públicas que ya no sirven. Firmadas al
+                // vuelo: el bucket es privado.
+                'photo_paths' => InspectionPhoto::where('quote_id', $checkoutSession->quote_id)
+                    ->orderBy('id')
+                    ->get()
+                    ->mapWithKeys(fn (InspectionPhoto $foto): array => [
+                        $foto->photo_key => Storage::disk('r2')->temporaryUrl($foto->storage_path, now()->addMinutes(15)),
+                    ])
+                    ->all(),
                 // Quote
                 'quote_id' => $checkoutSession->quote_id,
                 'alternative' => $checkoutSession->quoteAlternative ? [
