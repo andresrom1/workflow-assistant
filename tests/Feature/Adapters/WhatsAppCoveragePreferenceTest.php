@@ -212,6 +212,8 @@ function cotizacionProcesada(Conversation $conversation, bool $vigente): Quote
  * Eso le hacía decir al agente que no se pudo cotizar ese nivel — falso, y llegó a un cliente.
  */
 it('no dice que no se pudo cotizar cuando ya hay una cotización lista', function () {
+    Bus::fake([SendWhatsAppMessage::class, NotifyClientQuoteReady::class]);
+
     $conversation = conversacionConVehiculo();
     cotizacionProcesada($conversation, vigente: true);
 

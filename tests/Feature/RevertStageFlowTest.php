@@ -10,12 +10,22 @@ use App\Models\Customer;
 use App\Models\Quote;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Laravel\Ai\Tools\Request;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    // El turno manda WhatsApp de verdad: con QUEUE_CONNECTION=sync el job de salida corre
+    // inline y le pega a la Cloud API. Se falsifica solo el transporte, asi el resto del
+    // camino se sigue ejecutando igual. Lo destapo preventStrayRequests() en TestCase.
+    Http::fake([
+        // Un wamid distinto por llamada: `messages.external_message_id` es unique, y un id
+        // fijo hace que el segundo envio del test aborte la transaccion de Postgres (25P02).
+        'graph.facebook.com/*' => fn () => Http::response(['messages' => [['id' => 'wamid.'.uniqid()]]], 200),
+    ]);
+
     $this->customer = Customer::factory()->create();
     $this->conversation = Conversation::create([
         'external_conversation_id' => 'thread_revert',

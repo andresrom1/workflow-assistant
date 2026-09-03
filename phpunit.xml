@@ -38,6 +38,17 @@
              explícitamente con config()->set. -->
         <env name="WHATSAPP_INBOX_QUIET_SECONDS" value="0"/>
         <env name="WHATSAPP_TYPING_INDICATOR_ENABLED" value="false"/>
+        <!-- El dispatcher `cloud` encola SendWhatsAppTemplate y, con QUEUE_CONNECTION=sync,
+             lo corre inline contra Meta con credenciales reales. El default de config/whatsapp.php
+             ya es `log`, pero el .env de la máquina lo pisa (WHATSAPP_DISPATCH_DRIVER=cloud) y la
+             suite terminaba mandando WhatsApps de verdad. Se fija acá para que no dependa de eso.
+             Los tests que verifican el encolado eligen `cloud` explícitamente con Queue::fake(). -->
+        <env name="WHATSAPP_DISPATCH_DRIVER" value="log"/>
+        <!-- Sin esto, cualquier test que renderice una pagina Inertia le pega al endpoint
+             __inertia_ssr del dev server de Vite cuando existe public/hot (el archivo que deja
+             `npm run dev`), o sea que el resultado dependia de si alguien habia levantado el
+             dev server en esa maquina. Ver Inertia HttpGateway::shouldDispatch(). -->
+        <env name="INERTIA_SSR_ENABLED" value="false"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
