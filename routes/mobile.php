@@ -30,8 +30,11 @@ Route::patch('/emergencia/tracking/{token}/posicion', [EmergencyController::clas
     ->middleware('throttle:30,1');
 
 Route::prefix('auth')->group(function () {
-    // Intercambia el Firebase ID Token por un Sanctum token. Sin auth previa.
-    Route::post('/session', [AuthController::class, 'session']);
+    // Intercambia el Firebase ID Token por un Sanctum token. Sin auth previa, y por eso
+    // con throttle: era la unica ruta publica de mobile sin limite. Un login legitimo
+    // gasta uno o dos intentos; el margen cubre reintentos de red del device.
+    Route::post('/session', [AuthController::class, 'session'])
+        ->middleware('throttle:10,1'); // opcion-de-configuracion: tope de logins por minuto
 
     Route::middleware('auth:mobile')->group(function () {
         // Cierra la sesión del dispositivo actual.

@@ -9,9 +9,12 @@ use App\Models\InspectionPhoto;
 use App\Models\Quote;
 use App\Models\RiskSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -49,11 +52,11 @@ function checkoutReadyQuote(int $photoCount = 8, ?string $snapshotDni = null): a
     $quote->update(['checkout_alternative_id' => $alternative->id]);
 
     $paths = [];
-    for ($i = 0; $i < $photoCount; $i++) {
-        $path = "checkout/{$quote->id}/photos/photo_{$i}.jpg";
+    foreach (array_slice(InspectionPhoto::CLAVES, 0, $photoCount) as $key) {
+        $path = "checkout/{$quote->id}/photos/photo_{$key}.jpg";
         InspectionPhoto::create([
             'quote_id' => $quote->id,
-            'photo_key' => "slot_{$i}",
+            'photo_key' => $key,
             'storage_path' => $path,
             'storage_url' => "http://r2/{$path}",
             'status' => InspectionPhotoStatus::Temp,
@@ -305,4 +308,126 @@ it('no bloquea la venta si el catálogo no está disponible', function () {
     // del endpoint de Visred no puede cortar un checkout.
     $this->postJson(route('checkout.submit'), checkoutPayload($quote, $paths, ['cc_brand' => 'visa']))
         ->assertOk();
+});
+
+// ── Superficie pública de escritura (E2 del plan de seguridad) ───────────────
+
+it('rechaza una foto que pertenece a otra cotización', function () {
+    [$quote, $paths] = checkoutReadyQuote();
+    [$otra, $pathsAjenos] = checkoutReadyQuote();
+
+    $mezcla = $paths;
+    $mezcla[0] = $pathsAjenos[0];
+
+    $this->postJson(route('checkout.submit'), checkoutPayload($quote, $mezcla))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['photo_ids']);
+
+    expect(CheckoutSession::where('quote_id', $quote->id)->exists())->toBeFalse();
+    Bus::assertNotDispatched(EmitirPoliza::class);
+});
+
+it('rechaza un path de foto que no existe', function () {
+    [$quote, $paths] = checkoutReadyQuote();
+
+    $paths[0] = "checkout/{$quote->id}/photos/photo_inventada.jpg";
+
+    $this->postJson(route('checkout.submit'), checkoutPayload($quote, $paths))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['photo_ids']);
+});
+
+it('rechaza el envío si repite una foto', function () {
+    [$quote, $paths] = checkoutReadyQuote();
+
+    $paths[1] = $paths[0];
+
+    $this->postJson(route('checkout.submit'), checkoutPayload($quote, $paths))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['photo_ids']);
+});
+
+/**
+ * El conteo va sobre el conjunto aceptado y no sobre el total de filas Temp de la
+ * cotización: si fuera sobre el total, mandar menos fotos de las pedidas pasaría
+ * igual con tal de que en la base hubiera suficientes.
+ */
+it('no da por cumplido el mínimo mandando menos fotos de las que hay', function () {
+    [$quote, $paths] = checkoutReadyQuote(8);
+
+    $this->postJson(route('checkout.submit'), checkoutPayload($quote, array_slice($paths, 0, 3)))
+        ->assertStatus(422);
+
+    expect(CheckoutSession::where('quote_id', $quote->id)->exists())->toBeFalse();
+});
+
+it('rechaza una photo_key que no está en el catálogo del dominio', function () {
+    [$quote] = checkoutReadyQuote();
+
+    $this->postJson(route('checkout.upload-photo'), [
+        'checkout_token' => $quote->checkout_token,
+        'photo_key' => '../../../etc/passwd',
+        // `create` y no `image`: generar una imagen de verdad necesita la extension GD.
+        'photo' => UploadedFile::fake()->create('foto.jpg', 100, 'image/jpeg'),
+    ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['photo_key']);
+});
+
+it('corta la ráfaga de envíos con 429', function () {
+    [$quote, $paths] = checkoutReadyQuote();
+    $payload = checkoutPayload($quote, $paths);
+
+    // El primero pasa y deja el checkout cerrado; del segundo al quinto son 409. El
+    // throttle cuenta todos, así que el sexto ya no llega al controller.
+    for ($i = 0; $i < 5; $i++) {
+        $this->postJson(route('checkout.submit'), $payload);
+    }
+
+    $this->postJson(route('checkout.submit'), $payload)->assertStatus(429);
+});
+
+it('no registra el token del checkout cuando el submit falla', function () {
+    [$quote, $paths] = checkoutReadyQuote();
+
+    Log::spy();
+    Mail::shouldReceive('to')->andThrow(new RuntimeException('el mail explotó'));
+
+    $this->postJson(route('checkout.submit'), checkoutPayload($quote, $paths))
+        ->assertStatus(500);
+
+    Log::shouldHaveReceived('error')->withArgs(
+        fn (string $mensaje, array $contexto): bool => ! array_key_exists('checkout_token', $contexto)
+            && ! in_array($quote->checkout_token, $contexto, true)
+    );
+});
+
+/**
+ * La concurrencia real no es reproducible acá: `RefreshDatabase` envuelve el test en una
+ * transacción, así que una segunda conexión no ve la cotización y no puede competir por su
+ * fila. Lo que sí se puede probar —y es la propiedad que importa— es que el recheck de
+ * adentro del lock corta: se cambia el estado justo antes de que corra el `for update`,
+ * que es exactamente lo que deja hecho el envío que gana la carrera.
+ */
+it('el segundo envío simultáneo no duplica emisión, aviso ni mail', function () {
+    [$quote, $paths] = checkoutReadyQuote();
+
+    $yaCorrio = false;
+    DB::beforeExecuting(function (string $consulta) use ($quote, &$yaCorrio): void {
+        if ($yaCorrio || ! str_contains($consulta, 'for update')) {
+            return;
+        }
+
+        $yaCorrio = true;
+        DB::table('quotes')->where('id', $quote->id)->update(['status' => 'checkout_submitted']);
+    });
+
+    $this->postJson(route('checkout.submit'), checkoutPayload($quote, $paths))
+        ->assertStatus(409);
+
+    expect($yaCorrio)->toBeTrue()
+        ->and(CheckoutSession::where('quote_id', $quote->id)->exists())->toBeFalse();
+
+    Bus::assertNotDispatched(EmitirPoliza::class);
+    Bus::assertNotDispatched(NotifyClientCheckoutCompleted::class);
 });
