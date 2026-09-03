@@ -431,3 +431,34 @@ it('el segundo envío simultáneo no duplica emisión, aviso ni mail', function 
     Bus::assertNotDispatched(EmitirPoliza::class);
     Bus::assertNotDispatched(NotifyClientCheckoutCompleted::class);
 });
+
+// ── Fotos sin acceso anónimo (E3 del plan de seguridad) ─────────────────────
+
+it('no le devuelve al cliente la URL del bucket al subir una foto', function () {
+    [$quote] = checkoutReadyQuote();
+
+    $respuesta = $this->postJson(route('checkout.upload-photo'), [
+        'checkout_token' => $quote->checkout_token,
+        'photo_key' => 'frente',
+        'photo' => UploadedFile::fake()->create('foto.jpg', 100, 'image/jpeg'),
+    ])->assertOk();
+
+    // Devolverla le entregaba el dominio del bucket a cada cliente, y con el path
+    // adivinable eso alcanza para recorrer las fotos de todas las cotizaciones.
+    expect($respuesta->json())->toHaveKey('public_id')
+        ->and($respuesta->json())->not->toHaveKey('url');
+});
+
+it('guarda paths y no URLs públicas en photo_paths', function () {
+    [$quote, $paths] = checkoutReadyQuote();
+
+    $this->postJson(route('checkout.submit'), checkoutPayload($quote, $paths))->assertOk();
+
+    $guardados = CheckoutSession::where('quote_id', $quote->id)->firstOrFail()->photo_paths;
+
+    expect($guardados)->toHaveKey('frente');
+
+    foreach ($guardados as $valor) {
+        expect($valor)->not->toStartWith('http');
+    }
+});

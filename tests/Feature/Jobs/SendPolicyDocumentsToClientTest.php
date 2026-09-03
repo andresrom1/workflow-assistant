@@ -26,7 +26,7 @@ it('sends every visible document with a phone number', function () {
         'customer_id' => $customer->id,
     ]);
     $poliza = Poliza::factory()->create(['numero' => 'POL-999', 'company' => 'Sancor']);
-    PolicyDocument::factory()->create([
+    $documento = PolicyDocument::factory()->create([
         'poliza_id' => $poliza->id,
         'storage_url' => 'https://r2.example.com/poliza.pdf',
         'visible_to_client' => true,
@@ -39,12 +39,17 @@ it('sends every visible document with a phone number', function () {
     (new SendPolicyDocumentsToClient($poliza->id, $conversation->id))->handle(app(WhatsAppOutboundService::class));
 
     Http::assertSentCount(1);
-    Http::assertSent(function ($request) {
+    Http::assertSent(function ($request) use ($documento) {
         $body = $request->data();
+        $link = (string) ($body['document']['link'] ?? '');
 
         return ($body['to'] ?? null) === '5491112345678'
             && ($body['type'] ?? null) === 'document'
-            && ($body['document']['link'] ?? null) === 'https://r2.example.com/poliza.pdf'
+            // El link va FIRMADO y apunta al objeto por su path. No puede ser la URL
+            // pública guardada en `storage_url`: el bucket es privado y esa no resuelve.
+            && str_contains(rawurldecode($link), $documento->storage_path)
+            && str_contains($link, 'X-Amz-Signature')
+            && ! str_contains($link, 'r2.example.com')
             && ($body['document']['caption'] ?? null) === 'Póliza POL-999 — Sancor';
     });
 });

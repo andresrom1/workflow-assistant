@@ -760,7 +760,7 @@ const onPhotoCapture = async (e: Event, key: string) => {
     // Guardar storage_path y thumbnail para preview (no la URL completa de R2)
     photoIds[key] = data.public_id
     photos[key] = thumb  // micro-thumbnail 64px data URL (~3KB) — no la imagen completa
-    console.log(`[onPhotoCapture] Éxito: ${data.public_id}`, data.url)
+    console.log(`[onPhotoCapture] Éxito: ${data.public_id}`)
     // El File ya fue enviado y no se almacena en memoria
   } catch (err: any) {
     console.error(`[onPhotoCapture] Gran error capturado para ${key}:`, err)

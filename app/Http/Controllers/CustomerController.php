@@ -14,6 +14,7 @@ use App\Services\Visred\VisredCatalogService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -383,7 +384,8 @@ class CustomerController extends Controller
                         'id' => $d->id,
                         'kind' => $d->kind->value,
                         'label' => $d->label,
-                        'storage_url' => $d->storage_url,
+                        // Firmada al vuelo: el bucket es privado.
+                        'storage_url' => Storage::disk('r2')->temporaryUrl($d->storage_path, now()->addMinutes(15)),
                         'visible_to_client' => $d->visible_to_client,
                     ])->values(),
                 ];

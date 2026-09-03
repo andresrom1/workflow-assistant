@@ -12,6 +12,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Envía por WhatsApp los documentos oficiales (`visible_to_client = true`) de una
@@ -57,7 +58,7 @@ class SendPolicyDocumentsToClient implements ShouldQueue
             $poliza = Poliza::find($this->polizaId);
             $documents = $poliza?->documents()
                 ->where('visible_to_client', true)
-                ->whereNotNull('storage_url')
+                ->whereNotNull('storage_path')
                 ->get() ?? collect();
 
             if ($poliza === null || $documents->isEmpty()) {
@@ -100,7 +101,10 @@ class SendPolicyDocumentsToClient implements ShouldQueue
                 $waService->sendDocumentMessage(
                     $phone,
                     $bsuid,
-                    (string) $document->storage_url,
+                    // Meta baja el archivo con un GET común, así que una URL firmada le
+                    // sirve igual y no exige que el bucket sea público. 15 minutos alcanzan
+                    // de sobra para que lo busque.
+                    Storage::disk('r2')->temporaryUrl($document->storage_path, now()->addMinutes(15)),
                     $document->original_filename ?? "poliza-{$poliza->numero}.pdf",
                     $phoneNumberId,
                     $caption,

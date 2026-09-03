@@ -37,6 +37,13 @@ class InspectionPhoto extends Model
         'oblea_gnc',
     ];
 
+    /**
+     * OJO con `storage_url`: quedó de cuando el bucket era público y **ya no resuelve**.
+     * La columna es NOT NULL, así que se sigue escribiendo, pero para mostrar una foto va
+     * `Storage::disk('r2')->temporaryUrl($foto->storage_path, ...)`.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'quote_id',
         'photo_key',
