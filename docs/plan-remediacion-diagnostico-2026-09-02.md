@@ -1,352 +1,388 @@
 # Plan de remediación del diagnóstico técnico
 
-**Proyecto:** Workflow Assistant / PAS Mobile  
-**Fecha de corte:** 2026-09-02  
-**Estado del documento:** Propuesta ejecutable  
-**Alcance:** Backend Laravel, API, integraciones, pruebas, dependencias PHP/JavaScript, build frontend y deuda técnica detectada.  
-**Fuera de alcance:** Nuevas funcionalidades de negocio, rediseño visual y cambios de dominio no necesarios para corregir los hallazgos.
+**Proyecto:** Workflow Assistant
+**Fecha de corte del diagnóstico:** 2026-09-02
+**Revisión:** r2 — 2026-09-02 (contrastada contra el código)
+**Estado del documento:** Propuesta ejecutable
+**Alcance:** Backend Laravel, superficie HTTP pública (`routes/api.php` **y** `routes/web.php`), integraciones, pruebas, dependencias PHP/JavaScript y deuda técnica detectada.
+**Fuera de alcance:** Funcionalidad de negocio nueva, rediseño visual y cambios de dominio no necesarios para corregir los hallazgos.
+
+## 0. Qué cambió en la revisión r2
+
+La r1 mezclaba tres cosas sin distinguirlas: hallazgos verificados en el código, recomendaciones
+genéricas de higiene y trabajo que el repositorio ya tenía resuelto. Eso invertía prioridades — la
+fase crítica endurecía rutas sin consumidor mientras el flujo de checkout, que es el único
+público activo y el que maneja fotos y datos de tarjeta, quedaba fuera del inventario.
+
+La r2 mantiene la estructura de criterios de aceptación y rollback por entrega, y reemplaza las
+tareas genéricas por la **matriz de hallazgos** de la sección 2. Cada ítem queda clasificado en
+*confirmado*, *ya resuelto*, *condicional* o *descartado*, con su evidencia. Lo que no tiene
+evidencia no entra al plan.
 
 ## 1. Objetivo
 
-Reducir la superficie de ataque, recuperar una suite de pruebas determinista, actualizar las dependencias vulnerables y mejorar la resiliencia operativa sin interrumpir los consumidores actuales del sistema.
+Reducir la superficie de ataque efectiva, recuperar una suite determinista, actualizar las
+dependencias vulnerables y mejorar la resiliencia operativa sin romper consumidores vigentes.
 
 El trabajo se considera terminado cuando:
 
-- ningún endpoint mutante o de diagnóstico queda expuesto sin un mecanismo de confianza explícito;
-- las respuestas de cotizaciones no exponen payloads internos a consumidores no autorizados;
-- no se registran requests completos que puedan contener PII, tokens o datos de pago;
-- Composer y npm no reportan vulnerabilidades críticas o altas explotables en producción;
-- la suite completa termina sin conexiones externas, con `0 failed` y dentro de un límite de memoria documentado;
-- PHPStan, Pint, Rector y el build frontend terminan correctamente;
-- los secretos configurables quedan cifrados en reposo y no se serializan;
-- los clientes HTTP tienen timeouts, política de reintentos y pruebas de error consistentes;
+- el flujo de checkout público tiene límite de tasa, verificación de pertenencia de sus recursos y
+  no registra su propia credencial en logs;
+- ningún endpoint mutante o de diagnóstico queda expuesto sin consumidor y sin control;
+- las respuestas de cotización no exponen payloads internos a consumidores no autorizados;
+- los valores marcados como secretos no viajan al navegador, no se pierden al guardar y no quedan
+  en texto plano en ningún almacén;
+- Composer y npm no reportan vulnerabilidades críticas o altas explotables en producción, con
+  reporte reproducible adjunto;
+- la suite completa termina sin conexiones externas, con `0 failed` y dentro de un presupuesto de
+  memoria **medido**;
+- PHPStan, Pint y el build frontend terminan correctamente;
 - cada cambio puede desplegarse y revertirse de manera controlada.
 
-## 2. Estado inicial verificado
+## 2. Matriz de hallazgos
 
-### Plataforma
+Evidencia verificada contra el árbol en `4d4c65a`. Las líneas citadas son del 2026-09-02 y pueden
+desplazarse; el símbolo (método o clase) es la referencia estable.
 
-- PHP 8.4.10.
-- Laravel 13.3.0.
-- PostgreSQL.
-- Inertia Laravel v3, Vue 3 e Inertia Vue v2.
-- Tailwind CSS v4 y Vite 7.
-- 164 rutas registradas.
-- Todas las migraciones locales estaban aplicadas al momento del diagnóstico.
+### 2.1 Confirmado — hay defecto y hay trabajo pendiente
 
-### Verificaciones iniciales
+| # | Hallazgo | Evidencia | Entrega |
+|---|---|---|---|
+| C-01 | Las tres rutas públicas de escritura del checkout no tienen límite de tasa. La ruta vecina `cotizaciones.checkout` sí lo tiene (`throttle:10,1`), así que la inconsistencia es dentro del mismo archivo | `routes/web.php:168-175` | E3 |
+| C-02 | `submit()` construye las URLs de las fotos desde los `photo_ids` que manda el cliente, validados solo como `string\|max:255`, sin comprobar que pertenezcan a esa cotización. El conteo de fotos sí se hace contra `InspectionPhoto` propias | `CheckoutController::submit()`, línea 307 | E3 |
+| C-03 | `photo_key` se valida como `string\|max:50` sin lista de valores permitidos y se interpola en el path de almacenamiento (`checkout/{id}/photos/photo_{key}.jpg`) | `CheckoutController::uploadPhoto()`, líneas 105 y 127 | E3 |
+| C-04 | El `catch` de `submit()` registra el `checkout_token` —que es la credencial del flujo— junto al `trace` completo | `CheckoutController::submit()`, línea 387 | E3 |
+| C-05 | No hay idempotencia ni control de envío simultáneo en `submit()` | `CheckoutController::submit()` | E3 |
+| C-06 | El valor de los settings marcados como secretos viaja al navegador en el payload de Inertia; el enmascarado es solo visual en el front | `SettingsController::index()`, línea 32 | E5 |
+| C-07 | **"Vacío conserva el secreto" no funciona.** El `continue` corta la iteración de validación pero no saca la key de `$incoming`, que se entrega entero a `saveGroup()`. Guardar el formulario con el campo secreto vacío borra el secreto | `SettingsController::updateGroup()`, línea 61 + `SettingsService::saveGroup()`, línea 30 | E5 |
+| C-08 | `saveGroup()` escribe con `where()->update()` de query builder: no pasa por casts ni mutators. Cualquier diseño de cifrado basado en asignación de atributo no tendría efecto por ese camino | `SettingsService::saveGroup()`, línea 30 | E5 |
+| C-09 | `loadAll()` cachea todos los valores —incluidos los secretos— durante una hora, y `CACHE_STORE=database`. El cifrado en reposo tiene una segunda copia que atender | `SettingsService::loadAll()`, línea 55 | E5 |
+| C-10 | Los cuatro casos de éxito de `SiniestroTest` no tienen ningún fake: salen a la red real | `tests/Feature/Mobile/SiniestroTest.php` (0 ocurrencias de `Http::fake`/`Queue::fake` en 184 líneas) | E2 |
+| C-11 | No hay `Http::preventStrayRequests()` global. `tests/Pest.php` solo ata `TestCase` a `Feature`, así que el alcance sobre `tests/Unit` hay que decidirlo explícitamente | `tests/Pest.php:5` | E2 |
+| C-12 | El script `composer test` no fija presupuesto de memoria: depende del `php.ini` de cada máquina | `composer.json`, script `test` | E2 |
+| C-13 | `POST /api/tools/test` es público y registra el request completo | `routes/api.php:16` | E4 |
+| C-14 | `GET /api/quotes/{quote}/raw` devuelve `raw_response` del proveedor sin autenticación, con ID enumerable como única barrera | `routes/api.php:44` → `QuoteService::getRaw()`, línea 174 | E4 |
+| C-15 | Seis rutas `POST /api/tools/*` marcadas "sin implementar" siguen registradas y son públicas | `routes/api.php:47-52` | E4 |
+| C-16 | `QuoteController::store()` pasa `$request->all()` al servicio sin validar | `QuoteController::store()`, línea 101 | E4 o E7 según destino de la ruta |
+| C-17 | Un archivo fuera de formato: `tests/Feature/ProcessMediaAttachmentTest.php` (`fully_qualified_strict_types`, `ordered_imports`). Re-verificado en r2 | `vendor/bin/pint --test` | E7 |
+| C-18 | Advisories abiertos en ambos lockfiles al 2026-09-02 | Ver 3.2 | E6 |
 
-| Verificación | Resultado inicial |
+### 2.2 Ya resuelto — no rehacer; proteger de regresión
+
+| # | Ya existe | Evidencia |
+|---|---|---|
+| R-01 | Presupuestos de cola: `timeout` de job < `retry_after` de la conexión, y el presupuesto de espera del lock. **Verificado por test**, no solo por convención | `tests/Feature/Queue/WorkerConfigTest.php` |
+| R-02 | El upload de fotos ya valida tipo real y tamaño (`mimes:jpeg,jpg,png\|max:10240`) | `CheckoutController::uploadPhoto()`, línea 105 |
+| R-03 | El token es la credencial del flujo de checkout y está verificado en las dos entradas, con guard de estado (`409` si no está en `checkout_pending`) | `CheckoutController::uploadPhoto()` y `::submit()` |
+| R-04 | Los datos de tarjeta se guardan cifrados y con `$hidden` | `CheckoutSession` (`cc_pan_encrypted`, `cc_expiry_encrypted`, `cc_holder_name_encrypted`, `cc_holder_dni_encrypted`) |
+| R-05 | La vista pública de cotizaciones usa token opaco de 16 caracteres con restricción de formato, `noindex` y throttle en el CTA de escritura | `routes/web.php:140-157` |
+| R-06 | `tests/TestCase.php` ya bindea stubs sin red para `Quotability`, `QuotationProvider` y `EmissionProvider`. Es el punto de anclaje natural para los fakes globales de E2 | `tests/TestCase.php:22-29` |
+| R-07 | `tests/Unit` está declarado en `phpunit.xml` (no corría hasta el 2026-08-03) | `phpunit.xml` |
+| R-08 | `public/build` dejó de versionarse | commit `4d4c65a` |
+
+**Regla:** ninguna entrega de este plan puede debilitar R-01 a R-08. Si un cambio toca colas,
+`WorkerConfigTest` tiene que seguir en verde sin editarlo para acomodar el cambio.
+
+### 2.3 Condicional — requiere una confirmación acotada antes de ejecutar
+
+| # | Ítem | Qué falta confirmar | Cómo |
+|---|---|---|---|
+| K-01 | Retirar `/api/tools/test`, `/api/tools/*`, `/api/v1/quotes` y `/api/quotes/{quote}/raw` | La búsqueda en `pas_mobile`, `openai-chatkit-starter-app` y `resources/js` no encontró llamadas, pero eso no prueba ausencia de consumidores externos | Revisión acotada de accesos en producción sobre una ventana definida (30 días), contando por ruta. No hace falta construir telemetría nueva |
+| K-02 | Continuidad de ChatKit | `openai-chatkit-starter-app/lib/backendTools.ts` es el único consumidor de `/api/web-chat/v1/tools/*`, y la app está declarada deprecada con sunset de Agent Builder ≤ 2026-11-30 | Decisión de producto, separada de este plan. Hasta que exista, esas cinco rutas no se tocan |
+| K-03 | Backfill de cifrado de settings | La migración `2026_07_20_000001_drop_poliza_api_settings` borró la única key `is_secret = true` conocida, y todo lo sembrado después es `false`. Eso no prueba el contenido de cada base desplegada | Conteo por entorno de filas con `is_secret = true`, sin leer ni mostrar valores. El backfill corre solo si el conteo es mayor que cero |
+| K-04 | Versiones objetivo de dependencias | Los umbrales de la r1 salieron de un audit real pero fechado | Re-derivar con `composer audit --locked` y `npm audit` al empezar E6, adjuntando el reporte |
+
+### 2.4 Descartado — sale del plan, con motivo
+
+| # | Estaba en la r1 | Por qué sale |
+|---|---|---|
+| D-01 | Incluir `DeepSeekProbe` en la política de timeouts y reintentos, y "moverlo a una cola para no retener requests web" | Es una sonda de consola (`ai:probe-*`), nunca corre en un request web. Pega con `Http` crudo y un solo intento **a propósito**: agregarle reintentos corrompería lo que mide (latencia y tokens de un turno real) |
+| D-02 | Pasar DTOs a los servicios | El `CLAUDE.md` raíz prohíbe el patrón DTO en todo el monorepo. Se pasan arrays con campos permitidos |
+| D-03 | Crear un `QuoteResource` | El `CLAUDE.md` raíz excluye `JsonResource` salvo pedido explícito. La allowlist de campos se arma en el controller |
+| D-04 | "Reemplazar **todos** los `$request->all()`" | De 36 ocurrencias, 20 están en `app/AI/Tools/*` donde `$request` es `Laravel\Ai\Tools\Request` —otra clase, sin `validated()`— y el `CLAUDE.md` **obliga** a entrar por `handleToolCall($request->all(), ...)`. La instrucción vale solo para `Illuminate\Http\Request` en controllers |
+| D-05 | Objetivo de 256 MB para la suite | Nunca se midió. El presupuesto sale de medir, no de elegir un número |
+| D-06 | Ventana dual con feature flag y monitoreo de 24-48 h para las rutas de `api.php` | Diseñado para consumidores que hay que no romper. Si K-01 confirma que no existen, la ruta se retira y no hay compatibilidad que sostener |
+| D-07 | Rediseñar la política de colas | R-01: ya está implementada y verificada por test |
+
+## 3. Estado inicial — fotografía del 2026-09-02
+
+Esta sección es **histórica**. Documenta la línea base del diagnóstico, no el estado vigente.
+
+### 3.1 Plataforma y verificaciones
+
+- PHP 8.4.10, Laravel 13.3.0, PostgreSQL, Inertia v3 + Vue 3, Tailwind v4, Vite 7. 164 rutas.
+
+| Verificación | Resultado del 2026-09-02 |
 |---|---|
 | `composer validate --no-check-publish` | Correcto |
 | PHPStan sobre 253 archivos | Correcto, sin errores |
 | Suite Pest completa | 1036 aprobadas, 4 fallidas, 3308 assertions |
-| Suite con comando normal | Agota el límite de 128 MB |
-| Pest con 512 MB | Completa en ~140 s; fallan 4 casos de siniestros |
-| Pint | Un archivo fuera de formato |
-| Rector dry-run | Propone cambios en 39 archivos |
+| Suite con el comando por defecto | Agota 128 MB |
+| Pest con 512 MB | ~140 s; fallan los 4 casos de siniestros |
+| Pint | Un archivo fuera de formato *(re-verificado en r2: sigue igual)* |
+| Rector dry-run | Cambios propuestos en 39 archivos |
 | Vite build | Correcto con advertencias |
 | Bundle JS principal | ~1,10 MB; ~287 KB gzip |
-| Composer audit | 44 advisories en 13 paquetes; al menos uno crítico |
-| npm audit | 22 paquetes afectados: 12 altos y 10 moderados |
+| Composer audit | 44 advisories en 13 paquetes, al menos uno crítico |
+| npm audit | 22 paquetes afectados: 12 altos, 10 moderados |
 
-### Restricción de trabajo
+### 3.2 Deuda de evidencia
 
-El repositorio ya contenía cambios sin confirmar en `run.md`, `vite.config.js` y artefactos de `public/build`. Cada fase debe comenzar con `git status --short --branch`; no se deben mezclar ni sobrescribir esos cambios.
+Los conteos de audit de arriba son salidas reales, pero se citaron sin reporte reproducible. **La
+primera tarea de E6 es adjuntar** commit, hash de ambos lockfiles, fecha e identificadores de
+advisory por paquete. Sin eso no se puede saber después si un advisory se cerró o cambió de
+severidad.
 
-## 3. Principios de ejecución
+Versiones instaladas al corte, para poder comparar: `laravel/framework v13.3.0` (2026-04-01),
+`dompdf/dompdf v3.1.5`, `mtdowling/jmespath.php 2.8.0`, `guzzlehttp/guzzle 7.10.0`.
 
-1. **Seguridad antes que refactorización.** Cerrar exposición y actualizar componentes vulnerables antes de aplicar cambios cosméticos de Rector.
-2. **Compatibilidad explícita.** Antes de proteger una ruta, inventariar su consumidor, credencial disponible y contrato de error esperado.
-3. **Cambios pequeños y reversibles.** Una rama y una unidad de despliegue por fase; evitar un único PR con seguridad, dependencias y refactors mezclados.
-4. **Pruebas sin efectos externos.** Ninguna prueba puede depender de Internet o enviar mensajes, correo, archivos o solicitudes reales.
-5. **Validación en el borde.** Usar Form Requests y `$request->validated()`; no transportar `$request->all()` hacia servicios.
-6. **Secretos por diseño.** No registrar, serializar ni devolver secretos; cifrarlos en reposo.
-7. **Observabilidad sin PII.** Registrar identificadores técnicos, resultado, latencia y código de error, no payloads completos.
-8. **Sin modificar migraciones ejecutadas.** Cualquier corrección de esquema o datos se hará mediante una migración nueva.
+### 3.3 Estado del árbol
 
-## 4. Estrategia de ramas y entregas
+El diagnóstico se hizo con cambios sin confirmar en `run.md`, `vite.config.js` y `public/build`.
+**Ya no aplica:** el árbol está limpio, `main` está a la par de `origin/main` y `4d4c65a` dejó de
+versionar `public/build`. Se conserva el dato porque explica por qué la r1 pedía preservar esos
+archivos en cada fase.
 
-Crear las ramas desde una base limpia y actualizada, conservando los cambios actuales fuera de los PR de remediación.
+## 4. Principios de ejecución
 
-| Entrega | Rama sugerida | Contenido |
-|---|---|---|
-| E1 | `codex/security-api-boundaries` | Rutas, autenticación, autorización, throttling y respuestas públicas |
-| E2 | `codex/request-validation-redaction` | Form Requests, DTOs/payloads validados y logging seguro |
-| E3 | `codex/test-isolation` | Fakes globales, tests de siniestro, memoria y CI |
-| E4 | `codex/dependency-security` | Actualización Composer/npm y regresión |
-| E5 | `codex/encrypted-settings` | Cifrado y rotación de secretos |
-| E6 | `codex/http-resilience` | Timeouts, retry, errores y métricas |
-| E7 | `codex/quality-performance` | Pint, Rector seleccionado, N+1 y bundle frontend |
-| E8 | `codex/migration-governance` | Reglas futuras para DDL/DML y despliegues |
+1. **La evidencia manda.** Un ítem entra al plan con archivo y símbolo. Lo que no se verificó va a
+   *condicional*, no a *confirmado*.
+2. **Retirar antes que endurecer.** Para un endpoint sin consumidor, la respuesta es borrarlo. No
+   se diseñan abilities, compatibilidad dual ni monitoreo para algo que no llama nadie.
+3. **Endurecer lo que existe, no reemplazarlo.** Ser público sin login no es por sí solo un
+   defecto si el token es la credencial del flujo. La tarea es cerrar las brechas medidas.
+4. **Las convenciones del repositorio ganan.** Sin DTOs, sin `JsonResource`, sin tocar el stack de
+   identificación de vehículo, sin `window.confirm()`. Ver `CLAUDE.md` raíz y del sub-proyecto.
+5. **Cambios pequeños y reversibles.** Una rama y una unidad de despliegue por entrega.
+6. **Pruebas sin efectos externos.** Ninguna prueba depende de Internet ni envía mensajes, correo,
+   archivos o requests reales.
+7. **Validación en el borde.** Form Requests y `validated()` para entradas HTTP; a los servicios se
+   les pasan arrays con campos permitidos.
+8. **Observabilidad sin PII ni credenciales.** Identificadores técnicos, resultado, latencia y
+   código de error. Nunca el token del flujo ni el payload completo.
+9. **Sin modificar migraciones ejecutadas.** Cualquier corrección de esquema o datos va en una
+   migración nueva, y el backfill va separado del DDL.
 
-No avanzar a E4 mientras E3 no garantice una suite confiable. No desplegar E5 sin backup y procedimiento de rollback probado.
+## 5. Entregas y orden
 
-## 5. Fase 0 — Preparación y línea base
+| # | Entrega | Rama | Contenido | Depende de |
+|---|---|---|---|---|
+| E1 | Alcance y reglas | `remediacion/alcance-evidencia` | Esta revisión, índice, roadmap, reporte de evidencia | — |
+| E2 | Aislamiento de pruebas | `remediacion/test-isolation` | Fakes, `preventStrayRequests`, presupuesto de memoria medido | E1 |
+| E3 | Endurecer checkout | `remediacion/checkout-hardening` | C-01 a C-05 | E2 |
+| E4 | Retirar rutas huérfanas | `remediacion/retirar-rutas-huerfanas` | C-13 a C-16, sujeto a K-01/K-02 | E2, K-01 |
+| E5 | Settings | `remediacion/settings-secretos` | C-06 a C-09, sujeto a K-03 | E2 |
+| E6 | Dependencias | `remediacion/dependency-security` | C-18, sujeto a K-04 | E2 |
+| E7 | Brechas HTTP pendientes | `remediacion/http-gaps` | Lo que quede de C-16/C-17 y timeouts sin cubrir | E2 |
+| — | CI | entrega propia | Ver sección 12 | E2 |
+| — | N+1 | entrega propia | Ver sección 12 | E2 |
+| — | Frontend | entrega propia | Ver sección 12 | — |
 
-**Prioridad:** inmediata  
-**Duración estimada:** 0,5–1 día  
-**Dependencias:** ninguna
+E2 va primero de todo el trabajo de código: sin una suite que no salga a la red, ninguna otra
+entrega se puede verificar con seguridad.
+
+## 6. E1 — Alcance, evidencia y reglas
+
+**Prioridad:** inmediata · **Duración:** 0,5 día
 
 ### Tareas
 
-- Capturar `git status`, commit base, versiones de PHP/Node/Composer/npm y hashes de ambos lockfiles.
-- Identificar propietarios y consumidores de cada ruta de `routes/api.php`:
-  - frontend web/Inertia;
-  - chat web;
-  - agentes o tools internos;
-  - aplicación móvil;
-  - integraciones externas;
-  - endpoints obsoletos o de prueba.
-- Confirmar entornos y dominios donde se encuentran accesibles `/api/tools/test`, `/api/dev/*`, `/api/v1/quotes`, `/api/web-chat/v1/tools/*`, `/api/tools/*` y `/api/quotes/{quote}/raw`.
-- Recolectar métricas de uso de esas rutas sin almacenar payloads: cantidad, caller conocido, status y última utilización.
-- Definir para cada consumidor uno de estos mecanismos:
-  - sesión/autenticación web;
-  - token Sanctum con abilities;
-  - firma HMAC con timestamp y protección contra replay;
-  - red interna/mTLS en infraestructura;
-  - eliminación si no tiene consumidor vigente.
-- Ejecutar y conservar la línea base de las verificaciones de la sección 12.
-
-### Decisión obligatoria
-
-No asumir que todas las tools pueden usar el mismo guard. El cierre de rutas exige aprobar una matriz **ruta → consumidor → identidad → permiso → rate limit**. Si un consumidor no puede autenticarse todavía, aplicar temporalmente una firma HMAC o deshabilitar la ruta; no dejarla pública como compatibilidad implícita.
+- Reemplazar la r1 por esta revisión *(hecho)*.
+- Indexar el documento en `docs/README.md` y registrarlo en `ROADMAP.md`.
+- Levantar el reporte de evidencia de 3.2: commit, hashes de lockfiles, fecha, advisories por
+  paquete, y la salida de la matriz de verificación de la sección 9 asociada al commit base.
+- Abrir la confirmación operativa de K-01 (conteo de accesos por ruta, ventana de 30 días).
 
 ### Criterios de aceptación
 
-- Existe una matriz aprobada para todas las rutas señaladas.
-- Se conoce qué endpoints pueden eliminarse.
-- Hay un resultado reproducible de pruebas, audits y build asociado al commit base.
+- El documento está indexado y en el roadmap.
+- Existe un reporte reproducible asociado a un commit concreto.
+- K-01 tiene una fecha de respuesta.
 
 ### Rollback
 
-No aplica: esta fase es de inventario y no cambia comportamiento.
+No aplica: no cambia comportamiento.
 
-## 6. Fase 1 — Cerrar la superficie pública de API
+## 7. E2 — Aislamiento y presupuesto de pruebas
 
-**Prioridad:** crítica  
-**Duración estimada:** 2–4 días  
-**Dependencias:** Fase 0
+**Prioridad:** alta, bloqueante · **Duración:** 2-4 días
 
-### 6.1 Rutas de cotización y tools
+### Tareas
 
-Archivos principales:
-
-- `routes/api.php`.
-- `app/Http/Controllers/QuoteController.php`.
-- `app/Http/Controllers/ToolsController.php`.
-- `app/Services/QuoteService.php`.
-- `bootstrap/app.php` si hace falta registrar middleware o normalizar errores.
-
-Acciones:
-
-1. Agrupar `/api/v1/quotes`, `/api/web-chat/v1/tools/*` y `/api/tools/*` bajo el middleware aprobado en la matriz.
-2. Definir abilities de Sanctum por capacidad, por ejemplo `quotes:create`, `tools:execute` y `quotes:raw:read`, evitando tokens con `*` para integraciones.
-3. Agregar rate limiters nombrados por identidad autenticada y fallback por IP. Separar límites de lectura, cotización costosa y mutaciones.
-4. Mantener el webhook de WhatsApp fuera de Sanctum, pero conservar la verificación HMAC existente y agregar tests de firma inválida, timestamp/replay si el proveedor lo permite y límites de tamaño.
-5. Retirar o deshabilitar las tools marcadas como “sin implementar” si no tienen consumidor vigente. Una respuesta `404` es preferible a un stub mutante público.
-6. Establecer respuestas JSON uniformes para `401`, `403`, `404`, `422` y `429`, sin trazas ni detalles internos.
-
-### 6.2 Respuesta raw de cotizaciones
-
-El endpoint `GET /api/quotes/{quote}/raw` no debe usar un ID enumerable como única barrera.
-
-Acciones:
-
-- Preferencia: convertirlo en endpoint exclusivamente administrativo/interno con autorización explícita.
-- Si debe existir una vista pública, exponer un recurso específico mediante token aleatorio no enumerable y expiración; no reutilizar el payload raw.
-- Crear un `QuoteResource`/recurso dedicado con allowlist de campos.
-- Excluir siempre `raw_response`, referencias del proveedor, tokens internos, errores con stack trace y metadata no contractual.
-- Evitar serializar relaciones completas con `toArray()`.
-
-### 6.3 Endpoints de prueba y desarrollo
-
-- Eliminar `/api/tools/test` o limitarlo a testing/local más autenticación administrativa.
-- Reemplazar el chequeo negativo `! app()->isProduction()` de `/api/dev/*` por una allowlist positiva de entornos (`local`, y solo si se aprueba `testing`).
-- Agregar una segunda barrera para operaciones destructivas: autorización administrativa y feature flag desactivado por defecto.
-- En producción, comprobar mediante test que ninguna ruta `api/dev/*` se registra.
-
-### Pruebas Pest mínimas
-
-- Cada ruta sensible rechaza requests anónimos.
-- Cada ability incorrecta devuelve `403`.
-- Los límites devuelven `429` sin ejecutar el servicio.
-- El recurso público de quote no contiene campos internos.
-- Un usuario/token no puede leer una quote ajena.
-- Los endpoints de desarrollo no existen bajo `APP_ENV=production`.
-- El webhook válido funciona y una firma inválida falla sin procesar el mensaje.
+- En los cuatro casos de éxito de `SiniestroTest`, usar `Queue::fake()` o sustituir el dispatcher
+  por un fake del contrato, y afirmar que se encoló el mensaje correcto. El transporte de Meta se
+  cubre aparte, en el test de `WhatsAppOutboundService` con `Http::fake()`.
+- Agregar `Http::preventStrayRequests()` para toda la suite. Decidir y documentar el alcance sobre
+  `tests/Unit`, que hoy no está atado a `TestCase` (C-11). Colgar los fakes globales de
+  `tests/TestCase.php`, junto a los stubs que ya viven ahí (R-06).
+- Extender el criterio a Storage, Mail, Notifications y Events donde haya efecto externo.
+- **Medir** el pico de memoria de la suite y fijar el presupuesto a partir de esa medición, con
+  margen. Agregar un script Composer que lo aplique sin depender del `php.ini` local (C-12).
+  No se fija un objetivo previo a la medición.
+- No ejecutar suites concurrentes contra `workflow-assistant-test`: las migraciones simultáneas
+  duplican tablas y tipos en PostgreSQL.
 
 ### Criterios de aceptación
 
-- No quedan tools mutantes accesibles anónimamente.
-- No se puede obtener `raw_response` usando IDs consecutivos.
-- El inventario de rutas coincide con la matriz aprobada.
-- Logs y métricas no revelan credenciales durante pruebas de autorización.
-
-### Despliegue y rollback
-
-- Emitir credenciales/abilities antes de activar la protección.
-- Desplegar consumidores compatibles antes o junto con el backend.
-- Monitorear `401`, `403` y `429` por ruta durante 24–48 horas.
-- Rollback preferido: feature flag temporal que acepte ambos mecanismos durante una ventana corta y registrada. No reabrir indefinidamente el acceso anónimo.
-
-## 7. Fase 2 — Validación, autorización y logging seguro
-
-**Prioridad:** alta  
-**Duración estimada:** 3–5 días  
-**Dependencias:** Fase 1
-
-### 7.1 Form Requests y payloads
-
-- Crear Form Requests mediante `php artisan make:request --no-interaction` para cada contrato distinto de Quote y Tools.
-- Definir `authorize()` coherente con abilities/policies de la Fase 1.
-- Usar reglas en arrays, límites máximos, enums/allowlists y validación de arrays anidados.
-- Reemplazar todos los `$request->all()` por `$request->validated()`.
-- Pasar a servicios arrays con shape documentado o DTOs existentes; no pasar objetos Request a la capa de dominio.
-- Validar especialmente URLs, IDs externos, texto libre, archivos, MIME real, tamaño y cantidad de elementos.
-- Migrar gradualmente las validaciones inline detectadas en:
-  - `CoverageDocumentController`;
-  - `PolizaController`;
-  - `CheckoutController`;
-  - `Mobile/EmergencyController`;
-  - `Admin/StudioController`.
-
-### 7.2 Autorización por recurso
-
-- Inventariar mutaciones administrativas y de objetos de usuario.
-- Crear o completar Policies para Quote, Customer, Poliza, documentos y recursos compartidos.
-- Aplicar autorización antes de cargar datos sensibles o ejecutar side effects.
-- Añadir tests de acceso cruzado entre dos usuarios/PAS y tests por rol.
-
-### 7.3 Redacción de logs
-
-- Sustituir el log del request completo por un contexto allowlisted: request/correlation ID, nombre de operación, actor, entidad, duración y resultado.
-- Redactar claves con nombres como `token`, `authorization`, `secret`, `password`, `card`, `cbu`, `documento`, `phone`, `email` y equivalentes anidados.
-- No registrar cuerpos crudos de proveedor salvo en un almacén cifrado, de acceso restringido, con TTL y finalidad aprobada.
-- Definir retención y acceso para logs que contengan identificadores de cliente.
-
-### Pruebas Pest mínimas
-
-- Dataset por campo inválido y límite de tamaño.
-- Campos no declarados son ignorados y no llegan al servicio.
-- Payloads anidados malformados retornan `422`.
-- Policies rechazan acceso cruzado.
-- Logs de errores no contienen valores secretos de un payload centinela.
-
-### Criterios de aceptación
-
-- No hay `$request->all()` en los controllers de Quote/Tools.
-- Toda mutación tiene validación y autorización explícitas.
-- No aparecen PII ni tokens centinela al inspeccionar logs de pruebas.
-
-### Rollback
-
-- Los Form Requests pueden revertirse por endpoint sin tocar persistencia.
-- Mantener temporalmente compatibilidad de nombres mediante normalización previa validada, con fecha de eliminación; no aceptar campos arbitrarios.
-
-## 8. Fase 3 — Aislamiento y confiabilidad de pruebas
-
-**Prioridad:** alta y bloqueante  
-**Duración estimada:** 2–4 días  
-**Dependencias:** puede comenzar junto con Fase 1; debe terminar antes de actualizar dependencias
-
-### 8.1 Evitar tráfico externo
-
-Archivos principales:
-
-- `tests/Pest.php`.
-- `tests/Feature/Mobile/SiniestroTest.php`.
-- `app/Services/WhatsApp/CloudApiWhatsAppDispatcher.php`.
-- `app/Jobs/SendWhatsAppTemplate.php`.
-- tests de otras integraciones HTTP.
-
-Acciones:
-
-- En los cuatro casos de éxito de `SiniestroTest`, usar `Queue::fake()` o sustituir el dispatcher por un fake del contrato y afirmar que se encoló el mensaje correcto.
-- No probar el transporte de Meta en el test HTTP del controller; cubrir `WhatsAppOutboundService` por separado con `Http::fake()`.
-- Agregar `Http::preventStrayRequests()` globalmente para tests, habilitando únicamente URLs falsificadas de forma explícita.
-- Aplicar equivalentes para Storage, Mail, Notifications, Events y colas donde exista side effect.
-- Verificar que los fakes se activen después de crear fixtures cuando listeners de modelo sean parte del setup.
-
-### 8.2 Memoria y base de datos
-
-- Perfilar la suite para identificar crecimiento de contenedor, listeners, mocks y datasets retenidos.
-- Ejecutar Unit y Feature secuencialmente contra la misma base, o asignar bases aisladas por proceso si se habilita paralelismo.
-- No ejecutar suites concurrentes contra `workflow-assistant-test`: las migraciones simultáneas producen tablas/tipos duplicados en PostgreSQL.
-- Evaluar `LazilyRefreshDatabase` donde respete el aislamiento existente.
-- Definir un límite explícito de memoria para CI. Objetivo: completar con 256 MB; aceptación inicial: 512 MB documentados mientras se corrige el crecimiento.
-- Añadir un script Composer estable, por ejemplo uno que invoque Pest con la configuración de memoria acordada, sin depender del `php.ini` local.
-
-### 8.3 CI
-
-Pipeline mínimo:
-
-1. instalar dependencias desde lockfiles;
-2. validar Composer;
-3. preparar PostgreSQL de testing aislado;
-4. ejecutar PHPStan;
-5. ejecutar Pint en modo test;
-6. ejecutar Pest con stray requests bloqueados;
-7. ejecutar audit de dependencias;
-8. ejecutar build frontend;
-9. conservar reportes y tiempos.
-
-### Criterios de aceptación
-
-- `SiniestroTest.php`: 6 aprobadas, 0 fallidas.
+- `SiniestroTest`: 6 aprobadas, 0 fallidas.
 - Suite total: 0 fallos y 0 requests externos no declarados.
-- Dos ejecuciones consecutivas producen el mismo resultado.
-- El comando oficial no agota memoria.
-- Un test deliberado de request no falsificado falla inmediatamente por `preventStrayRequests()`.
+- Dos ejecuciones consecutivas dan el mismo resultado.
+- Un test deliberado con un request no falsificado falla por `preventStrayRequests()`.
+- El comando oficial termina dentro del presupuesto medido, documentado con el número medido.
 
 ### Rollback
 
-- Los fakes son cambios exclusivos de testing.
-- Si `preventStrayRequests()` descubre demasiadas dependencias, activarlo primero por suite y elevarlo a global una vez cubiertas; no eliminarlo como solución definitiva.
+Son cambios exclusivos de testing. Si `preventStrayRequests()` descubre demasiadas dependencias,
+se activa primero por suite y se eleva a global cuando estén cubiertas; no se elimina.
 
-## 9. Fase 4 — Actualización segura de dependencias
+## 8. E3 — Endurecer el checkout
 
-**Prioridad:** crítica  
-**Duración estimada:** 3–6 días  
-**Dependencias:** Fase 3
+**Prioridad:** crítica · **Duración:** 2-3 días
 
-### 9.1 PHP/Composer
+Es la única superficie pública con tráfico real: WhatsApp manda el link, el cliente sube siete
+fotos y carga datos de tarjeta. Los controles de R-02 a R-04 ya existen; esto cierra las brechas
+medidas, no los reemplaza.
 
-Paquetes prioritarios detectados:
+### Tareas
 
-- `laravel/framework`;
-- `mtdowling/jmespath.php`;
-- `dompdf/dompdf`;
-- `guzzlehttp/guzzle` y `guzzlehttp/psr7`;
-- `league/commonmark`;
-- componentes Symfony afectados: HttpFoundation, HttpKernel, Mailer, Mime, Routing, YAML y polyfill IDN.
+- **C-01** Throttle en `checkout.upload-photo`, `checkout.delete-photo` y `checkout.submit`. Los
+  límites se eligen por perfil de uso: subir siete fotos es una ráfaga legítima, enviar el
+  formulario no.
+- **C-02** Verificar que cada `photo_id` recibido pertenezca a la cotización antes de construir su
+  URL. La fuente de verdad son las filas de `InspectionPhoto` de esa quote, no el string del
+  cliente.
+- **C-03** Lista de valores permitidos para `photo_key`, derivada de las claves de inspección que
+  el flujo define. Deja de ser texto libre interpolado en un path.
+- **C-04** Sacar `checkout_token` del contexto de log del `catch`. Se registra `quote_id`, clase de
+  excepción, mensaje y ubicación. El `trace` va con criterio, sin el token.
+- **C-05** Idempotencia de `submit()` por cotización: un segundo envío concurrente no debe duplicar
+  `CheckoutSession`, correo ni transición de fotos.
+- Revisar que ninguna otra ruta del flujo registre el token.
 
-Acciones:
+### Pruebas Pest mínimas
 
-1. Ejecutar `composer why <paquete>` y `composer prohibits <paquete> <versión-segura>` para conocer restricciones.
-2. Actualizar primero parches/minors dentro de los constraints existentes usando una lista explícita y `--with-all-dependencies` solo cuando sea necesario.
-3. Subir Laravel al menos a una versión no afectada por el advisory identificado (`>=13.12.0`, sujeto a confirmar el advisory vigente al implementar).
-4. Actualizar JMESPath a una versión corregida (`>=2.9.1`, sujeto a confirmación del advisory).
-5. Actualizar Dompdf al menos a la versión corregida por los advisories detectados (`>=3.1.6`, sujeto a confirmación).
-6. Verificar generación de PDFs, HTTP clients, Markdown, correo, URLs firmadas y routing con tests específicos.
-7. No silenciar advisories salvo justificación documentada con alcance, mitigación, propietario y fecha de expiración.
+- Un `photo_id` de otra cotización es rechazado y no llega a `photo_paths`.
+- Un `photo_key` fuera de la lista permitida devuelve `422`.
+- La ráfaga supera el límite y devuelve `429` sin ejecutar el servicio.
+- Dos `submit()` concurrentes producen una sola sesión y un solo correo.
+- El log de un `submit()` fallido no contiene el token centinela.
+- Se conserva lo que ya funciona: token inválido, estado no `checkout_pending` (`409`), MIME
+  rechazado y archivo de más de 10 MB.
 
-### 9.2 JavaScript/npm
+### Criterios de aceptación
 
-Dependencias directas afectadas detectadas: `axios`, `vite` y `shadcn-vue`; también existen vulnerabilidades transitivas en Rollup, Hono, Undici, PostCSS, Lodash ES y otras.
+- No se puede asociar a una cotización una foto que no es suya.
+- El token no aparece en ningún log del flujo.
+- Los controles preexistentes siguen probados, no solo presentes.
 
-Acciones:
+### Rollback
 
-- Confirmar si Axios sigue siendo necesario. Inertia v3 eliminó su necesidad como cliente implícito; si no hay imports reales, retirarlo.
-- Si se usa, actualizarlo a una versión corregida y probar interceptores/requests.
-- Actualizar Vite y su ecosistema compatible; validar especialmente el dev server en Windows.
-- Ejecutar `npm audit fix --dry-run` antes de cualquier actualización automática.
-- No usar `npm audit fix --force` sin revisar el cambio mayor propuesto para `shadcn-vue`.
-- Resolver el árbol transitivo actualizando el paquete padre; evitar overrides permanentes salvo mitigación temporal documentada.
+Reversible por ruta. El throttle se configura por `config()` para poder ajustarlo sin redeploy
+estructural si aparecen falsos positivos.
 
-### Verificación obligatoria por lote
+## 9. E4 — Retirar rutas huérfanas
 
-```text
+**Prioridad:** alta · **Duración:** 0,5-1 día · **Bloqueada por K-01**
+
+### Tareas
+
+- Con K-01 confirmado, retirar `POST /api/tools/test` (C-13), las seis `POST /api/tools/*` sin
+  implementar (C-15), `GET /api/quotes/{quote}/raw` (C-14) y `POST /api/v1/quotes` (C-16).
+- Retirar del `ToolsController` los métodos que quedan sin ruta, y su logging de request completo.
+- Si K-01 devuelve tráfico real en alguna, esa ruta **no se retira**: pasa a E7 con su propio
+  mecanismo de identidad, y ahí sí aplica una allowlist de campos armada en el controller (D-03).
+- `/api/web-chat/v1/tools/*` **no se toca** hasta que K-02 tenga respuesta.
+- Reemplazar el chequeo negativo `! app()->isProduction()` de `/api/dev/*` por una lista positiva
+  de entornos, y agregar un test de que ninguna ruta `api/dev/*` se registra bajo
+  `APP_ENV=production`.
+
+### Criterios de aceptación
+
+- El inventario de rutas coincide con la matriz de la sección 2.
+- No queda ninguna tool mutante accesible de forma anónima.
+- No se puede obtener `raw_response` con IDs consecutivos.
+- Existe un test que falla si `api/dev/*` aparece en producción.
+
+### Rollback
+
+`git revert` de la entrega. No hay migración de datos ni consumidores que reconfigurar — ése es
+justamente el resultado de K-01.
+
+## 10. E5 — Settings: lectura, escritura y secretos
+
+**Prioridad:** alta · **Duración:** 1-2 días
+
+La r1 dimensionaba esto como una migración de datos riesgosa. No lo es: el defecto está repartido
+entre lectura, escritura y caché, y el backfill es condicional (K-03). Pero es más que
+presentación, y **C-07 es un bug activo que hoy borra secretos**.
+
+### Tareas
+
+- **C-07 primero.** `updateGroup()` tiene que sacar la key de `$incoming` —no solo saltear su
+  validación— cuando el setting es secreto y llega vacío. Es una pérdida de datos silenciosa.
+- **C-06** Dejar de enviar `value` de los settings secretos en el payload de Inertia. La vista
+  recibe si hay valor cargado y cuándo se actualizó, no el valor. `$hidden` en el modelo se agrega
+  como red, sabiendo que **no impide** un `'value' => $s->value` escrito a mano.
+- **C-08** El cifrado tiene que aplicarse en el camino de escritura real. Con `where()->update()`
+  de query builder no corren casts ni mutators: o el guardado pasa por instancias del modelo, o el
+  cifrado se hace explícito dentro de `saveGroup()`. Elegir uno y dejarlo escrito.
+- **C-09** Decidir qué pasa con la caché: o los secretos no entran a `loadAll()`, o entran
+  cifrados y se descifran en el punto de uso. Hoy quedan una hora en la tabla `cache`.
+- **K-03** Comando de conteo por entorno de filas con `is_secret = true`. Reporta cantidad, nunca
+  valores. El backfill se ejecuta solo donde el conteo sea mayor que cero, es idempotente y va en
+  un comando aparte, no dentro de una migración DDL.
+- Documentar que rotar `APP_KEY` obliga a recifrar.
+
+### Pruebas Pest mínimas
+
+- Guardar el grupo con el campo secreto vacío **conserva** el valor anterior (test de C-07).
+- Guardar el grupo con un valor nuevo lo reemplaza y la integración lo recibe utilizable.
+- La respuesta de Inertia de la vista de settings no contiene el valor de ningún secreto.
+- `toArray()` / JSON del modelo nunca incluye `value`.
+- Un secreto guardado no queda en texto plano en la base.
+- Un valor no secreto conserva su comportamiento exacto.
+- El comando de conteo no emite valores.
+- El backfill es idempotente.
+
+### Criterios de aceptación
+
+- El bug de borrado silencioso tiene test de regresión.
+- Ningún secreto sale hacia el navegador ni queda en texto plano en base ni en caché.
+- El conteo por entorno está ejecutado y registrado antes de cualquier backfill.
+
+### Rollback
+
+Durante la ventana de lectura compatible, el artefacto anterior no puede desplegarse después de
+cifrar si no sabe leer lo cifrado: el rollback incluye el artefacto compatible, no solo el revert
+del código. Nunca se descifra en masa a texto plano como maniobra de rollback.
+
+## 11. E6 — Actualización de dependencias
+
+**Prioridad:** crítica · **Duración:** 3-6 días · **Depende de E2**
+
+### Tareas
+
+1. Adjuntar el reporte reproducible de 3.2 con el estado **al implementar**, no el del corte.
+2. `composer why` y `composer prohibits` antes de tocar cada constraint.
+3. Actualizar por lotes: primero parches y minors dentro de los constraints vigentes, con lista
+   explícita; `--with-all-dependencies` solo cuando haga falta.
+4. Paquetes bajo observación al corte: `laravel/framework`, `mtdowling/jmespath.php`,
+   `dompdf/dompdf`, `guzzlehttp/guzzle` y `psr7`, `league/commonmark`, y componentes Symfony
+   (HttpFoundation, HttpKernel, Mailer, Mime, Routing, YAML, polyfill IDN). Los umbrales de versión
+   se re-derivan con el audit del día (K-04).
+5. Verificar con tests específicos: generación de PDF, clientes HTTP, Markdown, correo, URLs
+   firmadas y routing.
+6. En JavaScript: confirmar si `axios` sigue teniendo imports reales —Inertia v3 lo eliminó como
+   cliente implícito— y retirarlo si no. Actualizar Vite y su ecosistema; validar el dev server en
+   Windows. `npm audit fix --dry-run` antes de cualquier automatismo; nunca `--force` sin revisar
+   el cambio mayor de `shadcn-vue`.
+7. Resolver el árbol transitivo actualizando el paquete padre. Overrides solo como mitigación
+   temporal documentada.
+8. No silenciar un advisory sin alcance, mitigación, responsable y fecha de expiración.
+
+### Verificación por lote
+
+```powershell
 composer validate --no-check-publish
 composer audit --locked
 php artisan test --compact
@@ -359,202 +395,47 @@ npm run build
 ### Criterios de aceptación
 
 - Cero vulnerabilidades críticas y altas en dependencias de producción.
-- Las moderadas restantes, si existen, tienen evaluación de aplicabilidad y ticket con vencimiento.
-- Lockfiles actualizados y reproducibles.
-- Suite, análisis estático y build pasan.
-
-### Despliegue y rollback
-
-- Separar actualización PHP y JavaScript si alguna exige cambios de código.
-- Conservar lockfiles anteriores para rollback atómico.
-- Desplegar a staging, ejecutar smoke tests y observar errores 5xx, colas, PDFs y clientes HTTP.
-- Rollback mediante redeploy del artefacto y lockfiles previos; no ejecutar downgrade destructivo de base de datos.
-
-## 10. Fase 5 — Cifrado de configuraciones secretas
-
-**Prioridad:** alta  
-**Duración estimada:** 2–4 días  
-**Dependencias:** backup verificado y diseño de rotación
-
-Archivos principales:
-
-- `app/Models/SystemSetting.php`.
-- `app/Services/SettingsService.php`.
-- controller y página administrativa de settings.
-- nueva migración/comando de backfill si existen valores secretos.
-
-### Diseño
-
-- Añadir `value` a `$hidden` para impedir serialización accidental.
-- No aplicar un cast `encrypted` indiscriminado a filas no secretas si la tabla mezcla ambos tipos.
-- Preferir un accessor/mutator o servicio de repositorio que cifre únicamente cuando `is_secret=true` y descifre en lectura autorizada.
-- Mantener en la UI el patrón “vacío significa conservar el secreto actual”; nunca devolver el valor descifrado al navegador.
-- Usar `APP_KEY`/encrypter de Laravel y documentar que una rotación de clave necesita recifrado.
-
-### Migración de datos
-
-1. Backup y prueba de restauración.
-2. Detectar filas secretas y formato actual.
-3. Implementar lectura compatible temporal: reconocer cifrado vs. legado plano.
-4. Ejecutar un comando idempotente, por chunks, que cifre únicamente valores legados.
-5. Verificar conteos y capacidad de uso de cada integración.
-6. Retirar la lectura legacy en una entrega posterior.
-
-No incluir el backfill dentro de una migración DDL de larga duración.
-
-### Pruebas Pest mínimas
-
-- Un secreto nuevo no aparece en texto plano en DB.
-- Un valor no secreto conserva su comportamiento.
-- `toArray()`/JSON nunca incluye `value`.
-- Dejar el campo vacío no borra el secreto.
-- La actualización reemplaza el secreto y la integración recibe el valor descifrado.
-- El comando de backfill es idempotente.
-
-### Criterios de aceptación
-
-- Cero valores secretos nuevos en texto plano.
-- Cero secretos en respuestas Inertia/API o logs.
-- Todos los valores legados han sido cifrados y verificados.
+- Las moderadas restantes tienen evaluación de aplicabilidad y vencimiento.
+- Lockfiles reproducibles y reporte adjunto.
 
 ### Rollback
 
-- Mantener backup cifrado y acceso restringido.
-- Durante la ventana compatible, el código anterior no debe desplegarse después de cifrar datos si no puede leerlos. El rollback debe incluir el artefacto compatible, no solo revertir código.
-- Nunca descifrar masivamente a texto plano como rollback operativo.
+Lockfiles anteriores conservados para rollback atómico. PHP y JavaScript se separan si alguno
+exige cambios de código. Redeploy del artefacto previo; nunca downgrade destructivo de base.
 
-## 11. Fase 6 — Resiliencia de clientes HTTP
+## 12. E7 y entregas independientes
 
-**Prioridad:** media  
-**Duración estimada:** 3–5 días  
-**Dependencias:** suite aislada
+### E7 — Brechas HTTP operativas pendientes
 
-Clientes detectados:
+Solo lo que quede sin cubrir después de E3/E4: `connectTimeout` y `timeout` explícitos por
+integración (Visred, WhatsApp, AFIP), reintentos únicamente sobre errores transitorios, sin
+reintentar mutaciones no idempotentes sin clave de idempotencia, y redacción de tokens en el
+contexto de error. **`DeepSeekProbe` queda fuera** (D-01). Los presupuestos de cola no se tocan
+(R-01).
 
-- VisredClient y VisredDocumentService.
-- WhatsAppAdapter y WhatsAppOutboundService.
-- AfipSoapService.
-- DeepSeekProbe.
+### CI — entrega propia
 
-### Política común
+No existe `.github/workflows/`. Es infraestructura nueva —runner, servicio PostgreSQL, secretos—
+con costo propio, y en la r1 estaba escondida dentro de la fase de tests. Pipeline mínimo:
+dependencias desde lockfiles, `composer validate`, PostgreSQL aislado, PHPStan, Pint en modo test,
+Pest con requests externos bloqueados, audit, build, y conservación de reportes y tiempos.
 
-- Definir `connectTimeout` corto y `timeout` total por integración/configuración.
-- Reintentar solo errores transitorios: conexión, `408`, `429` y `5xx` seleccionados.
-- No reintentar mutaciones no idempotentes sin idempotency key o garantía del proveedor.
-- Usar backoff exponencial con jitter y respetar `Retry-After` cuando exista.
-- Llamar `throw()` o mapear status a excepciones de dominio; no devolver éxitos parciales silenciosos.
-- Redactar tokens y payloads en contexto de errores.
-- Registrar integración, operación, intento, latencia, status y correlation ID.
-- Alinear timeout de jobs y `retry_after`: el segundo debe superar al timeout del job.
+### Detección de N+1 — entrega propia
 
-### Caso especial DeepSeek
+`Model::preventLazyLoading()` no está hoy en `app/Providers/`. Activarlo en no-producción convierte
+cada carga perezosa en excepción sobre una suite de 1036 tests: el costo es desconocido hasta que
+se prende. Se activa, se mide cuántos casos aparecen, y recién ahí se planifica. No se desactiva
+globalmente ante el primer fallo.
 
-Revisar el timeout total de 400 segundos. Si es realmente necesario, mover la operación a una cola específica con límites coherentes, cancelación y alerta; no retener requests web.
+### Frontend — entrega propia
 
-### Pruebas Pest mínimas
+Corregir el selector CSS inválido de `[data-theme="dark"]` combinado con `@media` y la referencia
+sin resolver `...chevron...`. Objetivo: cero advertencias propias en `npm run build`. El code
+splitting se decide con medición antes y después; se documenta una excepción si el chunk inicial
+no baja de 500 KB minificado. Rector queda acá, por lotes de una regla, nunca los 39 archivos
+juntos, y separado de los fixes funcionales para poder revertirlo solo.
 
-- Respuesta exitosa.
-- Timeout de conexión.
-- Timeout total.
-- `429` con reintento.
-- `500/503` con número exacto de intentos.
-- `400/401/403/422` sin reintento.
-- Mutación no idempotente sin duplicación.
-- Excepción final sin token ni PII.
-
-### Criterios de aceptación
-
-- Todo request HTTP tiene `connectTimeout` y `timeout` explícitos.
-- La política de retry está probada y documentada por operación.
-- Los workers no quedan retenidos más allá del presupuesto definido.
-
-### Rollback
-
-- Configurar timeouts y retries mediante `config()` para poder ajustar valores sin cambios estructurales.
-- Revertir por integración si aumentan falsos timeouts; conservar límites máximos seguros.
-
-## 12. Fase 7 — Calidad, rendimiento y frontend
-
-**Prioridad:** media/baja  
-**Duración estimada:** 3–6 días  
-**Dependencias:** fases críticas estabilizadas
-
-### 12.1 Pint y Rector
-
-- Corregir el orden de imports/strict types de `tests/Feature/ProcessMediaAttachmentTest.php` ejecutando Pint.
-- Ejecutar `vendor/bin/pint --dirty --format agent` después de cada lote PHP.
-- Revisar los 39 cambios propuestos por Rector por categorías pequeñas:
-  - tipos de retorno/parámetros;
-  - código muerto;
-  - early returns;
-  - readonly;
-  - transformaciones potencialmente semánticas.
-- No aplicar los 39 cambios en bloque. Cada lote requiere tests focalizados y suite completa.
-- Tratar con especial cautela transformaciones que cambian condiciones, concatenación nullable, `property_exists` o tipos concretos.
-
-### 12.2 Detección de N+1
-
-- Activar `Model::preventLazyLoading(! app()->isProduction())` en `AppServiceProvider`.
-- Ejecutar tests y recorridos de pantallas administrativas para descubrir accesos perezosos.
-- Corregir cada caso con eager loading/selects mínimos; no desactivar globalmente la protección ante el primer fallo.
-- Agregar tests de conteo de consultas solo en recorridos críticos y estables.
-
-### 12.3 Build frontend
-
-- Localizar y corregir el selector CSS inválido asociado a la combinación de `[data-theme="dark"]` con `@media`.
-- Localizar la referencia literal/no resuelta `...chevron...` y convertirla en un asset importado o URL válida.
-- Analizar el bundle con una herramienta de visualización de Rollup de uso temporal o aprobada; no sumar dependencia permanente sin autorización.
-- Aplicar imports dinámicos a páginas/rutas administrativas pesadas y librerías usadas en una sola pantalla.
-- Evitar dividir dependencias pequeñas si aumenta requests sin reducir carga inicial materialmente.
-- Mantener compatibilidad con Inertia/Vue y estados de carga cuando una página se vuelva lazy.
-
-### Objetivos medibles
-
-- Cero warnings propios del proyecto en `npm run build`.
-- Reducir el chunk inicial por debajo de 500 KB minificado, o documentar una excepción respaldada por medición de carga.
-- Mantener o mejorar el tamaño gzip actual.
-- Smoke tests sin errores de JavaScript en landing, login, chat y principales páginas administrativas.
-
-### Rollback
-
-- Revertir individualmente lazy imports o manual chunks si empeoran navegación/caché.
-- Los cambios de Rector deben estar separados para poder revertirlos sin perder fixes funcionales.
-
-## 13. Fase 8 — Login móvil, migraciones y gobierno técnico
-
-**Prioridad:** media/baja  
-**Duración estimada:** 1–3 días  
-**Dependencias:** ninguna estricta; desplegar después de las fases críticas
-
-### Login móvil
-
-- Agregar rate limiter nombrado a `POST /api/mobile/v1/auth/session`.
-- Clave por combinación prudente de IP y fingerprint/identificador no sensible cuando esté disponible.
-- Devolver `429` uniforme y observar falsos positivos.
-- Registrar solo identificadores irreversibles/hashes, nunca Firebase ID tokens.
-- Probar éxito, token inválido, ráfaga y recuperación después de la ventana.
-
-### Migraciones futuras
-
-Las migraciones históricas con DDL+DML no deben editarse si ya se ejecutaron. Adoptar desde ahora:
-
-- una migración de esquema por preocupación;
-- backfills mediante comandos/jobs idempotentes y observables;
-- procesamiento por `chunkById`;
-- despliegues expand/migrate/contract para cambios incompatibles;
-- índices concurrentes o estrategia equivalente cuando PostgreSQL y el volumen lo exijan;
-- `down()` reversible cuando sea seguro; forward-fix documentado cuando no lo sea;
-- estimación de locks, volumen y tiempo antes de producción.
-
-### Criterios de aceptación
-
-- Login móvil tiene límite probado y monitoreable.
-- El próximo cambio con backfill sigue el patrón separado y sirve como referencia.
-- La checklist de PR exige evaluar DDL, DML, lock y rollback.
-
-## 14. Matriz global de verificación
-
-Ejecutar desde un árbol controlado y con servicios de testing aislados:
+## 13. Matriz global de verificación
 
 ```powershell
 composer validate --no-check-publish
@@ -570,91 +451,70 @@ npm run build
 git status --short --branch
 ```
 
-Para cambios PHP, ejecutar además antes de finalizar:
+Para cambios PHP, antes de cerrar: `vendor/bin/pint --dirty --format agent`.
 
-```powershell
-vendor/bin/pint --dirty --format agent
-```
+El entorno de pruebas debe impedir requests externos. Los audits necesitan acceso de red de solo
+lectura a Packagist y npm.
 
-El entorno de pruebas debe impedir requests externos. Los audits requieren acceso de red de solo lectura a Packagist/npm.
-
-## 15. Smoke tests de staging
+## 14. Smoke tests de staging
 
 Después de cada despliegue relevante:
 
 1. autenticación web y móvil;
-2. creación de cotización con caller autorizado;
-3. rechazo de caller anónimo o sin ability;
-4. presentación de alternativas sin campos raw;
+2. checkout completo: apertura por token, subida de las siete fotos, envío y correo;
+3. rechazo de `photo_id` ajeno y de `photo_key` no permitido;
+4. ráfaga que dispara `429` en las rutas de checkout;
 5. flujo de siniestro encolado, sin envío duplicado;
-6. webhook WhatsApp válido e inválido;
-7. emisión/generación de PDF con fixture seguro;
+6. webhook de WhatsApp válido e inválido;
+7. emisión y generación de PDF con fixture seguro;
 8. llamada controlada a Visred/AFIP en sandbox;
-9. actualización de setting secreto sin exposición;
+9. actualización de un setting secreto: se guarda, y guardarlo vacío no lo borra;
 10. landing, chat y panel administrativo sin errores de consola;
 11. procesamiento de colas y tareas programadas;
-12. revisión de logs para confirmar ausencia de secretos y PII centinela.
+12. revisión de logs: sin secretos, sin tokens de checkout, sin PII centinela.
 
-## 16. Observabilidad y métricas de éxito
+## 15. Observabilidad
 
-Medir durante al menos 48 horas después de E1, E4, E5 y E6:
+Medir 48 horas después de E3, E4, E5 y E6:
 
-- tasa de `401`, `403`, `422`, `429` y `5xx` por ruta;
-- latencia p50/p95/p99 de cotización, tools e integraciones;
+- tasa de `401`, `403`, `422`, `429` y `5xx` por ruta, con foco en las de checkout;
+- latencia p50/p95/p99 de checkout, cotización e integraciones;
 - reintentos y fallos finales por proveedor;
-- tiempo y memoria máxima de suite;
-- duración y tamaño del build;
-- tamaño del chunk inicial;
+- tiempo y memoria máxima de la suite;
+- duración y tamaño del build, y tamaño del chunk inicial;
 - fallos y duración de jobs por cola;
-- cantidad de secretos legacy pendientes de cifrado, sin registrar sus valores;
+- conteo de secretos legacy pendientes, sin registrar valores;
 - advisories abiertos por severidad y fecha objetivo.
 
-Alertas mínimas:
+Alertas mínimas: `429` que afecte clientes legítimos en el checkout; aumento de `5xx` en
+`checkout.submit`; reintentos sostenidos contra un proveedor; advisory crítico o alto nuevo en los
+lockfiles; request externo durante los tests; fallo del backfill.
 
-- incremento abrupto de `401/403` tras cierre de rutas;
-- tasa de `429` que afecte usuarios legítimos;
-- reintentos sostenidos o circuitos de proveedor degradados;
-- aparición de un advisory crítico/alto en lockfiles;
-- request externo durante tests;
-- fallo del backfill o valores secretos sin migrar.
-
-## 17. Riesgos y mitigaciones
+## 16. Riesgos
 
 | Riesgo | Probabilidad/impacto | Mitigación |
 |---|---|---|
-| Romper un consumidor al proteger rutas | Alta/Alta | Matriz de consumidores, ventana dual corta, métricas de 401/403 |
-| Actualización amplia de dependencias | Media/Alta | Lotes pequeños, lockfiles, suite estable antes de actualizar |
-| Envíos reales desde tests | Alta/Alta | `Http::preventStrayRequests`, Queue/Http fakes globales |
-| Cifrado deja datos ilegibles | Media/Alta | Backup, lectura dual temporal, comando idempotente y staging |
-| Retry duplica operaciones | Media/Alta | Idempotency keys y retry solo en operaciones seguras |
-| Rate limit bloquea usuarios legítimos | Media/Media | Límites por identidad, observabilidad y configuración ajustable |
-| Rector cambia semántica | Media/Media | PRs por regla, tests focalizados y revisión manual |
-| Code splitting empeora UX | Baja/Media | Medición antes/después y rollback por chunk |
+| El throttle del checkout corta una ráfaga legítima de siete fotos | Media/Alta | Límite por perfil de uso, configurable por `config()`, observado 48 h |
+| Retirar una ruta con un consumidor externo desconocido | Baja/Alta | K-01 antes de E4; si aparece tráfico, la ruta pasa a E7 en vez de retirarse |
+| El fix de C-07 no cubre otro camino de guardado | Media/Alta | Test de regresión sobre el comportamiento, no sobre la implementación |
+| Cifrar deja settings ilegibles | Baja/Alta | K-03 primero: si el conteo es cero no hay backfill; backup y lectura compatible si no lo es |
+| Actualización amplia de dependencias | Media/Alta | Lotes pequeños, lockfiles conservados, suite estable (E2) antes de empezar |
+| Envíos reales desde tests | Alta/Alta | `preventStrayRequests` y fakes globales en E2, que va primero |
+| `preventLazyLoading` destapa más de lo previsto | Alta/Media | Entrega propia, medir antes de planificar |
+| Rector cambia semántica | Media/Media | Lotes de una regla, revisión manual, separado de fixes funcionales |
 
-## 18. Definición de terminado
+## 17. Definición de terminado
 
-La remediación completa requiere evidencia adjunta al último PR o release:
+Con evidencia adjunta al último PR o release:
 
+- matriz de la sección 2 con cada ítem cerrado o justificado;
 - inventario final de rutas y controles;
-- salida exitosa de Pest, PHPStan, Pint y build;
-- salida de audits sin críticos/altos de producción, o excepciones temporales formalmente aceptadas;
+- salida exitosa de Pest, PHPStan, Pint y build, con el presupuesto de memoria medido;
+- reporte de audits reproducible, sin críticos ni altos de producción, o excepciones aceptadas con
+  vencimiento;
 - prueba de que los tests bloquean tráfico externo;
-- reporte del backfill de secretos con conteos, no valores;
+- reporte del conteo de secretos por entorno, con conteos y no valores;
+- `WorkerConfigTest` en verde sin haber sido editado;
 - métricas de staging y producción dentro de los umbrales;
-- procedimiento de rollback probado para dependencias y secretos;
-- `CHANGELOG.md` actualizado en español cuando se prepare el release.
-
-## 19. Orden recomendado resumido
-
-1. Preservar cambios actuales y levantar la línea base.
-2. Inventariar consumidores y aprobar el contrato de confianza.
-3. Cerrar rutas públicas y reducir la respuesta raw.
-4. Incorporar Form Requests, Policies y logging redactado.
-5. Bloquear side effects externos en Pest y estabilizar memoria/DB.
-6. Actualizar dependencias vulnerables por lotes.
-7. Cifrar settings secretos mediante migración compatible y backfill separado.
-8. Normalizar timeouts/retries de integraciones.
-9. Corregir Pint y aplicar Rector selectivamente.
-10. Resolver warnings y tamaño del bundle.
-11. Añadir rate limiting al login móvil y formalizar el patrón de migraciones.
-12. Ejecutar verificación completa, smoke tests, observación y release.
+- rollback probado para dependencias y settings;
+- `CHANGELOG.md` actualizado en español al preparar el release.
