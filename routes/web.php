@@ -165,13 +165,20 @@ Route::get('/privacy', function () {
 Route::get('/checkout/{token}', [CheckoutController::class, 'show'])
     ->name('checkout.show');
 
+// Las tres de escritura van con throttle: son anónimas (el token es la credencial) y
+// reciben archivos. Los límites salen del uso real — subir las 7-10 fotos es una ráfaga
+// legítima y hay reintentos por foto fallida, mandar el formulario no. Mismo middleware
+// inline que usan `cotizaciones.checkout`, `routes/mobile.php` y `routes/auth.php`.
 Route::post('/checkout/upload-photo', [CheckoutController::class, 'uploadPhoto'])
+    ->middleware('throttle:40,1') // opcion-de-configuracion: tope de subida de fotos por minuto
     ->name('checkout.upload-photo');
 
 Route::delete('/checkout/photo', [CheckoutController::class, 'deletePhoto'])
+    ->middleware('throttle:40,1') // opcion-de-configuracion: tope de borrado de fotos por minuto
     ->name('checkout.delete-photo');
 
 Route::post('/checkout/submit', [CheckoutController::class, 'submit'])
+    ->middleware('throttle:5,1') // opcion-de-configuracion: tope de envios del formulario por minuto
     ->name('checkout.submit');
 
 Route::get('/checkout/{quote}/success', [CheckoutController::class, 'success'])

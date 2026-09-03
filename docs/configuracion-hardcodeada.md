@@ -163,6 +163,20 @@ grep -rn "opcion-de-configuracion" workflow-assistant/
 | Máx. contactos de emergencia por cuenta (3) | `EmergencyContact::MAX_PER_ACCOUNT` | hardcodeado | **B?** — límite de producto |
 | Máx. shares activos por risk (2) | `SharedRisksController::MAX_ACTIVE_PER_RISK` | hardcodeado | **B?** — idem |
 | Regex de teléfono E.164 | `Mobile/EmergencyContactsController::PHONE_REGEX` | hardcodeado | **C** |
+| Tope de logins por minuto (10) | `routes/mobile.php` — `throttle:10,1` en `auth/session` | hardcodeado | **B** — se ajusta por entorno si aparecen falsos positivos |
+
+### 9.b Checkout público (límites de tasa)
+
+Las tres rutas de escritura del checkout son anónimas —el token de la cotización es la
+credencial— y reciben archivos, así que llevan límite por minuto. Los valores salen del uso
+real: subir las 7-10 fotos es una ráfaga legítima y hay reintentos por foto fallida, mandar
+el formulario no. Agregados en E2 del plan de seguridad (2026-09-03).
+
+| Valor | Ubicación | Valor actual / fuente | Destino |
+|---|---|---|---|
+| Tope de subida de fotos por minuto (40) | `routes/web.php` — `throttle:40,1` en `checkout.upload-photo` | hardcodeado | **A** — se toca sin deploy si un cliente legítimo choca |
+| Tope de borrado de fotos por minuto (40) | `routes/web.php` — `throttle:40,1` en `checkout.delete-photo` | hardcodeado | **A** |
+| Tope de envíos del formulario por minuto (5) | `routes/web.php` — `throttle:5,1` en `checkout.submit` | hardcodeado | **A** |
 
 ### 10. Keys fantasma (consumidas por `config()` sin existir en ningún config file)
 

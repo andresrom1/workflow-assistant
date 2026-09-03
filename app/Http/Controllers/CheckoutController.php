@@ -27,6 +27,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class CheckoutController extends Controller
 {
@@ -102,7 +103,9 @@ class CheckoutController extends Controller
     {
         $request->validate([
             'checkout_token' => 'required|string',
-            'photo_key' => 'required|string|max:50',
+            // `photo_key` se interpola en el path de almacenamiento, asi que sale de la
+            // lista del dominio y no llega como texto libre.
+            'photo_key' => ['required', 'string', Rule::in(InspectionPhoto::CLAVES)],
             'photo' => 'required|file|mimes:jpeg,jpg,png|max:10240',
         ]);
 
@@ -258,19 +261,55 @@ class CheckoutController extends Controller
             ]);
         }
 
-        // Validar cantidad de fotos en BD — valor configurable desde /admin/settings
-        $requiredPhotoCount = (int) app(SettingsService::class)->get('checkout.required_photos', 7);
-        $tempPhotosCount = InspectionPhoto::where('quote_id', $quote->id)
-            ->where('status', InspectionPhotoStatus::Temp)
-            ->count();
+        // Las fotos se resuelven contra las filas de ESTA cotización, no contra lo que mandó
+        // el cliente: `photo_ids` son paths que llegan del navegador y, validados solo por
+        // formato, permitían colgarle a este checkout archivos de otra cotización. Se rechaza
+        // en vez de filtrar en silencio, para no dejar pasar un envío con menos fotos de las
+        // que el cliente cree haber mandado. El mensaje no distingue "no existe" de "no es
+        // tuya": no se le confirma a nadie qué paths existen.
+        $recibidos = $validated['photo_ids'];
 
-        abort_if($tempPhotosCount < $requiredPhotoCount, 422, 'Faltan fotos de inspección o no fueron procesadas correctamente.');
+        if (count($recibidos) !== count(array_unique($recibidos))) {
+            throw ValidationException::withMessages([
+                'photo_ids' => 'Hay fotos repetidas en el envío. Recargá la página y volvé a intentarlo.',
+            ]);
+        }
+
+        $fotos = InspectionPhoto::where('quote_id', $quote->id)
+            ->where('status', InspectionPhotoStatus::Temp)
+            ->whereIn('storage_path', $recibidos)
+            ->get();
+
+        if ($fotos->count() !== count($recibidos)) {
+            throw ValidationException::withMessages([
+                'photo_ids' => 'Alguna de las fotos no corresponde a esta cotización. Recargá la página y volvé a intentarlo.',
+            ]);
+        }
+
+        // La cantidad se valida sobre el conjunto aceptado, no sobre el total de filas Temp:
+        // si no, un envío con paths ajenos podía "completar" el mínimo sin mandar las fotos.
+        $requiredPhotoCount = (int) app(SettingsService::class)->get('checkout.required_photos', 7);
+
+        abort_if($fotos->count() < $requiredPhotoCount, 422, 'Faltan fotos de inspección o no fueron procesadas correctamente.');
 
         // Ejecutar las mutaciones de BD en una transacción atómica.
         // try/catch para loguear el trace completo: sin esto el 500 del submit
         // es invisible (a diferencia de uploadPhoto, que sí captura y loguea).
         try {
-            DB::transaction(function () use ($quote, $alternative, $validated, $consolidation, $merge): void {
+            DB::transaction(function () use ($quote, $alternative, $validated, $consolidation, $merge, $fotos): void {
+
+                // 0. Serializar los envíos del mismo checkout. El guard de arriba lee el estado
+                // antes de la transacción, así que dos envíos simultáneos lo pasaban los dos y
+                // duplicaban emisión, aviso y mail. Con el lock tomado hay que RELEER: el valor
+                // de antes del lock ya es viejo. El 409 se relanza en el catch de abajo para que
+                // no lo trague el manejo genérico y salga como 500.
+                $bloqueada = Quote::whereKey($quote->id)->lockForUpdate()->firstOrFail();
+
+                abort_unless(
+                    $bloqueada->status === 'checkout_pending',
+                    409,
+                    'Esta cotización ya fue enviada o no está disponible.'
+                );
 
                 // 1. Guardar CheckoutSession
                 $session = CheckoutSession::updateOrCreate(
@@ -304,7 +343,7 @@ class CheckoutController extends Controller
                         'cc_expiry_encrypted' => Crypt::encryptString($validated['cc_expiry']),
                         'cc_holder_name_encrypted' => Crypt::encryptString($validated['cc_holder_name']),
                         'cc_holder_dni_encrypted' => Crypt::encryptString($validated['cc_holder_dni']),
-                        'photo_paths' => collect($validated['photo_ids'])->map(fn ($path) => Storage::disk('r2')->url($path))->toArray(),
+                        'photo_paths' => $fotos->pluck('storage_url')->all(),
                         'submitted_at' => now(),
                     ]
                 );
@@ -381,10 +420,15 @@ class CheckoutController extends Controller
 
                 Mail::to($recipient)->queue(new CheckoutCompletadoMail($quote, $session));
             });
+        } catch (HttpException $e) {
+            // Lo esperado (el 409 del recheck) no es un fallo del checkout: se relanza antes
+            // del manejo genérico para que el cliente reciba su status y no un 500.
+            throw $e;
         } catch (\Throwable $e) {
+            // Sin `checkout_token`: es la credencial del flujo, y quien lea el log podría
+            // operar el checkout con ella.
             Log::error('CheckoutController: submit falló dentro de la transacción', [
                 'quote_id' => $quote->id,
-                'checkout_token' => $token,
                 'exception' => $e::class,
                 'message' => $e->getMessage(),
                 'location' => $e->getFile().':'.$e->getLine(),
@@ -423,7 +467,7 @@ class CheckoutController extends Controller
     {
         $request->validate([
             'checkout_token' => 'required|string',
-            'photo_key' => 'required|string|max:50',
+            'photo_key' => ['required', 'string', Rule::in(InspectionPhoto::CLAVES)],
         ]);
 
         $quote = Quote::where('checkout_token', $request->input('checkout_token'))->firstOrFail();

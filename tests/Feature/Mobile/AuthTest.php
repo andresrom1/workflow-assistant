@@ -137,3 +137,18 @@ it('logout borra el token actual', function () {
 
     expect($account->fresh()->tokens()->count())->toBe(0);
 });
+
+/**
+ * Era la única ruta pública de mobile sin límite: intercambia un ID token por un Sanctum
+ * token, así que sin throttle se puede martillar sin costo.
+ */
+it('corta la ráfaga de logins con 429', function (): void {
+    fakeVerifier(identity());
+
+    for ($i = 0; $i < 10; $i++) {
+        $this->postJson('/api/mobile/v1/auth/session', ['firebase_token' => 'tok']);
+    }
+
+    $this->postJson('/api/mobile/v1/auth/session', ['firebase_token' => 'tok'])
+        ->assertStatus(429);
+});
