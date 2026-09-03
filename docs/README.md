@@ -24,6 +24,7 @@
 | [migracion-tier.md](migracion-tier.md) | **Planificado, sin ejecutar.** Bajar de tier de VM para cobrar el ahorro del refactor de colas: datos medidos (reposo), qué falta medir (el pico), opciones con el eje de latencia geográfica, procedimiento de corte y verificación. |
 | [colas-y-workers.md](colas-y-workers.md) | **Fuente viva** de la arquitectura de colas: conexiones, los dos invariantes, la topología de 3 workers residentes + `background` bajo demanda, inventario de jobs, el pipeline de inbox de WhatsApp y el costo medido. Supera a `v2/09`. |
 | [configuracion-hardcodeada.md](configuracion-hardcodeada.md) | Registro de la configuración marcada con `// opcion-de-configuracion`. |
+| [plan-remediacion-diagnostico-2026-09-02.md](plan-remediacion-diagnostico-2026-09-02.md) | **Propuesta ejecutable, sin ejecutar (revisión r2).** Remediación del diagnóstico técnico: matriz de hallazgos clasificados en *confirmado / ya resuelto / condicional / descartado* con evidencia por archivo y símbolo, siete entregas ordenadas (aislamiento de tests → checkout → rutas huérfanas → settings → dependencias), y CI, N+1 y frontend separados en entregas propias. La r1 está en `59cb2b0`. |
 
 ## Contexto de la arquitectura v2
 

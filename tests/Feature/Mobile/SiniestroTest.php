@@ -2,6 +2,7 @@
 
 use App\Enums\PolizaEstado;
 use App\Enums\UserRole;
+use App\Jobs\SendWhatsAppTemplate;
 use App\Models\Customer;
 use App\Models\MobileAccount;
 use App\Models\Poliza;
@@ -9,10 +10,43 @@ use App\Models\Risk;
 use App\Models\SharedRisk;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 
 uses(RefreshDatabase::class);
+
+/**
+ * El default de la suite es el driver `log` (lo fija phpunit.xml) para que ningún
+ * test le pegue a Meta con las credenciales del .env — con `cloud` + QUEUE_CONNECTION=sync
+ * el job de template corría inline contra la Cloud API. Los casos que verifican el
+ * aviso eligen el transporte real y falsifican la cola, igual que EmergencyDispatchTest.
+ */
+function transporteWhatsAppFalsificado(): void
+{
+    config([
+        'whatsapp.dispatch_driver' => 'cloud',
+        'whatsapp.templates.siniestro_aviso_pas' => ['name' => 'tpl_siniestro_test', 'language' => 'es_AR'],
+        'services.whatsapp.phone_number_id' => '999000111',
+    ]);
+
+    Queue::fake();
+}
+
+/**
+ * El destinatario viaja en una propiedad privada del job; se lee con un closure
+ * ligado en vez de exponerla solo para el test. El dispatcher normaliza el E.164
+ * a dígitos, así que la comparación va sobre esa forma.
+ */
+function assertAvisoAlPas(string $phoneE164): void
+{
+    $esperado = preg_replace('/\D/', '', $phoneE164);
+
+    Queue::assertPushed(
+        SendWhatsAppTemplate::class,
+        fn (SendWhatsAppTemplate $job): bool => (fn (): string => $this->waId)->call($job) === $esperado,
+    );
+}
 
 it('requiere autenticación', function (): void {
     $this->postJson('/api/mobile/v1/siniestro')
@@ -21,6 +55,8 @@ it('requiere autenticación', function (): void {
 });
 
 it('notifica al PAS del titular cuando hay Customer linkeado', function (): void {
+    transporteWhatsAppFalsificado();
+
     $pas = User::factory()->create([
         'role' => UserRole::Pas,
         'name' => 'Lucía Fernández',
@@ -42,9 +78,13 @@ it('notifica al PAS del titular cuando hay Customer linkeado', function (): void
             'pas' => ['name' => 'Lucía Fernández', 'phone' => '+5491156782341'],
         ])
         ->assertJsonStructure(['notified_at']);
+
+    assertAvisoAlPas('+5491156782341');
 });
 
 it('cae al fallback (PAS del titular del shared_risk de mayor sum_asegurada)', function (): void {
+    transporteWhatsAppFalsificado();
+
     // PAS de Tomás (titular del shared)
     $pasTomas = User::factory()->create([
         'role' => UserRole::Pas,
@@ -107,9 +147,13 @@ it('cae al fallback (PAS del titular del shared_risk de mayor sum_asegurada)', f
     $this->postJson('/api/mobile/v1/siniestro')
         ->assertOk()
         ->assertJson(['pas' => ['name' => 'Jorge Rivas']]); // titular del shared con mayor suma
+
+    assertAvisoAlPas('+5491187654321');
 });
 
 it('tier 2 funciona con invitación pendiente (sin accepted_at)', function (): void {
+    transporteWhatsAppFalsificado();
+
     $pasTomas = User::factory()->create([
         'role' => UserRole::Pas,
         'name' => 'Jorge Rivas',
@@ -147,9 +191,13 @@ it('tier 2 funciona con invitación pendiente (sin accepted_at)', function (): v
     $this->postJson('/api/mobile/v1/siniestro')
         ->assertOk()
         ->assertJson(['pas' => ['name' => 'Jorge Rivas']]);
+
+    assertAvisoAlPas('+5491187654321');
 });
 
 it('cae al PAS por default cuando no hay tier 1 ni 2', function (): void {
+    transporteWhatsAppFalsificado();
+
     config(['mango.default_pas_email' => 'default@mango.com']);
     User::factory()->create([
         'role' => UserRole::Pas,
@@ -167,6 +215,8 @@ it('cae al PAS por default cuando no hay tier 1 ni 2', function (): void {
     $this->postJson('/api/mobile/v1/siniestro')
         ->assertOk()
         ->assertJson(['pas' => ['name' => 'Andrés Romero']]);
+
+    assertAvisoAlPas('+5491100000000');
 });
 
 it('devuelve 422 NO_PAS_ASSIGNED si no hay PAS resoluble ni default', function (): void {
