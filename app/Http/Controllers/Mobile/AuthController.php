@@ -54,6 +54,23 @@ class AuthController extends Controller
             ], 422);
         }
 
+        // El email es la identidad de la app: `MobileAccount::resolveCustomer()` matchea al
+        // tomador por email, y `upsertMobileAccount()` ADOPTA una cuenta existente que lo
+        // tenga. Si llegara sin verificar, alguien podría registrarse con el correo de un
+        // cliente y quedarse con sus pólizas. Hoy en Firebase solo está habilitado Google,
+        // que siempre manda `email_verified: true`, así que esto no rechaza a nadie: pone la
+        // invariante en el código en vez de dejarla en una opción de la consola.
+        //
+        // Se comprueba el email PRESENTE, no su ausencia: Apple entrega el correo solo en el
+        // primer login y los siguientes llegan con null, contra un `firebase_uid` que ya
+        // existe — ahí no se decide nada por email y no hay nada que verificar.
+        if ($identity->email !== null && ! $identity->emailVerified) {
+            return response()->json([
+                'message' => 'Necesitamos que tu correo esté verificado para identificarte.',
+                'code' => 'email_not_verified',
+            ], 422);
+        }
+
         $account = $this->upsertMobileAccount($identity);
 
         $token = $account->createToken(

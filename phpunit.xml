@@ -49,6 +49,11 @@
              `npm run dev`), o sea que el resultado dependia de si alguien habia levantado el
              dev server en esa maquina. Ver Inertia HttpGateway::shouldDispatch(). -->
         <env name="INERTIA_SSR_ENABLED" value="false"/>
+        <!-- AdminUserSeeder ya no tiene contrasena por defecto: sin esto no siembra, y hay
+             tests (PasSafetyNet, SeedPasAssignment) que lo usan como fixture. Valor de
+             prueba, base descartable. AdminUserSeederTest la limpia para probar el caso
+             contrario. -->
+        <env name="MANGO_ADMIN_PASSWORD" value="solo-para-tests"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

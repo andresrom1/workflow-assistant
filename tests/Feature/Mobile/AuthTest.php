@@ -152,3 +152,54 @@ it('corta la ráfaga de logins con 429', function (): void {
     $this->postJson('/api/mobile/v1/auth/session', ['firebase_token' => 'tok'])
         ->assertStatus(429);
 });
+
+// ── El email presente tiene que venir verificado (E4 del plan de seguridad) ──
+
+it('rechaza una identidad cuyo email no está verificado', function (): void {
+    fakeVerifier(identity(uid: 'uid_sin_verificar', email: 'victima@gmail.com', emailVerified: false));
+
+    $this->postJson('/api/mobile/v1/auth/session', ['firebase_token' => 't'])
+        ->assertStatus(422)
+        ->assertJson(['code' => 'email_not_verified'])
+        ->assertJsonMissingPath('sanctum_token');
+
+    $this->assertDatabaseMissing('mobile_accounts', ['email' => 'victima@gmail.com']);
+});
+
+/**
+ * El camino que importa: `upsertMobileAccount()` adopta por email una cuenta existente, y
+ * esa cuenta puede tener `customer_id`, o sea las pólizas de esa persona.
+ *
+ * La cuenta previa se crea por factory y no con un primer request: re-bindear el verificador
+ * a mitad de test no le llega al request siguiente (el contenedor queda con el fake nuevo
+ * pero la request sigue usando el viejo), así que un test de dos llamadas probaría otra cosa.
+ */
+it('un email sin verificar no puede adoptar la cuenta de otro', function (): void {
+    $victima = MobileAccount::factory()->create([
+        'firebase_uid' => 'uid_victima',
+        'email' => 'victima@gmail.com',
+    ]);
+
+    fakeVerifier(identity(uid: 'uid_atacante', email: 'victima@gmail.com', emailVerified: false));
+
+    $this->postJson('/api/mobile/v1/auth/session', ['firebase_token' => 't'])
+        ->assertStatus(422)
+        ->assertJson(['code' => 'email_not_verified']);
+
+    expect($victima->fresh()->firebase_uid)->toBe('uid_victima');
+    $this->assertDatabaseMissing('mobile_accounts', ['firebase_uid' => 'uid_atacante']);
+});
+
+it('un uid existente no puede cambiar su email por uno sin verificar', function (): void {
+    $cuenta = MobileAccount::factory()->create([
+        'firebase_uid' => 'uid_x',
+        'email' => 'propio@gmail.com',
+    ]);
+
+    fakeVerifier(identity(uid: 'uid_x', email: 'ajeno@gmail.com', emailVerified: false));
+
+    $this->postJson('/api/mobile/v1/auth/session', ['firebase_token' => 't'])
+        ->assertStatus(422);
+
+    expect($cuenta->fresh()->email)->toBe('propio@gmail.com');
+});

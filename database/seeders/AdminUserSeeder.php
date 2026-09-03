@@ -37,9 +37,22 @@ class AdminUserSeeder extends Seeder
         $admin->name = env('MANGO_DEV_PAS_NAME') ?: ($admin->name ?: 'Andrés Romero');
         $admin->role = UserRole::Admin;
 
-        // Solo seteamos password al crear: no pisamos la de un admin ya logueado.
+        // La contraseña se exige explícita y solo al crear: no se pisa la de un admin ya
+        // logueado. Antes había un valor fijo acá, publicado en el repo, así que cualquier
+        // base donde se hubiera corrido `db:seed` quedaba con una cuenta admin de credencial
+        // conocida — y admin llega a los settings, a los prompts y a los datos de tarjeta de
+        // las sesiones de checkout. Sin `MANGO_ADMIN_PASSWORD` no se siembra: es preferible
+        // no tener la cuenta a tenerla con una contraseña que cualquiera puede leer.
         if (! $admin->exists) {
-            $admin->password = Hash::make('changeme-2026'); // opcion-de-configuracion: password inicial del admin sembrado
+            $password = env('MANGO_ADMIN_PASSWORD');
+
+            if (! is_string($password) || $password === '') {
+                $this->command?->warn('AdminUserSeeder: sin MANGO_ADMIN_PASSWORD no se siembra el admin.');
+
+                return;
+            }
+
+            $admin->password = Hash::make($password);
         }
 
         // Perfil de PAS. `?:` (no el default de env()) para que un env vacío
